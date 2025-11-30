@@ -43,7 +43,7 @@ This document describes the Graph Data Science (GDS) features implemented in the
 Find domains likely to adopt a specific technology:
 ```cypher
 MATCH (t:Technology {name: 'YourProduct'})<-[r:LIKELY_TO_ADOPT]-(d:Domain)
-RETURN d.final_domain, r.score
+RETURN d.final_domain AS likely_adopter, r.score AS adoption_score
 ORDER BY r.score DESC
 LIMIT 20
 ```
