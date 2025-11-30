@@ -14,11 +14,7 @@ This document provides **2 high-value graph features** that are fully implemente
 **Query**:
 ```cypher
 // Find domains likely to adopt a specific technology
-// Note: Filters out country TLDs (e.g., .com.br, .co.jp) which are not actionable company domains
 MATCH (t:Technology {name: 'YourProduct'})<-[r:LIKELY_TO_ADOPT]-(d:Domain)
-WHERE NOT d.final_domain IN ['com.br', 'co.jp', 'com.au', 'co.il', 'com.hk', 'co.uk', 'com.cn', 'co.za', 'com.mx', 'co.in']
-  AND d.final_domain CONTAINS '.'
-  AND size(split(d.final_domain, '.')) >= 2  // Exclude simple TLDs like 'com.br'
 RETURN d.final_domain AS likely_adopter, r.score AS adoption_score
 ORDER BY r.score DESC
 LIMIT 20

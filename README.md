@@ -100,7 +100,7 @@ ORDER BY d.final_domain
 ### Find domains likely to adopt a technology
 ```cypher
 MATCH (t:Technology {name: 'Shopify'})<-[r:LIKELY_TO_ADOPT]-(d:Domain)
-RETURN d.final_domain, r.score
+RETURN d.final_domain AS likely_adopter, r.score AS adoption_score
 ORDER BY r.score DESC
 LIMIT 20
 ```
@@ -148,12 +148,4 @@ domain_status_graph/
   - `neo4j` - Neo4j Python driver
   - `graphdatascience` - Neo4j GDS Python client
   - `python-dotenv` - Environment variable management
-
-## License
-
-[Add your license here]
-
-## Contributing
-
-[Add contribution guidelines here]
 
