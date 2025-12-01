@@ -14,14 +14,14 @@ This document analyzes our coverage of Neo4j Graph Data Science (GDS) algorithm 
 
 | Algorithm | Status | Implementation | Notes |
 |-----------|--------|----------------|-------|
-| **Personalized PageRank** | ✅ Implemented | `gds.pageRank.stream(sourceNodes=...)` | Technology adoption prediction |
+| **Personalized PageRank** | ✅ Implemented | `gds.pageRank.write(sourceNodes=...)` | Technology adopter prediction (Technology → Domain) |
 
 **Coverage**: 1/3 link prediction algorithms (33%)
 
-**Implementation**: Technology Adoption Prediction feature
+**Implementation**: Technology Adopter Prediction feature
 - Creates Technology-Technology co-occurrence graph
-- Runs Personalized PageRank starting from domain's current technologies
-- Predicts top 5 technologies each domain is likely to adopt next
+- For each technology, runs Personalized PageRank starting from that technology
+- Predicts which domains are most likely to adopt each technology (Technology → Domain direction)
 
 ---
 
@@ -71,30 +71,27 @@ Other GDS algorithms (community detection, centrality metrics, graph structure a
 
 ### 1. Personalized PageRank
 
-**Use Case**: Technology Adoption Prediction
+**Use Case**: Technology Adopter Prediction
 
 **How it works**:
 1. Creates Technology-Technology graph (technologies connected if they co-occur)
-2. For each domain, runs Personalized PageRank starting from domain's current technologies
-3. Ranks technologies by relevance score
-4. Stores top 20 predictions as `LIKELY_TO_ADOPT` relationships (filtering can be done in queries)
+2. For each technology, runs Personalized PageRank starting from that technology
+3. Finds domains that use similar technologies (but not the target technology)
+4. Ranks domains by their likelihood to adopt the target technology
+5. Stores top 50 predictions as `LIKELY_TO_ADOPT` relationships (Domain → Technology direction)
 
 **Business Value**: ⭐⭐⭐⭐⭐ HIGH VALUE
 - Sales targeting
 - Competitive intelligence
 - Roadmap planning
 
-**Example Query** (with ubiquitous technology filter):
+**Example Query**:
 ```cypher
-// Get top 5 recommendations, excluding ubiquitous technologies (used by >50% of domains)
-MATCH (d:Domain {final_domain: 'example.com'})-[r:LIKELY_TO_ADOPT]->(t:Technology)
-WITH t, r, count{(d2:Domain)-[:USES]->(t)} AS usage_count
-MATCH (d3:Domain)
-WITH t, r, usage_count, count(d3) AS total_domains
-WHERE toFloat(usage_count) / total_domains <= 0.5  // Exclude ubiquitous techs
-RETURN t.name, r.score
+// Find domains likely to adopt a specific technology
+MATCH (t:Technology {name: 'Shopify'})<-[r:LIKELY_TO_ADOPT]-(d:Domain)
+RETURN d.final_domain AS likely_adopter, r.score AS adoption_score
 ORDER BY r.score DESC
-LIMIT 5
+LIMIT 20
 ```
 
 ---
@@ -125,6 +122,6 @@ LIMIT 10
 
 ## Related Documentation
 
-- **High-Value Queries**: `docs/money_queries.md` - 4 graph queries with business value
+- **High-Value Queries**: `docs/money_queries.md` - 2 GDS features with business value
 - **GDS Features**: `docs/advanced_gds_features.md` - Detailed feature documentation
 - **Graph Schema**: `docs/graph_schema.md` - Complete schema documentation

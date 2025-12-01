@@ -49,15 +49,10 @@ LIMIT 20
 **Query** (find technologies that co-occur with a specific technology):
 ```cypher
 // Find technologies that co-occur with a given technology
-// Uses GDS Node Similarity (Jaccard) algorithm
-// Note: Filters out edge cases with perfect similarity but low co-occurrence
+// Uses pre-calculated GDS Node Similarity (Jaccard) scores
 MATCH (t1:Technology {name: 'WordPress'})-[r:CO_OCCURS_WITH]->(t2:Technology)
 WHERE r.similarity > 0.5
-WITH t1, t2, r
-MATCH (d:Domain)-[:USES]->(t1), (d)-[:USES]->(t2)
-WITH t1, t2, r, count(DISTINCT d) AS co_count
-WHERE co_count >= 5  // Minimum 5 domains must use both technologies
-RETURN t2.name AS technology, r.similarity AS co_occurrence_score, co_count
+RETURN t2.name AS technology, r.similarity AS co_occurrence_score
 ORDER BY r.similarity DESC
 LIMIT 20
 ```
@@ -65,21 +60,19 @@ LIMIT 20
 **Query** (find all high-affinity technology pairs):
 ```cypher
 // Find technology pairs with high similarity scores
+// Uses pre-calculated GDS Node Similarity (Jaccard) scores
 MATCH (t1:Technology)-[r:CO_OCCURS_WITH]->(t2:Technology)
 WHERE r.similarity > 0.5
-WITH t1, t2, r
-MATCH (d:Domain)-[:USES]->(t1), (d)-[:USES]->(t2)
-WITH t1, t2, r, count(DISTINCT d) AS co_count
-WHERE co_count >= 5  // Minimum 5 domains must use both technologies
-RETURN t1.name, t2.name, r.similarity, co_count
+RETURN t1.name, t2.name, r.similarity
 ORDER BY r.similarity DESC
 LIMIT 20
 ```
 
-**Alternative** (using graph traversal - no GDS required):
+**Alternative** (using graph traversal - no GDS, for comparison only):
 ```cypher
-// Find technologies frequently used together using graph traversal
-// Multi-hop graph traversal: Technology ← Domain → Technology
+// Find technologies frequently used together using simple graph traversal
+// This is a simple count-based approach (no similarity scoring)
+// Note: The GDS-based CO_OCCURS_WITH relationships provide better insights
 MATCH (d:Domain)-[:USES]->(t1:Technology {name: 'WordPress'})
 MATCH (d)-[:USES]->(t2:Technology)
 WHERE t1 <> t2
@@ -92,8 +85,8 @@ LIMIT 20
 **How it works**:
 1. Creates a Technology-Technology graph where technologies are connected if they co-occur on domains
 2. Runs GDS Node Similarity (Jaccard) algorithm to compute similarity scores
-3. Creates `CO_OCCURS_WITH` relationships between similar technologies
-4. Filters out edge cases (perfect similarity but low co-occurrence)
+3. Creates `CO_OCCURS_WITH` relationships with pre-calculated `similarity` scores
+4. Queries simply use the pre-calculated scores - no additional graph traversals needed
 
 **Business Value**:
 - **Partnership opportunities**: "These technologies are always used together"
