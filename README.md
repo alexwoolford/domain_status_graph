@@ -1,6 +1,6 @@
 # Domain Status Graph
 
-A focused knowledge graph of domains and their technology stacks. Built with Neo4j and Graph Data Science (GDS) to enable technology adoption prediction and affinity analysis.
+A focused knowledge graph of domains and their technology stacks. Built with Neo4j and Graph Data Science (GDS) to enable technology adopter prediction and affinity analysis.
 
 ## What Problem Does This Solve?
 
@@ -93,7 +93,7 @@ This project implements **2 high-value Graph Data Science features**:
 ### Find companies using a specific technology
 ```cypher
 MATCH (d:Domain)-[:USES]->(t:Technology {name: 'Shopify'})
-RETURN d.final_domain, d.status
+RETURN d
 ORDER BY d.final_domain
 ```
 
