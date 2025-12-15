@@ -48,6 +48,9 @@ The Domain Status Graph is a focused knowledge graph that models domains and the
 | `is_mobile_friendly` | INTEGER | ❌ | Mobile-friendly flag (0/1) | `0`, `1` |
 | `spf_record` | STRING | ❌ | SPF (Sender Policy Framework) record | `v=spf1 include:_spf.google.com ~all` |
 | `dmarc_record` | STRING | ❌ | DMARC (Domain-based Message Authentication) record | `v=DMARC1; p=quarantine` |
+| `title` | STRING | ❌ | HTML page title | `Apple - Official Site` |
+| `keywords` | STRING | ❌ | Meta keywords tag | `apple, iphone, macbook` |
+| `description` | STRING | ❌ | Meta description tag | `Shop the latest Apple products...` |
 | `creation_date` | INTEGER | ❌ | Domain registration date (Unix timestamp) | `1735689600` |
 | `expiration_date` | INTEGER | ❌ | Domain expiration date (Unix timestamp) | `1767225600` |
 | `registrar` | STRING | ❌ | Domain registrar name | `GoDaddy`, `Namecheap` |
@@ -64,6 +67,8 @@ The Domain Status Graph is a focused knowledge graph that models domains and the
 - Compare technology stacks across companies
 - Predict what technologies a domain is likely to adopt next
 - Segment domains by technology sophistication
+- Find domains with similar content (via title/keywords/description)
+- Enable domain-level text similarity for company comparison
 
 ---
 

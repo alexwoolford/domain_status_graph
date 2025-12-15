@@ -9,15 +9,14 @@ This script:
 4. Saves the enriched data back to the file
 
 Usage:
-    python scripts/create_description_embeddings.py                    # Dry-run (plan only)
-    python scripts/create_description_embeddings.py --execute          # Actually create embeddings
-    python scripts/create_description_embeddings.py --resume           # Resume from existing embeddings
+    python scripts/create_company_embeddings.py                    # Dry-run (plan only)
+    python scripts/create_company_embeddings.py --execute          # Actually create embeddings
+    python scripts/create_company_embeddings.py --resume           # Resume from existing embeddings
 """
 
 import argparse
 import json
 import logging
-import os
 import sys
 import time
 from pathlib import Path
@@ -26,47 +25,35 @@ from typing import Dict, List, Optional
 from dotenv import load_dotenv
 from tqdm import tqdm
 
+# Add src to path for imports
+sys.path.insert(0, str(Path(__file__).parent.parent))
+
+from src.openai_client import (  # noqa: E402
+    EMBEDDING_DIMENSION,
+    EMBEDDING_MODEL,
+    MIN_INTERVAL,
+    OPENAI_API_KEY,
+    OPENAI_AVAILABLE,
+    create_embedding,
+    get_openai_client,
+    suppress_http_logging,
+)
+
+try:
+    from openai import OpenAI
+except ImportError:
+    OpenAI = None
+
 # Load environment variables
 load_dotenv()
 
-# Try to import OpenAI
-try:
-    from openai import OpenAI
 
-    OPENAI_AVAILABLE = True
-except ImportError:
-    OPENAI_AVAILABLE = False
-    print("WARNING: openai not installed. Install with: pip install openai")
-
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "").strip()
-
-# Default embedding model (text-embedding-3-small is cost-effective)
-EMBEDDING_MODEL = "text-embedding-3-small"
-EMBEDDING_DIMENSION = 1536  # Default for text-embedding-3-small
-
-# Rate limiting: OpenAI allows 5000 requests/minute for embeddings
-# We'll be conservative: 100 requests/second max
-MAX_REQUESTS_PER_SECOND = 100
-MIN_INTERVAL = 1.0 / MAX_REQUESTS_PER_SECOND
-
-
-def create_embedding(
-    client: OpenAI, text: str, model: str = EMBEDDING_MODEL
-) -> Optional[List[float]]:
-    """Create an embedding for a single text."""
-    if not text or not text.strip():
-        return None
-
-    try:
-        response = client.embeddings.create(model=model, input=text.strip())
-        return response.data[0].embedding
-    except Exception as e:
-        logging.warning(f"Error creating embedding: {e}")
-        return None
-
-
+# Keep batch_create_embeddings for backward compatibility (unused but might be referenced)
 def batch_create_embeddings(
-    client: OpenAI, texts: List[str], model: str = EMBEDDING_MODEL, batch_size: int = 100
+    client: OpenAI,
+    texts: List[str],
+    model: str = EMBEDDING_MODEL,
+    batch_size: int = 100,
 ) -> List[Optional[List[float]]]:
     """
     Create embeddings for multiple texts in batches.
@@ -115,10 +102,10 @@ def create_embeddings_for_descriptions(
     if not OPENAI_AVAILABLE:
         raise ImportError("openai not available. Install with: pip install openai")
 
-    if not OPENAI_API_KEY:
-        raise ValueError("OPENAI_API_KEY not set in .env file")
-
-    client = OpenAI(api_key=OPENAI_API_KEY)
+    try:
+        client = get_openai_client()
+    except ValueError as e:
+        raise ValueError(str(e))
 
     # Load existing embeddings if resuming
     existing_embeddings = {}
@@ -190,7 +177,9 @@ def create_embeddings_for_descriptions(
     return embeddings
 
 
-def merge_embeddings_into_data(data: List[Dict], embeddings: Dict[str, List[float]]) -> List[Dict]:
+def merge_embeddings_into_data(
+    data: List[Dict], embeddings: Dict[str, List[float]]
+) -> List[Dict]:
     """Merge embeddings back into the original data."""
     enriched = []
     missing_count = 0
@@ -260,7 +249,7 @@ def main():
     log_dir = Path("logs")
     log_dir.mkdir(parents=True, exist_ok=True)
     timestamp = time.strftime("%Y%m%d_%H%M%S")
-    log_file = log_dir / f"create_description_embeddings_{timestamp}.log"
+    log_file = log_dir / f"create_company_embeddings_{timestamp}.log"
 
     logging.basicConfig(
         level=logging.INFO,
@@ -272,8 +261,7 @@ def main():
     )
 
     # Suppress OpenAI's verbose HTTP logging
-    logging.getLogger("httpx").setLevel(logging.WARNING)
-    logging.getLogger("openai").setLevel(logging.WARNING)
+    suppress_http_logging()
 
     logger = logging.getLogger(__name__)
 
@@ -310,9 +298,11 @@ def main():
         logger.info("=" * 80)
         logger.info("DRY RUN MODE")
         logger.info("=" * 80)
-        logger.info(f"This script will:")
+        logger.info("This script will:")
         logger.info(f"  1. Read {args.input_file}")
-        logger.info(f"  2. Create embeddings for {entries_with_descriptions} descriptions")
+        logger.info(
+            f"  2. Create embeddings for {entries_with_descriptions} descriptions"
+        )
         logger.info(f"  3. Use OpenAI model: {args.model}")
         logger.info(f"  4. Save embeddings to: {args.embeddings_file}")
         logger.info(f"  5. Merge embeddings into: {output_file}")
@@ -322,7 +312,9 @@ def main():
             f"  ~${entries_with_descriptions * 0.00002:.2f} for {entries_with_descriptions} embeddings"
         )
         logger.info("")
-        logger.info("To execute, run: python scripts/create_description_embeddings.py --execute")
+        logger.info(
+            "To execute, run: python scripts/" "create_company_embeddings.py --execute"
+        )
         logger.info("=" * 80)
         return
 

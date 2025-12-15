@@ -2,18 +2,12 @@
 """
 Orchestration script to run all data pipelines in the correct order.
 
-This script runs:
-1. Pipeline 1: Domain → Technology
-   (bootstrap_graph.py + compute_gds_features.py)
-2. Pipeline 2: Company Data
-   (collect_domains.py + create_description_embeddings.py + load_company_data.py)
-3. Pipeline 3: Company Similarity
-   (compute_gds_features.py - company similarity step)
+This script recreates the graph from scratch in the correct order:
+1. Bootstrap Graph: Load Domain and Technology nodes from SQLite
+2. Load Company Data: Collect domains, create embeddings, load Company nodes
+3. Compute GDS Features: Technology adoption, affinity, and company similarity
 
-Dependencies:
-- Pipeline 1 must run first (creates Domain and Technology nodes)
-- Pipeline 2 depends on Pipeline 1 (needs Domain nodes for HAS_DOMAIN relationships)
-- Pipeline 3 depends on Pipeline 2 (needs Company nodes with embeddings)
+All steps run in sequence to ensure the graph is complete and correct.
 
 Usage:
     python scripts/run_all_pipelines.py          # Dry-run (plan only)
@@ -30,8 +24,10 @@ SCRIPT_DIR = Path(__file__).parent
 BOOTSTRAP_SCRIPT = SCRIPT_DIR / "bootstrap_graph.py"
 COMPUTE_GDS_SCRIPT = SCRIPT_DIR / "compute_gds_features.py"
 COLLECT_DOMAINS_SCRIPT = SCRIPT_DIR / "collect_domains.py"
-CREATE_EMBEDDINGS_SCRIPT = SCRIPT_DIR / "create_description_embeddings.py"
+CREATE_COMPANY_EMBEDDINGS_SCRIPT = SCRIPT_DIR / "create_company_embeddings.py"
 LOAD_COMPANY_DATA_SCRIPT = SCRIPT_DIR / "load_company_data.py"
+CREATE_DOMAIN_EMBEDDINGS_SCRIPT = SCRIPT_DIR / "create_domain_embeddings.py"
+COMPUTE_DOMAIN_SIMILARITY_SCRIPT = SCRIPT_DIR / "compute_domain_similarity.py"
 
 
 def run_script(script_path: Path, execute: bool = False, description: str = ""):
@@ -80,19 +76,28 @@ def main():
         print("PIPELINE ORCHESTRATION PLAN (Dry Run)")
         print("=" * 70)
         print()
-        print("This script will run the following pipelines in order:")
+        print("This script will recreate the graph from scratch:")
         print()
-        print("Pipeline 1: Domain → Technology")
-        print("  1. bootstrap_graph.py - Load Domain and Technology nodes from SQLite")
-        print("  2. compute_gds_features.py - Compute Technology adoption and affinity")
+        print("Step 1: Bootstrap Graph")
+        print("  - bootstrap_graph.py - Load Domain and Technology nodes from SQLite")
         print()
-        print("Pipeline 2: Company Data")
-        print("  3. collect_domains.py - Collect company domains (if needed)")
-        print("  4. create_description_embeddings.py - Create embeddings (if needed)")
-        print("  5. load_company_data.py - Load Company nodes and HAS_DOMAIN relationships")
+        print("Step 2: Load Company Data")
+        print("  - collect_domains.py - Collect company domains (if needed)")
+        print(
+            "  - create_company_embeddings.py - Create embeddings for "
+            "Company descriptions (if needed)"
+        )
+        print("  - load_company_data.py - Load Company nodes and HAS_DOMAIN relationships")
         print()
-        print("Pipeline 3: Company Similarity")
-        print("  6. compute_gds_features.py - Compute Company description similarity")
+        print("Step 3: Domain Embeddings")
+        print("  - create_domain_embeddings.py - Create embeddings for Domain descriptions")
+        print("  - compute_domain_similarity.py - Compute Domain-Domain similarity")
+        print()
+        print("Step 4: Compute GDS Features")
+        print("  - compute_gds_features.py - Compute all features:")
+        print("    * Technology adoption predictions")
+        print("    * Technology affinity/bundling")
+        print("    * Company description similarity")
         print()
         print("=" * 70)
         print("To execute, run: python scripts/run_all_pipelines.py --execute")
@@ -105,30 +110,22 @@ def main():
     print("=" * 70)
     print()
 
-    # Pipeline 1: Domain → Technology
+    # Step 1: Bootstrap Graph (Domain + Technology nodes)
     print("\n" + "=" * 70)
-    print("PIPELINE 1: Domain → Technology")
+    print("STEP 1: Bootstrap Graph")
     print("=" * 70)
 
     if not run_script(
         BOOTSTRAP_SCRIPT,
         execute=True,
-        description="Step 1.1: Bootstrap Graph (Domain + Technology nodes)",
+        description="Loading Domain and Technology nodes from SQLite",
     ):
-        print("\n✗ Pipeline 1 failed at bootstrap step")
+        print("\n✗ Failed at bootstrap step")
         return
 
-    if not run_script(
-        COMPUTE_GDS_SCRIPT,
-        execute=True,
-        description="Step 1.2: Compute GDS Features (Technology adoption + affinity)",
-    ):
-        print("\n✗ Pipeline 1 failed at GDS computation step")
-        return
-
-    # Pipeline 2: Company Data
+    # Step 2: Company Data
     print("\n" + "=" * 70)
-    print("PIPELINE 2: Company Data")
+    print("STEP 2: Load Company Data")
     print("=" * 70)
 
     # Check if company data files exist
@@ -152,7 +149,7 @@ def main():
         print(f"⚠ Embeddings file not found: {embeddings_file}")
         print("  Running create_description_embeddings.py...")
         if not run_script(
-            CREATE_EMBEDDINGS_SCRIPT,
+            CREATE_COMPANY_EMBEDDINGS_SCRIPT,
             execute=True,
             description="Step 2.2: Create Description Embeddings",
         ):
@@ -160,30 +157,65 @@ def main():
             return
     else:
         msg = f"✓ Embeddings file exists: {embeddings_file}"
-        msg += " (skipping create_description_embeddings.py)"
+        msg += " (skipping create_company_embeddings.py)"
         print(msg)
 
     if not run_script(
         LOAD_COMPANY_DATA_SCRIPT,
         execute=True,
-        description="Step 2.3: Load Company Data (nodes + HAS_DOMAIN relationships)",
+        description="Loading Company nodes and HAS_DOMAIN relationships",
     ):
-        print("\n✗ Pipeline 2 failed at load_company_data step")
+        print("\n✗ Failed at load_company_data step")
         return
 
-    # Pipeline 3: Compute Company Similarity (runs as part of compute_gds_features.py)
+    # Step 3: Domain Embeddings
     print("\n" + "=" * 70)
-    print("PIPELINE 3: Company Similarity")
+    print("STEP 3: Domain Embeddings")
     print("=" * 70)
-    print("Note: Company similarity is computed as part of compute_gds_features.py")
-    print("      Running it again to compute company similarity now that companies are loaded...")
+
+    # Check if domain embeddings cache exists
+    domain_embeddings_cache = Path("data/domain_embeddings_cache.json")
+    if not domain_embeddings_cache.exists():
+        print(f"⚠ Domain embeddings cache not found: {domain_embeddings_cache}")
+        print("  Running create_domain_embeddings.py...")
+        if not run_script(
+            CREATE_DOMAIN_EMBEDDINGS_SCRIPT,
+            execute=True,
+            description="Step 3.1: Create Domain Description Embeddings",
+        ):
+            print("\n✗ Failed at create_domain_embeddings step")
+            return
+    else:
+        print(f"✓ Domain embeddings cache exists: {domain_embeddings_cache}")
+        print("  Running create_domain_embeddings.py to update Neo4j...")
+        if not run_script(
+            CREATE_DOMAIN_EMBEDDINGS_SCRIPT,
+            execute=True,
+            description="Step 3.1: Update Domain Embeddings in Neo4j",
+        ):
+            print("\n✗ Failed at create_domain_embeddings step")
+            return
+
+    if not run_script(
+        COMPUTE_DOMAIN_SIMILARITY_SCRIPT,
+        execute=True,
+        description="Step 3.2: Compute Domain-Domain Similarity",
+    ):
+        print("\n✗ Failed at compute_domain_similarity step")
+        return
+
+    # Step 4: Compute all GDS features (tech + company similarity in one pass)
+    print("\n" + "=" * 70)
+    print("STEP 4: Compute GDS Features")
+    print("=" * 70)
+    print("Computing all GDS features: Technology adoption, affinity, and company similarity")
 
     if not run_script(
         COMPUTE_GDS_SCRIPT,
         execute=True,
-        description="Step 3: Compute Company Description Similarity",
+        description="Computing all GDS features (tech adoption, affinity, company similarity)",
     ):
-        print("\n✗ Pipeline 3 failed at company similarity step")
+        print("\n✗ Failed at GDS computation step")
         return
 
     # Summary
@@ -192,10 +224,13 @@ def main():
     print("=" * 70)
     print()
     print("Graph is now ready for queries with:")
-    print("  ✓ Domain nodes and Technology nodes")
+    print("  ✓ Domain nodes with title/keywords/description metadata")
+    print("  ✓ Domain nodes with description embeddings")
+    print("  ✓ Technology nodes")
     print("  ✓ USES relationships (Domain → Technology)")
     print("  ✓ LIKELY_TO_ADOPT relationships (Domain → Technology)")
     print("  ✓ CO_OCCURS_WITH relationships (Technology → Technology)")
+    print("  ✓ SIMILAR_DESCRIPTION relationships (Domain → Domain)")
     print("  ✓ Company nodes with description embeddings")
     print("  ✓ HAS_DOMAIN relationships (Company → Domain)")
     print("  ✓ SIMILAR_DESCRIPTION relationships (Company → Company)")

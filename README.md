@@ -220,7 +220,9 @@ domain_status_graph/
 │   ├── compute_gds_features.py # GDS feature computation (CO_OCCURS_WITH, LIKELY_TO_ADOPT)
 │   ├── run_all_pipelines.py   # Orchestration: runs all pipelines in order
 │   ├── collect_domains.py      # Company domain collection (for company data pipeline)
-│   ├── create_description_embeddings.py  # Company description embeddings
+│   ├── create_company_embeddings.py  # Company description embeddings
+│   ├── create_domain_embeddings.py   # Domain description embeddings
+│   ├── compute_domain_similarity.py   # Domain-Domain similarity computation
 │   └── load_company_data.py    # Company nodes + HAS_DOMAIN relationships
 ├── docs/
 │   ├── graph_schema.md         # Complete schema documentation
