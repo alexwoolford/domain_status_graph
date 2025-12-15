@@ -454,7 +454,10 @@ def collect_domains(
                     description_scores[result.description][1],  # Keep first source
                 )
             else:
-                description_scores[result.description] = (weight * result.confidence, result.source)
+                description_scores[result.description] = (
+                    weight * result.confidence,
+                    result.source,
+                )
 
     # Get winner (already calculated during early stopping)
     winner_domain = max(domain_scores.items(), key=lambda x: x[1])[0]
@@ -506,7 +509,10 @@ Respond with ONLY the domain name (e.g., "apple.com"), nothing else."""
             response = client.chat.completions.create(
                 model="gpt-4o-mini",
                 messages=[
-                    {"role": "system", "content": "You identify correct company website domains."},
+                    {
+                        "role": "system",
+                        "content": "You identify correct company website domains.",
+                    },
                     {"role": "user", "content": prompt},
                 ],
                 temperature=0.1,

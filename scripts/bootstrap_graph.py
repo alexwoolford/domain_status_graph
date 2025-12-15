@@ -98,6 +98,9 @@ def load_domains(driver, db_path: str, batch_size: int = 1000, database: str = N
             us.is_mobile_friendly,
             us.spf_record,
             us.dmarc_record,
+            us.title,
+            us.keywords,
+            us.description,
             w.creation_date,
             w.expiration_date,
             w.registrar,
@@ -129,6 +132,9 @@ def load_domains(driver, db_path: str, batch_size: int = 1000, database: str = N
                 d.is_mobile_friendly = row.is_mobile_friendly,
                 d.spf_record = row.spf_record,
                 d.dmarc_record = row.dmarc_record,
+                d.title = row.title,
+                d.keywords = row.keywords,
+                d.description = row.description,
                 d.creation_date = row.creation_date,
                 d.expiration_date = row.expiration_date,
                 d.registrar = row.registrar,
@@ -245,11 +251,34 @@ def dry_run_plan(db_path: Path):
     )
     uses_count = cursor.fetchone()[0]
 
+    # Count domains with metadata
+    cursor.execute(
+        "SELECT COUNT(DISTINCT final_domain) FROM url_status WHERE title IS NOT NULL AND title != ''"
+    )
+    domains_with_title = cursor.fetchone()[0]
+
+    cursor.execute(
+        "SELECT COUNT(DISTINCT final_domain) FROM url_status WHERE keywords IS NOT NULL AND keywords != ''"
+    )
+    domains_with_keywords = cursor.fetchone()[0]
+
+    cursor.execute(
+        "SELECT COUNT(DISTINCT final_domain) FROM url_status WHERE description IS NOT NULL AND description != ''"
+    )
+    domains_with_description = cursor.fetchone()[0]
+
     conn.close()
 
     print("Data to be loaded:")
     print("-" * 70)
     print(f"  Domains: {domain_count:,}")
+    print(f"    - With title: {domains_with_title:,} ({domains_with_title/domain_count*100:.1f}%)")
+    print(
+        f"    - With keywords: {domains_with_keywords:,} ({domains_with_keywords/domain_count*100:.1f}%)"
+    )
+    print(
+        f"    - With description: {domains_with_description:,} ({domains_with_description/domain_count*100:.1f}%)"
+    )
     print(f"  Technologies: {tech_count:,}")
     print(f"  USES relationships: {uses_count:,}")
 
@@ -285,8 +314,9 @@ def main():
     print("Domain Status Graph ETL Pipeline")
     print("=" * 70)
     print()
-    print("Loading only Domain and Technology nodes + USES relationships.")
-    print("This is all that's needed for the two useful GDS features.")
+    print("Loading Domain and Technology nodes + USES relationships.")
+    print("Domain nodes include metadata: title, keywords, description.")
+    print("This enables domain-level text similarity for company comparison.")
     print()
 
     if not NEO4J_AVAILABLE:

@@ -14,7 +14,7 @@ Schema additions:
 
 Dependencies:
 - Requires: data/public_company_domains.json (from collect_domains.py)
-- Requires: data/description_embeddings.json (from create_description_embeddings.py)
+- Requires: data/description_embeddings.json (from create_company_embeddings.py)
 - Embeddings are REQUIRED (core feature), not optional
 
 Usage:
@@ -112,7 +112,7 @@ def load_companies(
     embeddings: Dict[str, List[float]] = {}
     if not embeddings_file or not embeddings_file.exists():
         print(f"ERROR: Embeddings file not found: {embeddings_file}")
-        print("Embeddings are required (core feature). Run create_description_embeddings.py first.")
+        print("Embeddings are required (core feature). Run create_company_embeddings.py first.")
         return
 
     print(f"Loading embeddings from: {embeddings_file}")
@@ -276,7 +276,7 @@ def dry_run_plan(companies_file: Path, embeddings_file: Optional[Path]):
     else:
         print(f"\nEmbeddings file: {embeddings_file} (not found)")
         print(
-            "  ERROR: Embeddings are required (core feature). Run create_description_embeddings.py first."
+            "  ERROR: Embeddings are required (core feature). Run create_company_embeddings.py first."
         )
 
     print("\n" + "=" * 80)
@@ -302,7 +302,10 @@ def main():
         help="Path to description_embeddings.json (default: data/description_embeddings.json)",
     )
     parser.add_argument(
-        "--batch-size", type=int, default=1000, help="Batch size for loading (default: 1000)"
+        "--batch-size",
+        type=int,
+        default=1000,
+        help="Batch size for loading (default: 1000)",
     )
 
     args = parser.parse_args()
