@@ -17,16 +17,16 @@ Usage:
 
 import argparse
 import sys
+from pathlib import Path
 
 from domain_status_graph.cli import (
     get_driver_and_database,
     setup_logging,
     verify_neo4j_connection,
 )
-from domain_status_graph.config import get_data_dir
 from domain_status_graph.embeddings import (
     EMBEDDING_MODEL,
-    EmbeddingCache,
+    SQLiteEmbeddingCache,
     create_embedding,
     create_embeddings_for_nodes,
     get_openai_client,
@@ -198,8 +198,8 @@ def main():
         driver.close()
         sys.exit(1)
 
-    cache_file = get_data_dir() / "keyword_embeddings_cache.json"
-    cache = EmbeddingCache(cache_file)
+    cache_db = Path("data/embeddings.db")
+    cache = SQLiteEmbeddingCache(cache_db)
 
     def create_fn(text, model):
         return create_embedding(client, text, model)

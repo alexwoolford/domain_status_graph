@@ -190,3 +190,12 @@ def run_all_pipelines():
 
     script = Path(__file__).parent.parent / "scripts" / "run_all_pipelines.py"
     subprocess.run([sys.executable, str(script)] + sys.argv[1:])
+
+
+def run_embedding_cache():
+    """Entry point for embedding-cache command."""
+    import subprocess
+    from pathlib import Path
+
+    script = Path(__file__).parent.parent / "scripts" / "embedding_cache.py"
+    subprocess.run([sys.executable, str(script)] + sys.argv[1:])

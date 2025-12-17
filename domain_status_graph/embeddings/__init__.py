@@ -9,9 +9,11 @@ from domain_status_graph.embeddings.openai_client import (
     get_openai_client,
     suppress_http_logging,
 )
+from domain_status_graph.embeddings.sqlite_cache import SQLiteEmbeddingCache
 
 __all__ = [
     "EmbeddingCache",
+    "SQLiteEmbeddingCache",
     "compute_text_hash",
     "create_embeddings_for_nodes",
     "create_embedding",

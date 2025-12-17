@@ -3,7 +3,7 @@ General-purpose embedding creation for Neo4j nodes.
 
 Simple, lightweight module that:
 1. Loads nodes with text from Neo4j
-2. Creates/caches embeddings using EmbeddingCache (JSON file)
+2. Creates/caches embeddings using SQLiteEmbeddingCache or EmbeddingCache
 3. Updates Neo4j nodes with embeddings
 
 Works with any node type (Domain, Company, etc.).
@@ -12,7 +12,7 @@ No external vector databases needed - Neo4j stores embeddings, similarity comput
 
 import logging
 import time
-from typing import Callable, List, Optional, Tuple
+from typing import TYPE_CHECKING, Callable, List, Optional, Tuple, Union
 
 try:
     from tqdm import tqdm
@@ -21,14 +21,19 @@ try:
 except ImportError:
     TQDM_AVAILABLE = False
 
-from domain_status_graph.embeddings.cache import EmbeddingCache
+if TYPE_CHECKING:
+    from domain_status_graph.embeddings.cache import EmbeddingCache
+    from domain_status_graph.embeddings.sqlite_cache import SQLiteEmbeddingCache
 
 logger = logging.getLogger(__name__)
+
+# Type alias for any cache that implements get/set/get_or_create
+CacheType = Union["EmbeddingCache", "SQLiteEmbeddingCache"]
 
 
 def create_embeddings_for_nodes(
     driver,
-    cache: EmbeddingCache,
+    cache: CacheType,
     node_label: str,
     text_property: str,
     key_property: str,
@@ -93,7 +98,9 @@ def create_embeddings_for_nodes(
     cached = 0
     failed = 0
     last_request_time = 0
-    cache_size_before = len(cache._cache)
+
+    # Check if this is JSON cache (needs periodic save) or SQLite (auto-commits)
+    is_json_cache = hasattr(cache, "_cache") and hasattr(cache, "save")
 
     # Use tqdm if available, otherwise just iterate
     progress_desc = f"Processing {node_label} {text_property} embeddings"
@@ -152,13 +159,12 @@ def create_embeddings_for_nodes(
             failed += 1
             logger.warning(f"Failed to create embedding for {node_label} {cache_key}")
 
-        # Save cache periodically (only if new embeddings were created)
-        if created > 0 and created % 100 == 0:
+        # Save JSON cache periodically (SQLite auto-commits)
+        if is_json_cache and created > 0 and created % 100 == 0:
             cache.save()
 
-    # Final cache save (only if new embeddings were created)
-    cache_size_after = len(cache._cache)
-    if cache_size_after > cache_size_before:
+    # Final JSON cache save
+    if is_json_cache and created > 0:
         cache.save()
 
     return (processed, created, cached, failed)

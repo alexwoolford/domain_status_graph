@@ -4,7 +4,7 @@ Create embeddings for Domain descriptions and store in Neo4j.
 
 This script uses the general-purpose embedding creation system to:
 1. Load Domain nodes from Neo4j that have descriptions
-2. Use EmbeddingCache to create/cache embeddings (avoids re-computation)
+2. Use SQLiteEmbeddingCache to create/cache embeddings (avoids re-computation)
 3. Update Domain nodes with description_embedding property
 4. Store model metadata for reproducibility
 
@@ -27,7 +27,7 @@ from domain_status_graph.cli import (
 from domain_status_graph.embeddings import (
     EMBEDDING_DIMENSION,
     EMBEDDING_MODEL,
-    EmbeddingCache,
+    SQLiteEmbeddingCache,
     create_embedding,
     create_embeddings_for_nodes,
     get_openai_client,
@@ -37,7 +37,7 @@ from domain_status_graph.embeddings import (
 
 def update_domain_embeddings(
     driver,
-    cache: EmbeddingCache,
+    cache: SQLiteEmbeddingCache,
     client,
     database: str = None,
     execute: bool = False,
@@ -89,6 +89,10 @@ def update_domain_embeddings(
             cache_hit_rate = (cached / processed) * 100
             logger.info(f"  Cache hit rate: {cache_hit_rate:.1f}%")
 
+        # Show updated cache stats
+        cache_stats = cache.stats()
+        logger.info(f"  Cache total: {cache_stats['total']}")
+
 
 def main():
     """Run the domain embeddings creation script."""
@@ -98,10 +102,10 @@ def main():
     )
     add_execute_argument(parser)
     parser.add_argument(
-        "--cache-file",
+        "--cache-db",
         type=Path,
-        default=Path("data/domain_embeddings_cache.json"),
-        help="Embedding cache file (default: data/domain_embeddings_cache.json)",
+        default=Path("data/embeddings.db"),
+        help="Embedding cache database (default: data/embeddings.db)",
     )
     parser.add_argument(
         "--model",
@@ -121,8 +125,8 @@ def main():
     # Suppress HTTP logging
     suppress_http_logging()
 
-    # Initialize cache
-    cache = EmbeddingCache(cache_file=args.cache_file)
+    # Initialize SQLite cache
+    cache = SQLiteEmbeddingCache(args.cache_db)
 
     # Get OpenAI client
     try:
@@ -153,7 +157,8 @@ def main():
 
         # Cache stats
         cache_stats = cache.stats()
-        logger.info(f"Cache stats: {cache_stats}")
+        logger.info(f"Cache: {cache_stats['total']} embeddings in {args.cache_db}")
+        logger.info(f"  By type: {cache_stats['by_type']}")
 
         # Dry-run mode
         if not args.execute:
@@ -163,7 +168,7 @@ def main():
             logger.info("This script will:")
             logger.info(f"  1. Load {domain_count} domains with descriptions")
             logger.info(f"  2. Create/load embeddings using model: {args.model}")
-            logger.info(f"  3. Cache embeddings in: {args.cache_file}")
+            logger.info(f"  3. Cache embeddings in: {args.cache_db}")
             logger.info("  4. Update Domain nodes in Neo4j with embeddings")
             logger.info("")
             logger.info("Estimated cost (text-embedding-3-small):")
