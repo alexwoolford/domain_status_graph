@@ -33,6 +33,7 @@ logs/*.log
 # Note: domain_status.db is included for first-time experience
 data/*.json
 data/*.txt
+data/embeddings.db  # Generated embedding cache
 # data/*.db  # Commented out to include domain_status.db
 !data/domain_status.db  # Include the sample database
 !data/.gitkeep

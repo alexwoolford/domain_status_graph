@@ -28,6 +28,7 @@ CREATE_COMPANY_EMBEDDINGS_SCRIPT = SCRIPT_DIR / "create_company_embeddings.py"
 LOAD_COMPANY_DATA_SCRIPT = SCRIPT_DIR / "load_company_data.py"
 CREATE_DOMAIN_EMBEDDINGS_SCRIPT = SCRIPT_DIR / "create_domain_embeddings.py"
 COMPUTE_DOMAIN_SIMILARITY_SCRIPT = SCRIPT_DIR / "compute_domain_similarity.py"
+COMPUTE_KEYWORD_SIMILARITY_SCRIPT = SCRIPT_DIR / "compute_keyword_similarity.py"
 
 
 def run_script(script_path: Path, execute: bool = False, description: str = ""):
@@ -89,9 +90,10 @@ def main():
         )
         print("  - load_company_data.py - Load Company nodes and HAS_DOMAIN relationships")
         print()
-        print("Step 3: Domain Embeddings")
+        print("Step 3: Domain Embeddings & Similarity")
         print("  - create_domain_embeddings.py - Create embeddings for Domain descriptions")
-        print("  - compute_domain_similarity.py - Compute Domain-Domain similarity")
+        print("  - compute_domain_similarity.py - Compute Domain-Domain description similarity")
+        print("  - compute_keyword_similarity.py - Compute Domain-Domain keyword similarity")
         print()
         print("Step 4: Compute GDS Features")
         print("  - compute_gds_features.py - Compute all features:")
@@ -199,9 +201,17 @@ def main():
     if not run_script(
         COMPUTE_DOMAIN_SIMILARITY_SCRIPT,
         execute=True,
-        description="Step 3.2: Compute Domain-Domain Similarity",
+        description="Step 3.2: Compute Domain-Domain Description Similarity",
     ):
         print("\n✗ Failed at compute_domain_similarity step")
+        return
+
+    if not run_script(
+        COMPUTE_KEYWORD_SIMILARITY_SCRIPT,
+        execute=True,
+        description="Step 3.3: Compute Domain-Domain Keyword Similarity",
+    ):
+        print("\n✗ Failed at compute_keyword_similarity step")
         return
 
     # Step 4: Compute all GDS features (tech + company similarity in one pass)
@@ -231,6 +241,7 @@ def main():
     print("  ✓ LIKELY_TO_ADOPT relationships (Domain → Technology)")
     print("  ✓ CO_OCCURS_WITH relationships (Technology → Technology)")
     print("  ✓ SIMILAR_DESCRIPTION relationships (Domain → Domain)")
+    print("  ✓ SIMILAR_KEYWORD relationships (Domain → Domain)")
     print("  ✓ Company nodes with description embeddings")
     print("  ✓ HAS_DOMAIN relationships (Company → Domain)")
     print("  ✓ SIMILAR_DESCRIPTION relationships (Company → Company)")
