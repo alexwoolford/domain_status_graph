@@ -216,3 +216,77 @@ def compute_similarity_for_node_type(
 
     log.info(f"Found {len(pairs)} similar pairs above threshold {similarity_threshold}")
     return pairs
+
+
+def write_similarity_relationships(
+    driver,
+    pairs: Dict[Tuple[str, str], float],
+    node_label: str,
+    key_property: str,
+    relationship_type: str,
+    database: Optional[str] = None,
+    batch_size: int = 1000,
+    logger_instance: Optional[logging.Logger] = None,
+) -> int:
+    """
+    Write similarity relationships to Neo4j.
+
+    Args:
+        driver: Neo4j driver
+        pairs: Dictionary of (key1, key2) -> similarity_score
+        node_label: Node label (e.g., "Domain", "Company")
+        key_property: Property for node identifier
+        relationship_type: Relationship type (e.g., "SIMILAR_KEYWORD")
+        database: Neo4j database name
+        batch_size: Batch size for writes
+        logger_instance: Optional logger
+
+    Returns:
+        Number of relationships created
+    """
+    log = logger_instance or logger
+
+    if not pairs:
+        log.info("No pairs to write")
+        return 0
+
+    # Delete existing relationships first (idempotent)
+    log.info(f"Deleting existing {relationship_type} relationships...")
+    with driver.session(database=database) as session:
+        result = session.run(
+            f"""
+            MATCH (:{node_label})-[r:{relationship_type}]->(:{node_label})
+            DELETE r
+            RETURN count(r) AS deleted
+            """
+        )
+        deleted = result.single()["deleted"]
+        if deleted > 0:
+            log.info(f"Deleted {deleted} existing relationships")
+
+    # Write new relationships
+    log.info(f"Writing {len(pairs)} {relationship_type} relationships...")
+    batch = [{"key1": k1, "key2": k2, "score": score} for (k1, k2), score in pairs.items()]
+
+    relationships_written = 0
+    with driver.session(database=database) as session:
+        for i in range(0, len(batch), batch_size):
+            chunk = batch[i : i + batch_size]
+            result = session.run(
+                f"""
+                UNWIND $batch AS rel
+                MATCH (n1:{node_label} {{{key_property}: rel.key1}})
+                MATCH (n2:{node_label} {{{key_property}: rel.key2}})
+                WHERE n1 <> n2
+                MERGE (n1)-[r:{relationship_type}]->(n2)
+                SET r.score = rel.score,
+                    r.metric = 'COSINE',
+                    r.computed_at = datetime()
+                RETURN count(r) AS created
+                """,
+                batch=chunk,
+            )
+            relationships_written += result.single()["created"]
+
+    log.info(f"Created {relationships_written} {relationship_type} relationships")
+    return relationships_written
