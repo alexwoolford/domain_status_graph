@@ -43,6 +43,9 @@ def compute_industry_similarity(
         if not cik:
             continue
 
+        # Ensure CIK is a string for consistent comparison
+        cik = str(cik)
+
         classification = None
         if method == "SIC":
             classification = company.get("sic_code")
@@ -106,6 +109,9 @@ def bucket_companies_by_size(
         if not cik:
             continue
 
+        # Ensure CIK is a string for consistent comparison
+        cik = str(cik)
+
         value = None
         if metric == "revenue":
             value = company.get("revenue")
@@ -114,6 +120,7 @@ def bucket_companies_by_size(
         elif metric == "employees":
             value = company.get("employees")
 
+        # Skip if value is None (but allow 0 as valid value)
         if value is None:
             continue
 

@@ -16,6 +16,10 @@ from domain_status_graph.company.enrichment import (
     merge_company_data,
     normalize_industry_codes,
 )
+from domain_status_graph.company.queries import (
+    get_similarity_breakdown_query,
+    get_top_similar_companies_query,
+)
 from domain_status_graph.company.similarity import (
     bucket_companies_by_size,
     compute_industry_similarity,
@@ -33,4 +37,7 @@ __all__ = [
     "compute_industry_similarity",
     "compute_size_similarity",
     "bucket_companies_by_size",
+    # Query functions
+    "get_top_similar_companies_query",
+    "get_similarity_breakdown_query",
 ]
