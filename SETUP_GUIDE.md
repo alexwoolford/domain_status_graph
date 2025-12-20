@@ -69,7 +69,7 @@ pip install -e .
 **Verify**:
 ```bash
 python3 -c "import neo4j; import graphdatascience; import dotenv; print('✓ All packages installed')"
-python3 -c "from domain_status_graph.embeddings import EmbeddingCache; print('✓ Package installed correctly')"
+python3 -c "from domain_status_graph.cache import get_cache; cache = get_cache(); print('✓ Package installed correctly')"
 ```
 
 ---

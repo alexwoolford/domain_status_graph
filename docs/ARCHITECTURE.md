@@ -10,11 +10,10 @@ domain_status_graph/
 ├── config.py                      # Configuration management (Neo4j, OpenAI, paths)
 ├── cli.py                         # Common CLI utilities (logging, dry-run, connection)
 │
-├── embeddings/                    # Embedding creation and caching
-│   ├── __init__.py               # Public API: EmbeddingCache, create_embeddings_for_nodes
-│   ├── cache.py                  # JSON-based embedding cache
+├── embeddings/                    # Embedding creation
+│   ├── __init__.py               # Public API: create_embeddings_for_nodes, create_embedding
 │   ├── openai_client.py          # OpenAI API client wrapper
-│   └── create.py                 # Embedding creation for Neo4j nodes
+│   └── create.py                 # Embedding creation for Neo4j nodes (uses unified AppCache)
 │
 ├── neo4j/                         # Neo4j database interaction
 │   ├── __init__.py               # Public API: get_driver, verify_connection, etc.
@@ -62,14 +61,13 @@ domain_status_graph/
 
 ### `embeddings/`
 
-**Purpose**: OpenAI embedding creation, caching, and persistence.
+**Purpose**: OpenAI embedding creation and persistence.
 
 **Key Components**:
-- **`cache.py`**: `EmbeddingCache` class - JSON-based cache with text hash verification
 - **`openai_client.py`**: OpenAI client initialization and embedding creation
-- **`create.py`**: High-level function to create embeddings for Neo4j nodes
+- **`create.py`**: High-level function to create embeddings for Neo4j nodes (uses unified `AppCache`)
 
-**Design**: Caching prevents redundant API calls. Cache keys include property names (e.g., `domain.com:description`) to support multiple embeddings per node.
+**Design**: Embeddings are cached using the unified `AppCache` (see `cache.py`). Cache keys include property names (e.g., `embeddings:domain.com:description`) to support multiple embeddings per node.
 
 ### `neo4j/`
 
@@ -191,9 +189,11 @@ Neo4j Graph (with computed relationships)
 ```
 Neo4j Nodes (with text properties)
   ↓ [create.py]
-OpenAI API (or cache lookup)
+AppCache lookup (unified cache, diskcache/SQLite)
+  ↓ [cache miss]
+OpenAI API
   ↓ [cache.py]
-EmbeddingCache (JSON file)
+AppCache (store embedding)
   ↓ [Write back]
 Neo4j Nodes (with embedding properties)
 ```
