@@ -1,22 +1,18 @@
 #!/usr/bin/env python3
 """
-Load Company nodes and relationships from JSON files.
+Load Company nodes and relationships from unified cache.
 
 This script:
 1. Creates Company nodes with company information (CIK, ticker, name, description)
-2. Adds description embeddings to Company nodes (REQUIRED - core feature)
-3. Creates HAS_DOMAIN relationships linking Company to Domain nodes
+2. Creates HAS_DOMAIN relationships linking Company to Domain nodes
 
 Schema additions:
 - Nodes: Company (key=cik)
 - Relationships: (Company)-[:HAS_DOMAIN]->(Domain)
-- Properties: Company.description, Company.description_embedding,
-  Company.embedding_model, Company.embedding_dimension
+- Properties: Company.description
 
 Dependencies:
-- Requires: data/public_company_domains.json (from collect_domains.py)
-- Requires: data/description_embeddings.json (from create_company_embeddings.py)
-- Embeddings are REQUIRED (core feature), not optional
+- Requires: Cache populated by collect_domains.py (namespace: company_domains)
 
 Usage:
     python scripts/load_company_data.py          # Dry-run (plan only)
@@ -24,11 +20,10 @@ Usage:
 """
 
 import argparse
-import json
 import sys
-from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Dict, List
 
+from domain_status_graph.cache import get_cache
 from domain_status_graph.cli import (
     get_driver_and_database,
     setup_logging,
@@ -39,80 +34,49 @@ from domain_status_graph.neo4j import create_company_constraints
 
 def load_companies(
     driver,
-    companies_file: Path,
-    embeddings_file: Optional[Path] = None,
+    cache,
     batch_size: int = 1000,
     database: str = None,
     execute: bool = False,
 ):
     """
-    Load Company nodes from JSON files.
+    Load Company nodes from unified cache.
 
     Args:
         driver: Neo4j driver
-        companies_file: Path to public_company_domains.json
-        embeddings_file: Optional path to description_embeddings.json
+        cache: AppCache instance
         batch_size: Batch size for loading
         database: Neo4j database name
         execute: If False, only print plan
     """
-    if not companies_file.exists():
-        print(f"ERROR: Companies file not found: {companies_file}")
-        return
+    # Get all company keys from cache
+    company_keys = cache.keys(namespace="company_domains", limit=10000)
 
-    print(f"Loading companies from: {companies_file}")
-    with open(companies_file) as f:
-        companies_data = json.load(f)
+    if not company_keys:
+        print("ERROR: No companies found in cache. Run collect_domains.py first.")
+        return []
 
-    # Load embeddings (REQUIRED - core feature)
-    # Embeddings file format: {cik: [embedding_vector], ...}
-    embeddings: Dict[str, List[float]] = {}
-    if not embeddings_file or not embeddings_file.exists():
-        print(f"ERROR: Embeddings file not found: {embeddings_file}")
-        print("Embeddings are required (core feature). Run create_company_embeddings.py first.")
-        return
+    print(f"Loading companies from cache: {len(company_keys)} companies")
 
-    print(f"Loading embeddings from: {embeddings_file}")
-    with open(embeddings_file) as f:
-        embeddings_data = json.load(f)
-
-    # Handle format: {cik: [embedding_vector], ...}
-    for cik, value in embeddings_data.items():
-        if isinstance(value, list):
-            embeddings[cik] = value
-
-    print(f"  Loaded {len(embeddings)} embeddings")
-
-    # Filter companies with domains (normalize domain to match Domain.final_domain)
+    # Load companies from cache
     companies_to_load = []
-    for company in companies_data:
-        cik = company.get("cik")
-        domain = company.get("domain")
-
-        if not cik:
+    for cik in company_keys:
+        company_data = cache.get("company_domains", cik)
+        if not company_data:
             continue
 
-        # Normalize domain to match Domain.final_domain format
+        domain = company_data.get("domain")
         if domain:
+            # Normalize domain to match Domain.final_domain format
             domain = domain.lower().replace("www.", "").strip()
-
-        # Get embedding if available (check both embeddings dict and company data)
-        embedding = embeddings.get(cik) or company.get("description_embedding")
-
-        # Get metadata from company data (embeddings file doesn't have metadata)
-        embedding_model = company.get("embedding_model")
-        embedding_dimension = company.get("embedding_dimension")
 
         companies_to_load.append(
             {
-                "cik": str(cik),
-                "ticker": company.get("ticker", "").upper(),
-                "name": company.get("name", "").strip(),
-                "description": company.get("description", "").strip() or None,
+                "cik": str(company_data.get("cik", cik)),
+                "ticker": company_data.get("ticker", "").upper(),
+                "name": company_data.get("name", "").strip(),
+                "description": company_data.get("description", "").strip() or None,
                 "domain": domain,
-                "description_embedding": embedding if embedding else None,
-                "embedding_model": embedding_model,
-                "embedding_dimension": embedding_dimension,
             }
         )
 
@@ -120,11 +84,9 @@ def load_companies(
 
     if not execute:
         print(f"\nDRY RUN: Would load {len(companies_to_load)} Company nodes")
-        companies_with_embeddings = sum(1 for c in companies_to_load if c["description_embedding"])
-        print(f"  {companies_with_embeddings} companies would have embeddings (required)")
-        if companies_with_embeddings == 0:
-            print("  WARNING: No embeddings found. Embeddings are required (core feature).")
-        return
+        companies_with_domains = sum(1 for c in companies_to_load if c["domain"])
+        print(f"  {companies_with_domains} companies would have domains")
+        return []
 
     # Load Company nodes in batches
     with driver.session(database=database) as session:
@@ -138,9 +100,6 @@ def load_companies(
             SET c.ticker = company.ticker,
                 c.name = company.name,
                 c.description = company.description,
-                c.description_embedding = company.description_embedding,
-                c.embedding_model = company.embedding_model,
-                c.embedding_dimension = company.embedding_dimension,
                 c.loaded_at = datetime()
             """
 
@@ -205,38 +164,33 @@ def create_has_domain_relationships(
         print(f"✓ Created {total_created} HAS_DOMAIN relationships")
 
 
-def dry_run_plan(companies_file: Path, embeddings_file: Optional[Path]):
+def dry_run_plan(cache):
     """Print a dry-run plan."""
     print("=" * 80)
     print("DRY RUN: Company Data Loading Plan")
     print("=" * 80)
 
-    if not companies_file.exists():
-        print(f"ERROR: Companies file not found: {companies_file}")
+    company_keys = cache.keys(namespace="company_domains", limit=10000)
+
+    if not company_keys:
+        print("ERROR: No companies found in cache. Run collect_domains.py first.")
         return
 
-    with open(companies_file) as f:
-        companies_data = json.load(f)
+    companies_with_domains = 0
+    companies_with_descriptions = 0
 
-    companies_with_domains = sum(1 for c in companies_data if c.get("domain"))
-    companies_with_descriptions = sum(1 for c in companies_data if c.get("description"))
+    for cik in company_keys:
+        company_data = cache.get("company_domains", cik)
+        if company_data:
+            if company_data.get("domain"):
+                companies_with_domains += 1
+            if company_data.get("description"):
+                companies_with_descriptions += 1
 
-    print(f"\nCompanies file: {companies_file}")
-    print(f"  Total companies: {len(companies_data)}")
+    print("\nCache: company_domains namespace")
+    print(f"  Total companies: {len(company_keys)}")
     print(f"  Companies with domains: {companies_with_domains}")
     print(f"  Companies with descriptions: {companies_with_descriptions}")
-
-    if embeddings_file and embeddings_file.exists():
-        with open(embeddings_file) as f:
-            embeddings = json.load(f)
-        print(f"\nEmbeddings file: {embeddings_file}")
-        print(f"  Total embeddings: {len(embeddings)}")
-    else:
-        print(f"\nEmbeddings file: {embeddings_file} (not found)")
-        print(
-            "  ERROR: Embeddings are required (core feature). "
-            "Run create_company_embeddings.py first."
-        )
 
     print("\n" + "=" * 80)
     print("To execute, run: python scripts/load_company_data.py --execute")
@@ -250,18 +204,6 @@ def main():
         "--execute", action="store_true", help="Actually load data (default is dry-run)"
     )
     parser.add_argument(
-        "--companies-file",
-        type=Path,
-        default=Path("data/public_company_domains.json"),
-        help="Path to public_company_domains.json (default: data/public_company_domains.json)",
-    )
-    parser.add_argument(
-        "--embeddings-file",
-        type=Path,
-        default=Path("data/description_embeddings.json"),
-        help="Path to description_embeddings.json (default: data/description_embeddings.json)",
-    )
-    parser.add_argument(
         "--batch-size",
         type=int,
         default=1000,
@@ -271,9 +213,10 @@ def main():
     args = parser.parse_args()
 
     logger = setup_logging("load_company_data", execute=args.execute)
+    cache = get_cache()
 
     if not args.execute:
-        dry_run_plan(args.companies_file, args.embeddings_file)
+        dry_run_plan(cache)
         return
 
     logger.info("=" * 80)
@@ -295,8 +238,7 @@ def main():
         logger.info("\n2. Loading Company nodes...")
         companies_data = load_companies(
             driver,
-            args.companies_file,
-            args.embeddings_file,
+            cache,
             batch_size=args.batch_size,
             database=database,
             execute=True,

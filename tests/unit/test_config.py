@@ -71,6 +71,10 @@ def test_get_data_dir():
     data_dir = get_data_dir()
     assert isinstance(data_dir, Path)
     assert data_dir.name == "data"
+    # Verify it's in the project root (not parent of project root)
+    # The data dir should be a subdirectory of the project root
+    project_root = data_dir.parent
+    assert (project_root / "domain_status_graph").exists(), "data dir should be in project root"
 
 
 def test_get_domain_status_db():

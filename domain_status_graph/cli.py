@@ -192,10 +192,45 @@ def run_all_pipelines():
     subprocess.run([sys.executable, str(script)] + sys.argv[1:])
 
 
-def run_embedding_cache():
-    """Entry point for embedding-cache command."""
-    import subprocess
-    from pathlib import Path
+def run_cache():
+    """Entry point for cache command."""
+    import argparse
 
-    script = Path(__file__).parent.parent / "scripts" / "embedding_cache.py"
-    subprocess.run([sys.executable, str(script)] + sys.argv[1:])
+    from domain_status_graph.cache import get_cache
+
+    parser = argparse.ArgumentParser(description="Manage unified cache")
+    parser.add_argument("command", choices=["stats", "list", "clear"])
+    parser.add_argument("--namespace", "-n", help="Filter by namespace")
+    parser.add_argument("--limit", type=int, default=20, help="Limit for list")
+    parser.add_argument("--yes", "-y", action="store_true", help="Skip confirmation")
+    args = parser.parse_args()
+
+    cache = get_cache()
+
+    if args.command == "stats":
+        stats = cache.stats()
+        print(f"Cache: {stats['cache_dir']}")
+        print(f"  Total entries: {stats['total']}")
+        print(f"  Size: {stats['size_mb']} MB")
+        print("  By namespace:")
+        for ns, count in sorted(stats["by_namespace"].items()):
+            print(f"    {ns}: {count}")
+
+    elif args.command == "list":
+        keys = cache.keys(namespace=args.namespace, limit=args.limit)
+        ns_label = args.namespace or "all"
+        print(f"Keys ({ns_label}, limit {args.limit}):")
+        for key in keys:
+            print(f"  {key}")
+
+    elif args.command == "clear":
+        if args.namespace:
+            if not args.yes:
+                confirm = input(f"Clear all {args.namespace} entries? [y/N] ")
+                if confirm.lower() != "y":
+                    print("Aborted")
+                    return
+            count = cache.clear_namespace(args.namespace)
+            print(f"Cleared {count} entries from {args.namespace}")
+        else:
+            print("Specify --namespace to clear, or use 'rm -rf data/cache'")

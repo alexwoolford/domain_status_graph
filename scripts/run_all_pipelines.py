@@ -31,7 +31,12 @@ COMPUTE_DOMAIN_SIMILARITY_SCRIPT = SCRIPT_DIR / "compute_domain_similarity.py"
 COMPUTE_KEYWORD_SIMILARITY_SCRIPT = SCRIPT_DIR / "compute_keyword_similarity.py"
 
 
-def run_script(script_path: Path, execute: bool = False, description: str = ""):
+def run_script(
+    script_path: Path,
+    execute: bool = False,
+    description: str = "",
+    extra_args: list = None,
+):
     """Run a script and return success status."""
     if not script_path.exists():
         print(f"✗ ERROR: Script not found: {script_path}")
@@ -45,6 +50,8 @@ def run_script(script_path: Path, execute: bool = False, description: str = ""):
     cmd = [sys.executable, str(script_path)]
     if execute:
         cmd.append("--execute")
+    if extra_args:
+        cmd.extend(extra_args)
 
     try:
         result = subprocess.run(cmd, check=True, capture_output=False)
@@ -69,6 +76,11 @@ def main():
         "--execute",
         action="store_true",
         help="Actually execute the pipelines (default is dry-run)",
+    )
+    parser.add_argument(
+        "--fast",
+        action="store_true",
+        help="Fast mode: skip uncached companies in collect_domains.py",
     )
     args = parser.parse_args()
 
@@ -130,12 +142,15 @@ def main():
     print("STEP 2: Load Company Data")
     print("=" * 70)
 
-    # Check if company data files exist
-    companies_file = Path("data/public_company_domains.json")
-    embeddings_file = Path("data/description_embeddings.json")
+    # Check cache for company data
+    from domain_status_graph.cache import get_cache
 
-    if not companies_file.exists():
-        print(f"⚠ Companies file not found: {companies_file}")
+    cache = get_cache()
+    cached_companies = cache.count("company_domains")
+
+    # Run collect_domains.py if needed
+    if cached_companies == 0 and not args.fast:
+        print(f"⚠ No companies in cache")
         print("  Running collect_domains.py...")
         if not run_script(
             COLLECT_DOMAINS_SCRIPT,
@@ -144,30 +159,43 @@ def main():
         ):
             print("\n✗ Pipeline 2 failed at collect_domains step")
             return
+    elif cached_companies > 0:
+        if args.fast:
+            print(
+                f"✓ {cached_companies} companies in cache (fast mode: skipping collect_domains.py)"
+            )
+        else:
+            print(f"✓ {cached_companies} companies in cache")
+            print("  Running collect_domains.py with --skip-uncached to check for new companies...")
+            if not run_script(
+                COLLECT_DOMAINS_SCRIPT,
+                execute=True,
+                description="Step 2.1: Collect Company Domains",
+                extra_args=["--skip-uncached"],
+            ):
+                print("\n✗ Pipeline 2 failed at collect_domains step")
+                return
     else:
-        print(f"✓ Companies file exists: {companies_file} (skipping collect_domains.py)")
+        # cached_companies == 0 and args.fast
+        print(f"⚠ No companies in cache, but --fast mode enabled")
+        print("  Skipping collect_domains.py (use without --fast to fetch companies)")
 
-    if not embeddings_file.exists():
-        print(f"⚠ Embeddings file not found: {embeddings_file}")
-        print("  Running create_company_embeddings.py...")
-        if not run_script(
-            CREATE_COMPANY_EMBEDDINGS_SCRIPT,
-            execute=True,
-            description="Step 2.2: Create Company Description Embeddings",
-        ):
-            print("\n✗ Pipeline 2 failed at create_embeddings step")
-            return
-    else:
-        msg = f"✓ Embeddings file exists: {embeddings_file}"
-        msg += " (skipping create_company_embeddings.py)"
-        print(msg)
-
+    # Load Company nodes first (needed before creating embeddings)
     if not run_script(
         LOAD_COMPANY_DATA_SCRIPT,
         execute=True,
-        description="Loading Company nodes and HAS_DOMAIN relationships",
+        description="Step 2.2: Loading Company nodes and HAS_DOMAIN relationships",
     ):
         print("\n✗ Failed at load_company_data step")
+        return
+
+    # Then create embeddings for the Company nodes
+    if not run_script(
+        CREATE_COMPANY_EMBEDDINGS_SCRIPT,
+        execute=True,
+        description="Step 2.3: Create Company Description Embeddings",
+    ):
+        print("\n✗ Pipeline 2 failed at create_embeddings step")
         return
 
     # Step 3: Domain Embeddings
@@ -175,28 +203,14 @@ def main():
     print("STEP 3: Domain Embeddings")
     print("=" * 70)
 
-    # Check if domain embeddings cache exists
-    domain_embeddings_cache = Path("data/domain_embeddings_cache.json")
-    if not domain_embeddings_cache.exists():
-        print(f"⚠ Domain embeddings cache not found: {domain_embeddings_cache}")
-        print("  Running create_domain_embeddings.py...")
-        if not run_script(
-            CREATE_DOMAIN_EMBEDDINGS_SCRIPT,
-            execute=True,
-            description="Step 3.1: Create Domain Description Embeddings",
-        ):
-            print("\n✗ Failed at create_domain_embeddings step")
-            return
-    else:
-        print(f"✓ Domain embeddings cache exists: {domain_embeddings_cache}")
-        print("  Running create_domain_embeddings.py to update Neo4j...")
-        if not run_script(
-            CREATE_DOMAIN_EMBEDDINGS_SCRIPT,
-            execute=True,
-            description="Step 3.1: Update Domain Embeddings in Neo4j",
-        ):
-            print("\n✗ Failed at create_domain_embeddings step")
-            return
+    # Always run create_domain_embeddings (it checks cache internally)
+    if not run_script(
+        CREATE_DOMAIN_EMBEDDINGS_SCRIPT,
+        execute=True,
+        description="Step 3.1: Create Domain Description Embeddings",
+    ):
+        print("\n✗ Failed at create_domain_embeddings step")
+        return
 
     if not run_script(
         COMPUTE_DOMAIN_SIMILARITY_SCRIPT,

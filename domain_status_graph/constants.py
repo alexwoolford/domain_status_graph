@@ -24,4 +24,6 @@ EMBEDDING_MODEL = "text-embedding-3-small"
 EMBEDDING_DIMENSION = 1536
 
 # Rate limiting
-MIN_REQUEST_INTERVAL = 0.1  # seconds between API calls
+MIN_REQUEST_INTERVAL = 0.1  # seconds between API calls (general)
+# OpenAI embeddings allow higher rates (100 req/sec)
+EMBEDDING_REQUEST_INTERVAL = 0.01  # seconds between embedding API calls

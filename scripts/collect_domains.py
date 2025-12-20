@@ -21,7 +21,6 @@ Sources (in priority order):
 4. Finnhub (weight: 1) - Incomplete but can augment
 """
 
-import json
 import logging
 import os
 import time
@@ -579,16 +578,23 @@ def process_company(
     session: requests.Session,
     cik: str,
     company_info: Dict[str, str],
-    existing_results: Dict[str, Dict],
-) -> Optional[Dict]:
-    """Process a single company and return result."""
+    cache,
+    ttl_days: int = 30,
+) -> Tuple[Optional[Dict], bool]:
+    """Process a single company - check cache first, then API calls.
+
+    Returns:
+        Tuple of (result_dict, was_cached)
+    """
     ticker = company_info["ticker"]
     name = company_info["name"]
 
-    # Skip if already processed
-    if cik in existing_results:
-        return existing_results[cik]
+    # Check cache first
+    cached = cache.get("company_domains", cik)
+    if cached:
+        return cached, True
 
+    # Not in cache - do the expensive API calls
     result = collect_domains(session, cik, ticker, name)
 
     if result.domain:
@@ -607,9 +613,26 @@ def process_company(
         if result.description:
             output["description"] = result.description
             output["description_source"] = result.description_source
-        return output
 
-    return None
+        # Store in cache
+        cache.set("company_domains", cik, output, ttl_days=ttl_days)
+        return output, False
+    else:
+        # Cache negative result (no domain found) to avoid retrying
+        negative_result = {
+            "cik": cik,
+            "ticker": ticker,
+            "name": name,
+            "domain": None,
+            "source": "none",
+            "confidence": 0.0,
+            "votes": 0,
+            "all_sources": {},
+            "collected_at": datetime.now(timezone.utc).isoformat(),
+            "no_domain_found": True,
+        }
+        cache.set("company_domains", cik, negative_result, ttl_days=7)
+        return negative_result, False
 
 
 def main():
@@ -634,9 +657,21 @@ def main():
         help="Quick test with a few major companies (AAPL, MSFT, GOOGL, etc.)",
     )
     parser.add_argument(
-        "--resume",
+        "--ttl-days",
+        type=int,
+        default=30,
+        help="Cache TTL in days (default: 30)",
+    )
+    parser.add_argument(
+        "--skip-uncached",
         action="store_true",
-        help="Resume from existing output file",
+        help="Skip companies not in cache (fast iteration mode)",
+    )
+    parser.add_argument(
+        "--max-new",
+        type=int,
+        default=None,
+        help="Maximum number of new API calls to make (default: unlimited)",
     )
 
     args = parser.parse_args()
@@ -664,12 +699,16 @@ def main():
     logging.getLogger("openai").setLevel(logging.WARNING)
     logging.getLogger("urllib3").setLevel(logging.WARNING)
 
-    output_file = Path("data/public_company_domains.json")
-    domain_list_file = Path("data/public_company_domains_list.txt")
+    # Initialize cache
+    from domain_status_graph.cache import get_cache
+
+    cache = get_cache()
+    cached_count = cache.count("company_domains")
 
     _logger.info("=" * 80)
     _logger.info("Starting parallel domain collection")
     _logger.info(f"Log file: {log_file}")
+    _logger.info(f"Cache: {cached_count} companies already cached")
 
     # Create session
     session = requests.Session()
@@ -696,94 +735,95 @@ def main():
         companies = test_companies
         _logger.info(f"TEST MODE: Processing {len(companies)} test companies")
 
-    # Load existing results
-    existing_results = {}
-    if args.resume and output_file.exists():
-        try:
-            with open(output_file) as f:
-                data = json.load(f)
-                existing_results = {r["cik"]: r for r in data if "cik" in r}
-            _logger.info(f"Loaded {len(existing_results)} existing results")
-        except Exception as e:
-            _logger.warning(f"Could not load existing results: {e}")
+    _logger.info(f"Processing {len(companies)} companies...")
 
-    # Filter companies to process
-    to_process = {cik: info for cik, info in companies.items() if cik not in existing_results}
+    # Pre-load all cached entries (much faster than individual lookups)
+    _logger.info("Pre-loading cached entries...")
+    cached_results = {}
+    companies_to_fetch = {}
+    for cik, info in companies.items():
+        cached = cache.get("company_domains", cik)
+        if cached:
+            cached_results[cik] = cached
+        else:
+            companies_to_fetch[cik] = info
 
-    if args.max_companies:
-        to_process = dict(list(to_process.items())[: args.max_companies])
+    cached_count = len(cached_results)
+    uncached_count = len(companies_to_fetch)
 
-    _logger.info(f"Processing {len(to_process)} companies in parallel...")
+    if args.skip_uncached:
+        _logger.info(f"Found {cached_count} cached, skipping {uncached_count} uncached companies")
+        _logger.info("Use without --skip-uncached to fetch uncached companies")
+        results = list(cached_results.values())
+        new_count = 0
+        skipped_count = uncached_count
+    else:
+        _logger.info(f"Found {cached_count} cached, {uncached_count} need API calls")
 
-    results = list(existing_results.values())
+        # Limit new API calls if requested
+        if args.max_new and uncached_count > args.max_new:
+            _logger.info(
+                f"Limiting to {args.max_new} new API calls (out of {uncached_count} uncached)"
+            )
+            companies_to_fetch = dict(list(companies_to_fetch.items())[: args.max_new])
+            skipped_count = uncached_count - args.max_new
+        else:
+            skipped_count = 0
 
-    # Process in parallel
-    # With 30 workers, each making 4 parallel API calls, we can have up to 120 concurrent requests
-    # Rate limits are enforced per-source to prevent overwhelming any single service
-    # Finnhub (1 req/sec) is the bottleneck, but yfinance/Finviz/SEC can handle more
-    max_workers = 30  # Process 30 companies concurrently
-    with ThreadPoolExecutor(max_workers=max_workers) as executor:
-        future_to_cik = {
-            executor.submit(process_company, session, cik, info, existing_results): cik
-            for cik, info in to_process.items()
-        }
+        # Process only companies that need API calls in parallel
+        results = list(cached_results.values())
+        new_count = 0
 
-        save_interval = 10  # Save every 10 companies
-        processed_count = 0
+        with tqdm(
+            total=len(companies),
+            desc="Processing companies",
+            initial=cached_count,
+        ) as pbar:
+            pbar.set_postfix({"found": len(results), "cached": cached_count, "new": new_count})
 
-        with tqdm(total=len(to_process), desc="Processing companies") as pbar:
-            start_time = time.time()
-            for future in as_completed(future_to_cik):
-                cik = future_to_cik[future]
-                try:
-                    # Timeout per company: 60 seconds max (4 sources * 30s each with overhead)
-                    result = future.result(timeout=60)
-                    if result:
-                        results.append(result)
-                        # Log successful finds periodically
-                        if len(results) % 100 == 0:
-                            elapsed = time.time() - start_time
-                            rate = len(results) / elapsed if elapsed > 0 else 0
-                            _logger.debug(
-                                f"Progress: {len(results)} companies found "
-                                f"({rate:.1f} companies/sec)"
+            if companies_to_fetch:
+                max_workers = 30
+                with ThreadPoolExecutor(max_workers=max_workers) as executor:
+                    future_to_cik = {
+                        executor.submit(
+                            process_company, session, cik, info, cache, args.ttl_days
+                        ): cik
+                        for cik, info in companies_to_fetch.items()
+                    }
+
+                    for future in as_completed(future_to_cik):
+                        cik = future_to_cik[future]
+                        try:
+                            result, was_cached = future.result(timeout=60)
+                            if result:
+                                results.append(result)
+                                if not was_cached:
+                                    new_count += 1
+                        except TimeoutError:
+                            _logger.warning(f"Timeout processing CIK {cik}")
+                        except Exception as e:
+                            _logger.warning(f"Error processing CIK {cik}: {e}")
+                        finally:
+                            pbar.update(1)
+                            pbar.set_postfix(
+                                {"found": len(results), "cached": cached_count, "new": new_count}
                             )
-                except TimeoutError:
-                    _logger.warning(f"Timeout processing CIK {cik} - skipping")
-                except Exception as e:
-                    _logger.warning(f"Error processing CIK {cik}: {e}")
-                finally:
-                    pbar.update(1)
-                    pbar.set_postfix({"found": len(results)})
-                    processed_count += 1
+            else:
+                _logger.info("All companies were cached - no API calls needed")
 
-                    # Incremental save to prevent data loss
-                    if processed_count % save_interval == 0:
-                        output_file.parent.mkdir(parents=True, exist_ok=True)
-                        with open(output_file, "w") as f:
-                            json.dump(results, f, indent=2)
-                        _logger.debug(
-                            f"Incremental save: {len(results)} companies saved to {output_file}"
-                        )
-
-    # Final save
-    output_file.parent.mkdir(parents=True, exist_ok=True)
-    with open(output_file, "w") as f:
-        json.dump(results, f, indent=2)
-
-    # Save domain list
-    domains = sorted(set(r["domain"] for r in results if r.get("domain")))
-    with open(domain_list_file, "w") as f:
-        for domain in domains:
-            f.write(f"{domain}\n")
-
-    # Print final summary to stdout (after tqdm is done)
+    # Summary
+    domains = set(r["domain"] for r in results if r.get("domain"))
     print(f"\n✓ Complete: {len(results)} companies, {len(domains)} unique domains")
-    print(f"✓ Saved to {output_file}")
+    summary_parts = [f"From cache: {cached_count}"]
+    if new_count > 0:
+        summary_parts.append(f"New API calls: {new_count}")
+    if skipped_count > 0:
+        summary_parts.append(f"Skipped: {skipped_count}")
+    print(f"  {', '.join(summary_parts)}")
     print(f"✓ Log file: {log_file}")
 
-    _logger.info(f"✓ Complete: {len(results)} companies, {len(domains)} unique domains")
-    _logger.info(f"✓ Saved to {output_file}")
+    _logger.info(f"✓ Complete: {len(results)} companies, {len(domains)} domains")
+    _logger.info(f"  Cached: {cached_count}, New: {new_count}, Skipped: {skipped_count}")
     _logger.info("=" * 80)
 
 

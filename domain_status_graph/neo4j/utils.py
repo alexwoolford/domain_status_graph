@@ -3,7 +3,21 @@ Neo4j utility functions for common operations.
 """
 
 import logging
+import re
 from typing import Optional
+
+# Relationship type pattern: uppercase letters, numbers, and underscores
+REL_TYPE_PATTERN = re.compile(r"^[A-Z][A-Z0-9_]*$")
+
+
+def _validate_relationship_type(rel_type: str) -> None:
+    """Validate that a relationship type is safe to use in Cypher queries."""
+    if not REL_TYPE_PATTERN.match(rel_type):
+        raise ValueError(
+            f"Invalid relationship type: '{rel_type}'. "
+            "Relationship types must start with an uppercase letter and contain "
+            "only uppercase letters, numbers, and underscores."
+        )
 
 
 def delete_relationships_in_batches(
@@ -32,6 +46,9 @@ def delete_relationships_in_batches(
     """
     if logger is None:
         logger = logging.getLogger(__name__)
+
+    # Validate relationship type for security
+    _validate_relationship_type(rel_type)
 
     with driver.session(database=database) as session:
         # Count relationships before deletion

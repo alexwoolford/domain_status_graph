@@ -4,7 +4,7 @@ Create embeddings for Domain descriptions and store in Neo4j.
 
 This script uses the general-purpose embedding creation system to:
 1. Load Domain nodes from Neo4j that have descriptions
-2. Use SQLiteEmbeddingCache to create/cache embeddings (avoids re-computation)
+2. Use unified cache to create/cache embeddings (avoids re-computation)
 3. Update Domain nodes with description_embedding property
 4. Store model metadata for reproducibility
 
@@ -16,8 +16,8 @@ Usage:
 import argparse
 import logging
 import sys
-from pathlib import Path
 
+from domain_status_graph.cache import get_cache
 from domain_status_graph.cli import (
     add_execute_argument,
     get_driver_and_database,
@@ -27,7 +27,6 @@ from domain_status_graph.cli import (
 from domain_status_graph.embeddings import (
     EMBEDDING_DIMENSION,
     EMBEDDING_MODEL,
-    SQLiteEmbeddingCache,
     create_embedding,
     create_embeddings_for_nodes,
     get_openai_client,
@@ -37,7 +36,7 @@ from domain_status_graph.embeddings import (
 
 def update_domain_embeddings(
     driver,
-    cache: SQLiteEmbeddingCache,
+    cache,
     client,
     database: str = None,
     execute: bool = False,
@@ -50,7 +49,7 @@ def update_domain_embeddings(
 
     Args:
         driver: Neo4j driver
-        cache: EmbeddingCache instance
+        cache: AppCache instance (unified cache)
         client: OpenAI client instance
         database: Neo4j database name
         execute: If False, only print plan
@@ -92,6 +91,7 @@ def update_domain_embeddings(
         # Show updated cache stats
         cache_stats = cache.stats()
         logger.info(f"  Cache total: {cache_stats['total']}")
+        logger.info(f"  Embeddings in cache: {cache_stats['by_namespace'].get('embeddings', 0)}")
 
 
 def main():
@@ -101,18 +101,6 @@ def main():
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     add_execute_argument(parser)
-    parser.add_argument(
-        "--cache-db",
-        type=Path,
-        default=Path("data/embeddings.db"),
-        help="Embedding cache database (default: data/embeddings.db)",
-    )
-    parser.add_argument(
-        "--model",
-        type=str,
-        default=EMBEDDING_MODEL,
-        help=f"OpenAI embedding model (default: {EMBEDDING_MODEL})",
-    )
 
     args = parser.parse_args()
 
@@ -125,8 +113,8 @@ def main():
     # Suppress HTTP logging
     suppress_http_logging()
 
-    # Initialize SQLite cache
-    cache = SQLiteEmbeddingCache(args.cache_db)
+    # Initialize unified cache
+    cache = get_cache()
 
     # Get OpenAI client
     try:
@@ -157,8 +145,8 @@ def main():
 
         # Cache stats
         cache_stats = cache.stats()
-        logger.info(f"Cache: {cache_stats['total']} embeddings in {args.cache_db}")
-        logger.info(f"  By type: {cache_stats['by_type']}")
+        logger.info(f"Cache: {cache_stats['total']} total entries")
+        logger.info(f"  Embeddings: {cache_stats['by_namespace'].get('embeddings', 0)}")
 
         # Dry-run mode
         if not args.execute:

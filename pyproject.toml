@@ -31,6 +31,7 @@ dependencies = [
     "numpy>=1.24.0",
     "requests>=2.31.0",
     "tenacity>=8.0.0",
+    "diskcache>=5.6.0",
 ]
 
 [project.optional-dependencies]
@@ -54,7 +55,7 @@ bootstrap-graph = "domain_status_graph.cli:run_bootstrap"
 compute-gds-features = "domain_status_graph.cli:run_gds_features"
 health-check = "domain_status_graph.cli:run_health_check"
 run-all-pipelines = "domain_status_graph.cli:run_all_pipelines"
-embedding-cache = "domain_status_graph.cli:run_embedding_cache"
+cache = "domain_status_graph.cli:run_cache"
 
 [tool.setuptools]
 packages = ["domain_status_graph"]
