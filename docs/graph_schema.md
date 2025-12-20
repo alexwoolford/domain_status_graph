@@ -35,13 +35,18 @@ The Domain Status Graph is a focused knowledge graph that models domains and the
 
 **Unique Identifier**: `final_domain` (normalized domain name, lowercase, no `www.`)
 
+**Schema Migration Note**: The graph uses semantic property names that map from the SQLite schema:
+- `domain` maps from `initial_domain` in SQLite (the original domain from input URL)
+- `status` maps from `http_status` in SQLite (HTTP status code)
+- These names are kept for backward compatibility and semantic clarity
+
 **Properties**:
 
 | Property | Type | Required | Description | Example Values |
 |----------|------|----------|-------------|----------------|
 | `final_domain` | STRING | ✅ | Normalized domain name (unique key) | `apple.com`, `microsoft.com` |
-| `domain` | STRING | ❌ | Original domain from source data | `www.apple.com`, `apple.com` |
-| `status` | INTEGER | ❌ | HTTP status code | `200`, `307` |
+| `domain` | STRING | ❌ | Original domain from input URL (maps from SQLite `initial_domain`) | `www.apple.com`, `apple.com` |
+| `status` | INTEGER | ❌ | HTTP status code (maps from SQLite `http_status`) | `200`, `307` |
 | `status_description` | STRING | ❌ | Human-readable status description | `OK`, `Temporary Redirect` |
 | `response_time` | FLOAT | ❌ | HTTP response time in seconds | `0.226` - `31.722` |
 | `timestamp` | INTEGER | ❌ | Unix timestamp of status check | `1735689600` |

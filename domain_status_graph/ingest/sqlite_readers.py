@@ -6,6 +6,7 @@ and return structured data that can be loaded into Neo4j.
 """
 
 import sqlite3
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Dict, List
 
@@ -27,19 +28,19 @@ def read_domains(db_path: Path) -> List[Dict]:
             """
             SELECT DISTINCT
                 us.final_domain,
-                us.domain,
-                us.status,
-                us.status_description,
-                us.response_time,
-                us.timestamp,
+                us.initial_domain,
+                us.http_status,
+                us.http_status_text,
+                us.response_time_seconds,
+                us.observed_at_ms,
                 us.is_mobile_friendly,
                 us.spf_record,
                 us.dmarc_record,
                 us.title,
                 us.keywords,
                 us.description,
-                w.creation_date,
-                w.expiration_date,
+                w.creation_date_ms,
+                w.expiration_date_ms,
                 w.registrar,
                 w.registrant_country,
                 w.registrant_org
@@ -48,7 +49,41 @@ def read_domains(db_path: Path) -> List[Dict]:
             WHERE us.final_domain IS NOT NULL
             """
         )
-        return [dict(row) for row in cursor.fetchall()]
+        rows = cursor.fetchall()
+        # Convert to dicts and normalize field names for backward compatibility
+        domains = []
+        for row in rows:
+            domain_dict = dict(row)
+            # Map new schema to expected field names for loaders
+            domain_dict["domain"] = domain_dict.get("initial_domain", "")
+            domain_dict["status"] = domain_dict.get("http_status", 0)
+            domain_dict["status_description"] = domain_dict.get("http_status_text", "")
+            domain_dict["response_time"] = domain_dict.get("response_time_seconds", 0.0)
+            # Convert milliseconds to datetime string (ISO format)
+            observed_ms = domain_dict.get("observed_at_ms")
+            if observed_ms:
+                domain_dict["timestamp"] = datetime.fromtimestamp(
+                    observed_ms / 1000.0, tz=timezone.utc
+                ).isoformat()
+            else:
+                domain_dict["timestamp"] = None
+            # Convert whois dates from milliseconds
+            creation_ms = domain_dict.get("creation_date_ms")
+            if creation_ms:
+                domain_dict["creation_date"] = datetime.fromtimestamp(
+                    creation_ms / 1000.0, tz=timezone.utc
+                ).isoformat()
+            else:
+                domain_dict["creation_date"] = None
+            expiration_ms = domain_dict.get("expiration_date_ms")
+            if expiration_ms:
+                domain_dict["expiration_date"] = datetime.fromtimestamp(
+                    expiration_ms / 1000.0, tz=timezone.utc
+                ).isoformat()
+            else:
+                domain_dict["expiration_date"] = None
+            domains.append(domain_dict)
+        return domains
 
 
 def read_technologies(db_path: Path) -> List[Dict]:

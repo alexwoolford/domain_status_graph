@@ -144,6 +144,23 @@ This is all that's needed for the two core GDS features (CO_OCCURS_WITH and LIKE
 
 **Note**: A sample database (`data/domain_status.db`) is included in this repository to enable immediate exploration. To generate your own database with fresh data, use the [`domain_status`](https://github.com/alexwoolford/domain_status) tool.
 
+### Generating the SQLite Database
+
+The included `data/domain_status.db` was created using this command:
+
+```bash
+domain_status scan public_companies.txt --enable-whois --status-port 8080 --max-concurrency 5 --rate-limit-rps 2
+```
+
+**Why these slow rate limits?** For a small dataset where completeness is prioritized over speed, conservative rate limiting helps ensure:
+- **Complete WHOIS data**: WHOIS services have varying rate limits, and each service handles limits differently. Conservative limits reduce the chance of hitting rate limits that could result in incomplete data.
+- **Reliable technology fingerprinting**: Slower crawling reduces the chance of transient network issues affecting technology detection.
+- **Complete TLS/DNS records**: Ensures all security and DNS metadata is captured reliably.
+
+**For larger datasets**: If you're scanning thousands of domains and speed is more important, you can increase `--max-concurrency` and `--rate-limit-rps`, but be aware that WHOIS rate limits may cause some records to be incomplete.
+
+This command scans domains from `public_companies.txt`, enables WHOIS lookups, and creates the `domain_status.db` SQLite database used by this project.
+
 ## Graph Schema
 
 **Nodes**:

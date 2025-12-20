@@ -1,0 +1,2 @@
+data/*.db filter=lfs diff=lfs merge=lfs -text
+data/cache/*.db filter=lfs diff=lfs merge=lfs -text
