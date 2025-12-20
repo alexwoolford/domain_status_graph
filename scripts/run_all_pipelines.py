@@ -26,6 +26,7 @@ COMPUTE_GDS_SCRIPT = SCRIPT_DIR / "compute_gds_features.py"
 COLLECT_DOMAINS_SCRIPT = SCRIPT_DIR / "collect_domains.py"
 CREATE_COMPANY_EMBEDDINGS_SCRIPT = SCRIPT_DIR / "create_company_embeddings.py"
 LOAD_COMPANY_DATA_SCRIPT = SCRIPT_DIR / "load_company_data.py"
+ENRICH_COMPANY_PROPERTIES_SCRIPT = SCRIPT_DIR / "enrich_company_properties.py"
 CREATE_DOMAIN_EMBEDDINGS_SCRIPT = SCRIPT_DIR / "create_domain_embeddings.py"
 COMPUTE_DOMAIN_SIMILARITY_SCRIPT = SCRIPT_DIR / "compute_domain_similarity.py"
 COMPUTE_KEYWORD_SIMILARITY_SCRIPT = SCRIPT_DIR / "compute_keyword_similarity.py"
@@ -101,6 +102,7 @@ def main():
             "Company descriptions (if needed)"
         )
         print("  - load_company_data.py - Load Company nodes and HAS_DOMAIN relationships")
+        print("  - enrich_company_properties.py - Enrich Company nodes with properties")
         print()
         print("Step 3: Domain Embeddings & Similarity")
         print("  - create_domain_embeddings.py - Create embeddings for Domain descriptions")
@@ -189,11 +191,20 @@ def main():
         print("\n✗ Failed at load_company_data step")
         return
 
+    # Enrich Company nodes with properties (SEC, Yahoo Finance, etc.)
+    if not run_script(
+        ENRICH_COMPANY_PROPERTIES_SCRIPT,
+        execute=True,
+        description="Step 2.3: Enrich Company Properties (Industry, Size, etc.)",
+    ):
+        print("\n✗ Failed at enrich_company_properties step")
+        return
+
     # Then create embeddings for the Company nodes
     if not run_script(
         CREATE_COMPANY_EMBEDDINGS_SCRIPT,
         execute=True,
-        description="Step 2.3: Create Company Description Embeddings",
+        description="Step 2.4: Create Company Description Embeddings",
     ):
         print("\n✗ Pipeline 2 failed at create_embeddings step")
         return

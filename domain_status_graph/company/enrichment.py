@@ -75,17 +75,27 @@ def fetch_sec_company_info(cik: str, session: Optional[requests.Session] = None)
         sic_code = None
         naics_code = None
 
-        # SIC code is typically in the first entry of sic array
-        # Format: "7372 - Services-Prepackaged Software"
-        sic_array = data.get("sic", [])
-        if sic_array and len(sic_array) > 0:
-            sic_code = str(sic_array[0]).split("-")[0].strip()
+        # SIC code: SEC API returns as string (e.g., "3571") or array
+        sic_value = data.get("sic")
+        if sic_value:
+            if isinstance(sic_value, str):
+                # Format: "3571" (just the code)
+                sic_code = sic_value.strip()
+            elif isinstance(sic_value, list) and len(sic_value) > 0:
+                # Format: ["3571", "Description"] or ["3571 - Description"]
+                sic_entry = str(sic_value[0])
+                sic_code = sic_entry.split("-")[0].split()[0].strip()
 
-        # NAICS might be in the filings or we need to check companyfacts endpoint
-        # For now, we'll get it from companyfacts if available
-        naics_array = data.get("naics", [])
-        if naics_array and len(naics_array) > 0:
-            naics_code = str(naics_array[0]).split("-")[0].strip()
+        # NAICS code: SEC API may return as string or array
+        naics_value = data.get("naics")
+        if naics_value:
+            if isinstance(naics_value, str):
+                # Format: "511210" (just the code)
+                naics_code = naics_value.strip()
+            elif isinstance(naics_value, list) and len(naics_value) > 0:
+                # Format: ["511210", "Description"] or ["511210 - Description"]
+                naics_entry = str(naics_value[0])
+                naics_code = naics_entry.split("-")[0].split()[0].strip()
 
         result = {
             "sic_code": sic_code,

@@ -234,3 +234,12 @@ def run_cache():
             print(f"Cleared {count} entries from {args.namespace}")
         else:
             print("Specify --namespace to clear, or use 'rm -rf data/cache'")
+
+
+def run_enrich_company_properties():
+    """Entry point for enrich-company-properties command."""
+    import subprocess
+    from pathlib import Path
+
+    script = Path(__file__).parent.parent / "scripts" / "enrich_company_properties.py"
+    subprocess.run([sys.executable, str(script)] + sys.argv[1:])

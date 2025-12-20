@@ -63,9 +63,14 @@ def rate_limit_yahoo():
 
 def enrich_company(
     cik: str, ticker: str, name: str, session: requests.Session, cache
-) -> Optional[Dict]:
+) -> tuple[Optional[Dict], bool]:
     """
     Enrich a single company with data from all sources.
+
+    Follows the same caching pattern as collect_domains.py:
+    - Check cache first (by CIK)
+    - If not cached, fetch from all sources
+    - Cache final merged result
 
     Args:
         cik: Company CIK
@@ -75,29 +80,33 @@ def enrich_company(
         cache: Unified cache instance
 
     Returns:
-        Enriched company data dictionary or None if failed
+        Tuple of (enriched company data dictionary, was_cached).
+        Returns (None, False) if enrichment failed.
     """
-    # Check cache first
+    # Check cache first (consistent with collect_domains.py pattern)
     cache_key = cik
     cached = cache.get("company_properties", cache_key)
     if cached:
-        return cached
+        return cached, True
 
-    # Fetch from sources
+    # Not in cache - fetch from sources
     sec_data = fetch_sec_company_info(cik, session=session)
     rate_limit_yahoo()
     yahoo_data = fetch_yahoo_finance_info(ticker) if ticker else None
     wikidata_data = fetch_wikidata_info(ticker, name)  # Optional, may return None
 
-    # Merge data
+    # Merge data from all sources
     enriched = merge_company_data(sec_data, yahoo_data, wikidata_data)
 
-    # Store in cache (TTL: 30 days - company properties don't change often)
+    # Store final merged result in cache (TTL: 30 days)
+    # Cache even if partial - avoids re-fetching if one source fails
     if enriched:
         cache.set("company_properties", cache_key, enriched, ttl_days=30)
-        return enriched
+        return enriched, False
 
-    return None
+    # If no data at all, return None (don't cache negative results)
+    # This allows retry on next run
+    return None, False
 
 
 def enrich_all_companies(
@@ -183,19 +192,16 @@ def enrich_all_companies(
             failed_count += 1
             continue
 
-        # Check cache first
-        cache_key = cik
-        cached = cache.get("company_properties", cache_key)
-        if cached:
+        # Enrich company (returns tuple: data, was_cached)
+        enriched_data, was_cached = enrich_company(cik, ticker, name, session, cache)
+
+        if not enriched_data:
+            failed_count += 1
+            logger.debug(f"Failed to enrich {ticker} (CIK: {cik})")
+            continue
+
+        if was_cached:
             cached_count += 1
-            enriched_data = cached
-        else:
-            # Fetch from sources
-            enriched_data = enrich_company(cik, ticker, name, session, cache)
-            if not enriched_data:
-                failed_count += 1
-                logger.debug(f"Failed to enrich {ticker} (CIK: {cik})")
-                continue
 
         enriched_count += 1
 
