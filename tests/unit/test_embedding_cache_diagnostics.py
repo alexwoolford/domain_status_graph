@@ -162,7 +162,6 @@ class TestLongTextChunkingBehavior:
                 )
 
             # With batched chunking, all chunks go in a single API call
-            # (this is the optimized behavior - ~40x fewer API calls)
             total_calls = len(client._call_log["calls"])
             assert total_calls >= 1, "Should make at least one API call"
 
@@ -336,3 +335,77 @@ class TestCacheKeyConsistency:
             assert result is not None, "Cache lookup should find stored embedding"
             assert result["embedding"][0] == 0.5
             cache.close()
+
+
+class TestTokenBasedBatching:
+    """Tests verifying token-based batching in create_embeddings_batch."""
+
+    def test_batch_splits_on_token_limit(self):
+        """Verify that batches are split based on token counts, not text counts."""
+        from public_company_graph.embeddings.openai_client import create_embeddings_batch
+
+        client = create_mock_client()
+
+        # Create texts that when combined exceed a small token limit
+        # Each text is ~200 tokens (50 words × ~4 tokens/word)
+        text1 = "The company provides enterprise software solutions. " * 50  # ~200 tokens
+        text2 = "Our business focuses on cloud computing services. " * 50  # ~200 tokens
+        text3 = "We deliver innovative technology products globally. " * 50  # ~200 tokens
+
+        # Use a small token limit that forces splitting
+        # With max_tokens_per_batch=300, texts should be batched separately
+        results = create_embeddings_batch(
+            client,
+            [text1, text2, text3],
+            "text-embedding-3-small",
+            max_tokens_per_batch=300,  # Very small - forces separate batches
+        )
+
+        # Should get 3 embeddings back
+        assert len(results) == 3
+        assert all(r is not None for r in results)
+
+        # With such a small limit, should have made multiple API calls
+        # (each text gets its own batch because ~200 tokens each)
+        assert client._call_log["total_texts"] == 3
+
+    def test_batch_combines_small_texts(self):
+        """Small texts should be combined into single batch when under token limit."""
+        from public_company_graph.embeddings.openai_client import create_embeddings_batch
+
+        client = create_mock_client()
+
+        # Create very short texts
+        texts = [
+            "Small company A.",
+            "Small company B.",
+            "Small company C.",
+        ]
+
+        # Use default (large) token limit
+        results = create_embeddings_batch(client, texts, "text-embedding-3-small")
+
+        # All 3 should be in one batch call
+        assert len(results) == 3
+        assert len(client._call_log["calls"]) == 1  # Single batch
+        assert client._call_log["calls"][0]["count"] == 3
+
+    def test_empty_texts_return_none(self):
+        """Empty texts should return None without API calls."""
+        from public_company_graph.embeddings.openai_client import create_embeddings_batch
+
+        client = create_mock_client()
+
+        results = create_embeddings_batch(
+            client,
+            ["Valid text here.", "", "   ", "Another valid."],
+            "text-embedding-3-small",
+        )
+
+        assert len(results) == 4
+        # Valid texts get embeddings
+        assert results[0] is not None
+        assert results[3] is not None
+        # Empty/whitespace texts get None
+        assert results[1] is None
+        assert results[2] is None

@@ -21,7 +21,6 @@ Data Sources:
 Performance:
 - Uses parallel processing with ThreadPoolExecutor
 - SEC and Yahoo APIs have independent rate limits (10 req/sec each)
-- Parallel processing allows ~2x throughput vs sequential
 - First run: ~15-20 minutes for 5000 companies
 - Subsequent runs: seconds (all cached for 30 days)
 
@@ -38,6 +37,7 @@ import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import requests
+from tqdm import tqdm
 
 from public_company_graph.cache import get_cache
 from public_company_graph.cli import (
@@ -233,80 +233,78 @@ def enrich_all_companies(
     logger.info("")
 
     start_time = time.time()
-    last_log_time = start_time
 
-    # Process companies in parallel
+    # Process companies in parallel with tqdm progress bar
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
         # Submit all tasks
         future_to_company = {
             executor.submit(process_company, company): company for company in companies
         }
 
-        # Process results as they complete
-        for future in as_completed(future_to_company):
-            company = future_to_company[future]
-            try:
-                cik, enriched_data, was_cached = future.result()
+        # Process results as they complete with tqdm progress bar
+        with tqdm(
+            total=len(companies),
+            desc="Enriching",
+            unit="company",
+            bar_format="{l_bar}{bar}| {n_fmt}/{total_fmt} [{elapsed}<{remaining}, {rate_fmt}{postfix}]",
+        ) as pbar:
+            for future in as_completed(future_to_company):
+                company = future_to_company[future]
+                try:
+                    cik, enriched_data, was_cached = future.result()
 
-                with counters_lock:
-                    counters["processed"] += 1
-
-                    if enriched_data is None:
-                        counters["failed"] += 1
-                    else:
-                        counters["enriched"] += 1
-                        if was_cached:
-                            counters["cached"] += 1
-
-                # Collect result for Neo4j batch update
-                if enriched_data:
-                    batch_to_update = None
-                    with results_lock:
-                        results.append({"cik": cik, **enriched_data})
-
-                        # Batch update to Neo4j when we have enough
-                        if len(results) >= batch_size:
-                            batch_to_update = results.copy()
-                            results.clear()
-
-                    # Update Neo4j outside the lock to avoid blocking other threads
-                    if batch_to_update:
-                        _update_companies_batch(
-                            driver, batch_to_update, database=database, logger=logger
-                        )
-                        with counters_lock:
-                            logger.info(
-                                f"  Updated {len(batch_to_update)} companies in Neo4j... "
-                                f"({counters['processed']}/{len(companies)})"
-                            )
-
-                # Progress logging every 5 seconds
-                current_time = time.time()
-                if current_time - last_log_time >= 5:
                     with counters_lock:
-                        elapsed = current_time - start_time
-                        rate = counters["processed"] / elapsed if elapsed > 0 else 0
-                        remaining = (
-                            (len(companies) - counters["processed"]) / rate if rate > 0 else 0
-                        )
+                        counters["processed"] += 1
+
+                        if enriched_data is None:
+                            counters["failed"] += 1
+                        else:
+                            counters["enriched"] += 1
+                            if was_cached:
+                                counters["cached"] += 1
+
+                        # Update tqdm postfix with cache stats
                         cache_pct = (
                             (counters["cached"] / counters["processed"] * 100)
                             if counters["processed"] > 0
                             else 0
                         )
-                        logger.info(
-                            f"  Progress: {counters['processed']}/{len(companies)} "
-                            f"({counters['processed'] / len(companies) * 100:.1f}%) | "
-                            f"Rate: {rate:.1f}/sec | ETA: {remaining / 60:.1f}min | "
-                            f"Cache hits: {counters['cached']} ({cache_pct:.0f}%)"
+                        pbar.set_postfix(
+                            cached=f"{counters['cached']}",
+                            cache_pct=f"{cache_pct:.0f}%",
+                            failed=counters["failed"],
                         )
-                    last_log_time = current_time
 
-            except Exception as e:
-                logger.warning(f"Error processing {company.get('ticker', 'unknown')}: {e}")
-                with counters_lock:
-                    counters["processed"] += 1
-                    counters["failed"] += 1
+                    # Collect result for Neo4j batch update
+                    if enriched_data:
+                        batch_to_update = None
+                        with results_lock:
+                            results.append({"cik": cik, **enriched_data})
+
+                            # Batch update to Neo4j when we have enough
+                            if len(results) >= batch_size:
+                                batch_to_update = results.copy()
+                                results.clear()
+
+                        # Update Neo4j outside the lock to avoid blocking other threads
+                        if batch_to_update:
+                            _update_companies_batch(
+                                driver, batch_to_update, database=database, logger=logger
+                            )
+                            # Use tqdm.write to avoid interfering with progress bar
+                            tqdm.write(
+                                f"  Updated {len(batch_to_update)} companies in Neo4j... "
+                                f"({counters['processed']}/{len(companies)})"
+                            )
+
+                    pbar.update(1)
+
+                except Exception as e:
+                    logger.warning(f"Error processing {company.get('ticker', 'unknown')}: {e}")
+                    with counters_lock:
+                        counters["processed"] += 1
+                        counters["failed"] += 1
+                    pbar.update(1)
 
     # Final batch update
     with results_lock:
@@ -379,6 +377,14 @@ def main():
     logger = setup_logging("enrich_company_properties", execute=args.execute)
     cache = get_cache()
 
+    # Log cache status upfront
+    cache_stats = cache.stats()
+    logger.info("Cache status:")
+    logger.info(f"  Total entries: {cache_stats['total']:,}")
+    logger.info(f"  Size: {cache_stats['size_mb']} MB")
+    for ns, ns_count in sorted(cache_stats["by_namespace"].items(), key=lambda x: -x[1]):
+        logger.info(f"    {ns}: {ns_count:,}")
+
     if not args.execute:
         # Dry-run: show plan
         driver, database = get_driver_and_database(logger)
@@ -408,11 +414,13 @@ def main():
             sys.exit(1)
 
         # Ensure constraints exist
-        logger.info("\n1. Creating/verifying constraints...")
+        logger.info("")
+        logger.info("1. Creating/verifying constraints...")
         create_company_constraints(driver, database=database, logger=logger)
 
         # Enrich companies
-        logger.info("\n2. Enriching company properties...")
+        logger.info("")
+        logger.info("2. Enriching company properties...")
         enriched = enrich_all_companies(
             driver,
             cache,
@@ -423,7 +431,8 @@ def main():
             max_workers=args.workers,
         )
 
-        logger.info("\n" + "=" * 80)
+        logger.info("")
+        logger.info("=" * 80)
         logger.info("✓ Complete!")
         logger.info("=" * 80)
         logger.info(f"Enriched {enriched} companies")

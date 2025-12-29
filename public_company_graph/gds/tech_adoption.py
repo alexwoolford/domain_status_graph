@@ -58,7 +58,7 @@ def compute_tech_adoption_prediction(
     logger.info("=" * 70)
     logger.info("   Use case: Sales targeting for specific technologies")
     logger.info("   Relationship: Domain-[LIKELY_TO_ADOPT {score}]->Technology")
-    logger.info("   Algorithm: Personalized PageRank (optimized with batching)")
+    logger.info("   Algorithm: Personalized PageRank")
 
     predictions_written = 0
 
@@ -96,7 +96,6 @@ def compute_tech_adoption_prediction(
 
         # Compute Personalized PageRank for all technologies
         logger.info("   Computing Personalized PageRank for all technologies...")
-        logger.info("   Using batched processing for better performance...")
         logger.info("   Focusing on non-ubiquitous technologies (used by <50% of domains)...")
 
         with driver.session(database=database) as session:

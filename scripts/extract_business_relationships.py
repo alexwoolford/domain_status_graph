@@ -104,18 +104,26 @@ def extract_relationships_from_cache(
     # Get all keys from 10k_extracted namespace
     keys = cache.keys(namespace=CACHE_NAMESPACE, limit=limit or 100000)
 
+    import time
+
     logger.info(f"Processing {len(keys)} companies from cache...")
     logger.info(f"Extracting relationship types: {[rt.value for rt in relationship_types]}")
+
+    start_time = time.time()
+    last_log_time = start_time
+    total = len(keys)
 
     for cik in keys:
         data = cache.get(CACHE_NAMESPACE, cik)
         if not data:
+            processed += 1
             continue
 
         business_desc = data.get("business_description")
         risk_factors = data.get("risk_factors")
 
         if not business_desc and not risk_factors:
+            processed += 1
             continue
 
         # Extract all requested relationship types
@@ -134,8 +142,22 @@ def extract_relationships_from_cache(
                 companies_with_relationships[rel_type] += 1
 
         processed += 1
-        if processed % 500 == 0:
-            logger.info(f"  Processed {processed} companies...")
+
+        # Time-based progress logging (every 30 seconds)
+        current_time = time.time()
+        if current_time - last_log_time >= 30:
+            elapsed = current_time - start_time
+            rate = processed / elapsed if elapsed > 0 else 0
+            remaining = (total - processed) / rate if rate > 0 else 0
+            pct = (processed / total * 100) if total > 0 else 0
+            rel_counts = " | ".join(
+                f"{rt.value}: {companies_with_relationships[rt]}" for rt in relationship_types
+            )
+            logger.info(
+                f"  Progress: {processed:,}/{total:,} ({pct:.1f}%) | "
+                f"Rate: {rate:.1f}/sec | ETA: {remaining / 60:.1f}min | {rel_counts}"
+            )
+            last_log_time = current_time
 
         if limit and processed >= limit:
             break
@@ -415,6 +437,14 @@ def main():
     # Get cache and Neo4j connection
     cache = get_cache()
     driver, database = get_driver_and_database(log)
+
+    # Log cache status upfront
+    cache_stats = cache.stats()
+    log.info("Cache status:")
+    log.info(f"  Total entries: {cache_stats['total']:,}")
+    log.info(f"  Size: {cache_stats['size_mb']} MB")
+    for ns, ns_count in sorted(cache_stats["by_namespace"].items(), key=lambda x: -x[1]):
+        log.info(f"    {ns}: {ns_count:,}")
 
     try:
         if not verify_neo4j_connection(driver, database, log):

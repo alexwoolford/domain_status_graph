@@ -213,125 +213,67 @@ class TestExtractBusinessDescription:
 
 
 class TestExtractBusinessDescriptionWithDatamuleFallback:
-    """Tests for extract_business_description_with_datamule_fallback function."""
+    """Tests for extract_business_description_with_datamule_fallback function.
+
+    Note: This function now relies on datamule and returns None when datamule
+    fails (no custom fallback). This keeps the code simple and accepts that
+    ~6% of filings won't have business descriptions extracted.
+    """
 
     def test_skip_datamule_flag(self, tmp_path):
-        """Test that skip_datamule flag uses custom parser directly."""
+        """Test that skip_datamule flag returns None (no extraction)."""
         html_file = tmp_path / "test.html"
-        html_file.write_text(
-            """
-            <html>
-                <body>
-                    <div id="item1-business">
-                        <p>Business description.</p>
-                    </div>
-                    <div id="item1a">Item 1A</div>
-                </body>
-            </html>
-            """
-        )
+        html_file.write_text("<html><body>Test</body></html>")
 
         result = extract_business_description_with_datamule_fallback(
             html_file, cik="0000123456", skip_datamule=True, filings_dir=tmp_path
         )
-        assert result is not None
-        assert "Business description" in result
+        # skip_datamule=True means no extraction
+        assert result is None
 
-    def test_no_tar_files_uses_custom_parser(self, tmp_path):
-        """Test that missing tar files triggers custom parser."""
+    def test_no_tar_files_returns_none(self, tmp_path):
+        """Test that missing tar files returns None (no fallback)."""
         html_file = tmp_path / "test.html"
-        html_file.write_text(
-            """
-            <html>
-                <body>
-                    <div id="item1-business">
-                        <p>Business description.</p>
-                    </div>
-                    <div id="item1a">Item 1A</div>
-                </body>
-            </html>
-            """
-        )
+        html_file.write_text("<html><body>Test</body></html>")
 
-        # Mock get_data_dir to return tmp_path
+        # Mock get_data_dir to return tmp_path (no tar files exist)
         with patch(
             "public_company_graph.parsing.business_description.get_data_dir", return_value=tmp_path
         ):
             result = extract_business_description_with_datamule_fallback(
                 html_file, cik="0000123456", filings_dir=tmp_path
             )
-            # Should use custom parser (no tar files exist)
-            assert result is not None
-            assert "Business description" in result
+            # No tar files = no datamule document = None
+            assert result is None
 
-    def test_datamule_not_available_fallback(self, tmp_path):
-        """Test fallback when datamule is not available."""
+    def test_datamule_not_available_returns_none(self, tmp_path):
+        """Test that missing datamule library returns None."""
         html_file = tmp_path / "test.html"
-        html_file.write_text(
-            """
-            <html>
-                <body>
-                    <div id="item1-business">
-                        <p>Business description.</p>
-                    </div>
-                    <div id="item1a">Item 1A</div>
-                </body>
-            </html>
-            """
-        )
+        html_file.write_text("<html><body>Test</body></html>")
 
-        # Mock ImportError for datamule import (happens inside the function)
-        # We need to patch sys.modules to make datamule unavailable
-        import sys
-
-        original_modules = sys.modules.copy()
-
-        # Remove datamule from sys.modules if it exists
-        if "datamule" in sys.modules:
-            del sys.modules["datamule"]
-        if "datamule.portfolio" in sys.modules:
-            del sys.modules["datamule.portfolio"]
-
-        try:
-            # Patch __import__ to raise ImportError for datamule
-            original_import = __import__
-
-            def mock_import(name, *args, **kwargs):
-                if name == "datamule":
-                    raise ImportError("No module named 'datamule'")
-                return original_import(name, *args, **kwargs)
-
-            with patch("builtins.__import__", side_effect=mock_import):
+        # Mock ImportError for get_cached_parsed_doc (imported inside the function)
+        with patch(
+            "public_company_graph.utils.datamule.get_cached_parsed_doc",
+            side_effect=ImportError("No module named 'datamule'"),
+        ):
+            with patch(
+                "public_company_graph.parsing.business_description.get_data_dir",
+                return_value=tmp_path,
+            ):
                 result = extract_business_description_with_datamule_fallback(
                     html_file, cik="0000123456", filings_dir=tmp_path
                 )
-                # Should fall back to custom parser
-                assert result is not None
-                assert "Business description" in result
-        finally:
-            # Restore original modules
-            sys.modules.clear()
-            sys.modules.update(original_modules)
+                # datamule not available = None
+                assert result is None
 
-    def test_no_cik_fallback(self, tmp_path):
-        """Test fallback when CIK cannot be determined."""
+    def test_no_cik_returns_none(self, tmp_path):
+        """Test that missing CIK returns None."""
+        # Create file in a non-numeric directory (can't determine CIK)
         html_file = tmp_path / "test.html"
-        html_file.write_text(
-            """
-            <html>
-                <body>
-                    <div id="item1-business">
-                        <p>Business description.</p>
-                    </div>
-                    <div id="item1a">Item 1A</div>
-                </body>
-            </html>
-            """
-        )
+        html_file.write_text("<html><body>Test</body></html>")
 
         result = extract_business_description_with_datamule_fallback(
             html_file, cik=None, filings_dir=tmp_path
         )
-        # Should fall back to custom parser
-        assert result is not None
-        assert "Business description" in result
+        # Can't determine CIK from path (non-numeric parent) = None
+        assert result is None

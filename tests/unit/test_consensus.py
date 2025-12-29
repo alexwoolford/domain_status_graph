@@ -30,10 +30,12 @@ class TestCollectDomains:
 
         assert result.domain == domain
         # Confidence is weighted by source reliability and result confidence
-        # All sources agree, but confidence is normalized by weighted scores
-        assert result.confidence > 0.7  # Should be high but not necessarily 1.0
-        # Early stopping may cause not all sources to be included
-        # But at least 2 sources should agree (early stopping threshold)
+        # Early stopping kicks in when 2+ sources agree - loop breaks immediately
+        # Minimum confidence: finnhub (1.0*0.6) + finviz (2.0*0.7) / 3.0 = 0.666
+        # Maximum confidence: if yfinance (3.0*0.9) and sec (2.5*0.85) complete first
+        # The actual confidence depends on which 2 sources complete first
+        assert result.confidence >= 0.6  # Minimum when lowest-weight sources complete first
+        # Early stopping causes only 2 sources to be included (the first 2 to agree)
         assert len(result.sources) >= 2
         # Verify the domain is correct
         assert result.domain == domain

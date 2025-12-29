@@ -199,7 +199,8 @@ def main():
         create_company_constraints(driver, database=database)
 
         # Backfill filing dates
-        logger.info("\nBackfilling filing dates...")
+        logger.info("")
+        logger.info("Backfilling filing dates...")
         stats = backfill_filing_dates(
             driver,
             cache,
@@ -208,7 +209,8 @@ def main():
             execute=args.execute,
         )
 
-        logger.info("\n" + "=" * 80)
+        logger.info("")
+        logger.info("=" * 80)
         logger.info("Backfill Complete!")
         logger.info("=" * 80)
         logger.info(f"Total companies: {stats['total']}")
@@ -217,7 +219,8 @@ def main():
         if args.execute:
             logger.info(f"Updated: {stats['updated']}")
 
-        logger.info("\nTo query companies with filing dates:")
+        logger.info("")
+        logger.info("To query companies with filing dates:")
         logger.info("  MATCH (c:Company) WHERE c.filing_date IS NOT NULL")
         logger.info("  RETURN c.ticker, c.name, c.filing_date, c.filing_year")
         logger.info("  ORDER BY c.filing_date DESC")

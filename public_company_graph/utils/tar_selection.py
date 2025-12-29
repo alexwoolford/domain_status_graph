@@ -166,7 +166,11 @@ def is_tar_file_empty(tar_file: Path) -> bool:
         return True
 
 
-def find_tar_with_latest_10k(tar_files: list[Path]) -> Path | None:
+def find_tar_with_latest_10k(
+    tar_files: list[Path],
+    ticker: str | None = None,
+    cik: str | None = None,
+) -> Path | None:
     """
     Find which tar file contains the latest 10-K filing.
 
@@ -178,6 +182,8 @@ def find_tar_with_latest_10k(tar_files: list[Path]) -> Path | None:
 
     Args:
         tar_files: List of tar file paths to check
+        ticker: Optional ticker symbol for logging context
+        cik: Optional CIK for logging context
 
     Returns:
         Path to tar file with latest 10-K, or None if no valid tar files found
@@ -185,17 +191,36 @@ def find_tar_with_latest_10k(tar_files: list[Path]) -> Path | None:
     if not tar_files:
         return None
 
+    # Build context string for logging
+    context = ""
+    if ticker and cik:
+        context = f" for {ticker} (CIK {cik})"
+    elif ticker:
+        context = f" for {ticker}"
+    elif cik:
+        context = f" for CIK {cik}"
+
     # Filter out empty tar files first (they're useless)
     non_empty_tars = []
+    empty_tar_names = []
     for tar_file in tar_files:
         if not is_tar_file_empty(tar_file):
             non_empty_tars.append(tar_file)
         else:
-            logger.debug(f"Skipping empty tar file: {tar_file.name}")
+            empty_tar_names.append(tar_file.name)
+            logger.debug(f"Skipping empty tar file{context}: {tar_file.name}")
 
     if not non_empty_tars:
         # All tar files are empty - return None (will trigger fallback)
-        logger.warning(f"All {len(tar_files)} tar files are empty")
+        # Log parent directory path for context (shows the portfolio/company directory)
+        parent_dir = tar_files[0].parent if tar_files else "unknown"
+        logger.warning(
+            f"All {len(tar_files)} tar files are empty{context}. "
+            f"Directory: {parent_dir}. "
+            f"Files: {', '.join(empty_tar_names[:5])}{'...' if len(empty_tar_names) > 5 else ''}. "
+            f"This may indicate the company has no 10-K filings in the requested date range, "
+            f"or the download failed silently."
+        )
         return None
 
     # If only one non-empty tar file, return it (no need to inspect dates)

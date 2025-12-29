@@ -363,16 +363,19 @@ def main():
             sys.exit(1)
 
         # Ensure constraints exist
-        logger.info("\n1. Creating/verifying constraints...")
+        logger.info("")
+        logger.info("1. Creating/verifying constraints...")
         create_company_constraints(driver, database=database, logger=logger)
 
         # Compute similarity
-        logger.info("\n2. Computing similarity relationships...")
+        logger.info("")
+        logger.info("2. Computing similarity relationships...")
         counts = compute_all_similarity(
             driver, database=database, execute=True, logger_instance=logger
         )
 
-        logger.info("\n" + "=" * 80)
+        logger.info("")
+        logger.info("=" * 80)
         logger.info("✓ Complete!")
         logger.info("=" * 80)
         logger.info(f"Created {counts['industry']} SIMILAR_INDUSTRY relationships")

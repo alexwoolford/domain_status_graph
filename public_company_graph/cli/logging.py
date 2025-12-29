@@ -1,7 +1,7 @@
 """
 Logging utilities for public_company_graph CLI.
 
-Provides logging setup and header printing functions.
+Provides logging setup and header printing functions with tqdm compatibility.
 """
 
 import logging
@@ -9,11 +9,14 @@ import sys
 import time
 from pathlib import Path
 
+from public_company_graph.utils.tqdm_logging import TqdmLoggingHandler
+
 
 def setup_logging(
     script_name: str,
     execute: bool = False,
     log_dir: Path = Path("logs"),
+    tqdm_compatible: bool = True,
 ) -> logging.Logger:
     """
     Set up logging for a script.
@@ -22,6 +25,7 @@ def setup_logging(
         script_name: Name of the script (for log file naming)
         execute: If True, log to file + console. If False, only console.
         log_dir: Directory for log files
+        tqdm_compatible: If True, use TqdmLoggingHandler for clean progress bar output
 
     Returns:
         Configured logger instance
@@ -51,9 +55,12 @@ def setup_logging(
         file_handler.setFormatter(file_formatter)
 
         # Console handler: INFO and above (summary only)
-        # Use stderr to avoid conflicts with tqdm (which uses stdout)
-        console_handler = logging.StreamHandler(sys.stderr)
-        console_handler.setLevel(logging.INFO)
+        # Use TqdmLoggingHandler to avoid interference with tqdm progress bars
+        if tqdm_compatible:
+            console_handler = TqdmLoggingHandler(level=logging.INFO)
+        else:
+            console_handler = logging.StreamHandler(sys.stderr)
+            console_handler.setLevel(logging.INFO)
         console_formatter = logging.Formatter("%(message)s")
         console_handler.setFormatter(console_formatter)
 
@@ -65,15 +72,35 @@ def setup_logging(
         logger.propagate = False
 
         # Suppress noisy external library loggers
-        # These print warnings to console that clutter output
+        # These print warnings/errors to console that clutter output
         for noisy_logger in [
             "datamule",  # 10-K downloader library
             "httpx",  # HTTP client
             "openai",  # OpenAI API
             "urllib3",  # HTTP library
             "httpcore",  # HTTP core
+            "yfinance",  # Yahoo Finance API
         ]:
             logging.getLogger(noisy_logger).setLevel(logging.ERROR)
+
+        # Configure the public_company_graph parent logger
+        # This ensures child loggers (e.g., public_company_graph.parsing.*)
+        # route through our tqdm-compatible handler instead of the root logger
+        pkg_logger = logging.getLogger("public_company_graph")
+        pkg_logger.setLevel(logging.DEBUG)
+        pkg_logger.handlers = []  # Clear existing handlers
+        pkg_logger.addHandler(file_handler)  # All levels to file
+        # Console: Only show INFO, not WARNING (warnings go to file only)
+        # This prevents warnings from interrupting tqdm progress bars
+        pkg_console_handler = (
+            TqdmLoggingHandler(level=logging.INFO)
+            if tqdm_compatible
+            else logging.StreamHandler(sys.stderr)
+        )
+        pkg_console_handler.setLevel(logging.ERROR)  # Console shows only ERROR+
+        pkg_console_handler.setFormatter(console_formatter)
+        pkg_logger.addHandler(pkg_console_handler)
+        pkg_logger.propagate = False  # Don't propagate to root
 
         logger.info(f"Log file: {log_file}")
         return logger

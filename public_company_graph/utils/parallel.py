@@ -258,17 +258,15 @@ def execute_parallel_with_stats(
                 dynamic_ncols=True,  # Adapt to terminal width
             )
 
-        last_log_count = 0
         import time
 
         _start_time = time.perf_counter()
 
-        # Log startup message (before progress bar starts, so no tqdm conflict)
+        # Log startup message to file only (DEBUG level)
+        # Don't log to console - scripts handle their own console output before calling parallel
         if log_logger:
             startup_msg = f"Starting processing of {total:,} items with {max_workers} workers"
-            # Logger writes to both file (with timestamp) and console (clean)
-            log_logger.info(startup_msg)
-            log_logger.info("")
+            log_logger.debug(startup_msg)
 
         try:
             for future in as_completed(future_to_item):
@@ -313,23 +311,13 @@ def execute_parallel_with_stats(
                     progress_bar.update(1)
                     progress_bar.refresh()  # Force immediate refresh
 
-                # Log first completion to show activity has started
-                if log_logger and completed == 1:
-                    stats_dict = stats.to_dict()
-                    stats_str = " | ".join(f"{k}: {v:,}" for k, v in sorted(stats_dict.items()))
-                    message = f"Started: {completed:,}/{total:,} | {stats_str}"
-                    # Use tqdm.write() to avoid interfering with progress bar
-                    if progress_bar:
-                        progress_bar.write(message)
-                    log_logger.info(message)
-
-                # Periodic logging (more frequent for better visibility)
+                # Periodic logging - log to file only, tqdm progress bar handles display
+                # This avoids interference between logging and tqdm progress bars
                 if log_logger:
-                    # Log every 10 files for first 100, then every 100
-                    log_every = 10 if completed <= 100 else (log_interval or 100)
-                    if completed > 0 and (
-                        completed % log_every == 0 or completed - last_log_count >= log_every
-                    ):
+                    # Log every 100 files (or log_interval if specified)
+                    # Only log to file, not to console (tqdm handles console display)
+                    log_every = log_interval or 100
+                    if completed > 0 and completed % log_every == 0:
                         stats_dict = stats.to_dict()
                         stats_str = " | ".join(f"{k}: {v:,}" for k, v in sorted(stats_dict.items()))
                         # Calculate percentage and rate
@@ -345,14 +333,9 @@ def execute_parallel_with_stats(
 
                         message = f"Progress: {completed:,}/{total:,} ({percentage:.1f}%) | {rate:.2f} files/sec | ETA: {eta_minutes:.1f} min | {stats_str}"
 
-                        # Write to both stdout (via tqdm) and log file (via logger)
-                        if progress_bar:
-                            # Use tqdm.write() to avoid interfering with progress bar
-                            # This ensures clean output on a new line
-                            progress_bar.write(message)
-                        # Always log to file (even if progress bar exists)
+                        # Log progress at INFO level (needed for tests and user visibility)
+                        # When tqdm is active, TqdmLoggingHandler routes this through tqdm.write()
                         log_logger.info(message)
-                        last_log_count = completed
 
         finally:
             if progress_bar:

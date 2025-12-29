@@ -172,6 +172,14 @@ def parse_all_10ks(
     # Get cache (will be closed automatically on script exit)
     cache = get_cache()
 
+    # Log cache status upfront
+    cache_stats = cache.stats()
+    logger.info("Cache status:")
+    logger.info(f"  Total entries: {cache_stats['total']:,}")
+    logger.info(f"  Size: {cache_stats['size_mb']} MB")
+    for ns, ns_count in sorted(cache_stats["by_namespace"].items(), key=lambda x: -x[1]):
+        logger.info(f"    {ns}: {ns_count:,}")
+
     # Register cleanup handler to close cache on exit (handles Ctrl+C, Ctrl+Z, etc.)
     import atexit
 
@@ -220,6 +228,7 @@ def parse_all_10ks(
         logger.info("🔄 INCREMENTAL MODE: Adding new fields to existing cache entries")
     logger.info("")
 
+    import time
     from concurrent.futures import ProcessPoolExecutor, as_completed
 
     from tqdm import tqdm
@@ -239,6 +248,10 @@ def parse_all_10ks(
     # Execute with ProcessPoolExecutor
     results = []
     parsed = cached = failed = updated = 0
+
+    # Time-based progress logging (logs to file every 30 seconds)
+    start_time = time.time()
+    last_log_time = start_time
 
     with ProcessPoolExecutor(max_workers=mp_workers) as executor:
         futures = {executor.submit(parse_10k_worker, args): args for args in args_list}
@@ -262,6 +275,22 @@ def parse_all_10ks(
 
                 pbar.update(1)
                 pbar.set_postfix(parsed=parsed, updated=updated, cached=cached, failed=failed)
+
+                # Time-based progress logging (every 30 seconds to log file)
+                current_time = time.time()
+                if current_time - last_log_time >= 30:
+                    processed = len(results)
+                    elapsed = current_time - start_time
+                    rate = processed / elapsed if elapsed > 0 else 0
+                    remaining = (total - processed) / rate if rate > 0 else 0
+                    pct = (processed / total * 100) if total > 0 else 0
+                    logger.info(
+                        f"  Progress: {processed:,}/{total:,} ({pct:.1f}%) | "
+                        f"Rate: {rate:.1f} files/sec | ETA: {remaining / 60:.1f}min | "
+                        f"Parsed: {parsed:,} | Updated: {updated:,} | "
+                        f"Cached: {cached:,} | Failed: {failed:,}"
+                    )
+                    last_log_time = current_time
 
     # Update stats for reporting
     stats = ExecutionStats(parsed=parsed, cached=cached, failed=failed, updated=updated)

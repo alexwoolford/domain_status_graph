@@ -199,9 +199,6 @@ def main():
 
     cache = get_cache()
 
-    def create_fn(text, model):
-        return create_embedding(client, text, model)
-
     processed, created, cached, failed = create_embeddings_for_nodes(
         driver=driver,
         cache=cache,
@@ -211,10 +208,10 @@ def main():
         embedding_property="keyword_embedding",
         model_property="keyword_embedding_model",
         dimension_property="keyword_embedding_dimension",
-        create_fn=create_fn,
+        openai_client=client,  # Use batch API for speed
         database=database,
         execute=True,
-        log=logger,  # Pass logger for proper output
+        log=logger,
     )
 
     logger.info(f"Processed: {processed}, Created: {created}, Cached: {cached}, Failed: {failed}")

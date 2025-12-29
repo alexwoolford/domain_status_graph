@@ -2,12 +2,7 @@
 Chunking utilities for long text embeddings.
 
 When text exceeds token limits, split into chunks and aggregate embeddings.
-
-Optimization: Batched chunk embedding
-- Instead of 1 API call per chunk (slow), we batch all chunks together
-- OpenAI allows up to 300K tokens per request
-- With ~7K tokens per chunk, we can fit ~40 chunks per batch
-- This reduces API calls by ~40x for long text processing
+Chunks are batched together for efficient API usage.
 """
 
 import logging
@@ -27,11 +22,11 @@ CHUNK_SIZE_TOKENS = 7000  # Leave room for overlap
 CHUNK_OVERLAP_TOKENS = 200  # Overlap between chunks to preserve context
 
 # Batching parameters for chunk embedding
-# OpenAI has 300K token limit per request
-# Actual chunks average ~8K tokens (not 7K) due to overlap and tokenization
-# 300K / 8.5K = ~35 chunks max, use 30 for safety margin
-MAX_TOKENS_PER_BATCH = 250000  # Leave margin below 300K limit
-MAX_CHUNKS_PER_BATCH = 30  # Safe limit: 30 * 8.5K = 255K tokens
+# OpenAI has 300K token limit per request, but tiktoken can undercount massively:
+# - 2024-12-29 incident 1: tiktoken said ~240K, API saw 485K (2x discrepancy)
+# - 2024-12-29 incident 2: tiktoken said ~126K, API saw 933K (7.4x discrepancy!)
+# Use extremely conservative limit to prevent failures
+MAX_TOKENS_PER_BATCH = 40_000  # ~13% of OpenAI's 300K limit to handle 7x discrepancy
 
 
 def chunk_text(
@@ -39,6 +34,7 @@ def chunk_text(
     chunk_size_tokens: int = CHUNK_SIZE_TOKENS,
     overlap_tokens: int = CHUNK_OVERLAP_TOKENS,
     model: str = "text-embedding-3-small",
+    identifier: str | None = None,
 ) -> list[str]:
     """
     Split text into chunks that fit within token limits.
@@ -51,6 +47,7 @@ def chunk_text(
         chunk_size_tokens: Target chunk size in tokens
         overlap_tokens: Overlap between chunks in tokens
         model: Model name (determines encoding)
+        identifier: Optional identifier for logging (e.g., CIK, domain)
 
     Returns:
         List of text chunks
@@ -98,9 +95,10 @@ def chunk_text(
             if start_idx <= (end_idx - chunk_size_tokens) and len(chunks) > 1:
                 start_idx = end_idx
 
+        id_prefix = f"[{identifier}] " if identifier else ""
         logger.debug(
-            f"Chunked text: {total_tokens} tokens → {len(chunks)} chunks "
-            f"(avg {total_tokens // len(chunks)} tokens/chunk)"
+            f"{id_prefix}Chunked text: {total_tokens:,} tokens → {len(chunks)} chunks "
+            f"(avg {total_tokens // len(chunks):,} tokens/chunk)"
         )
 
         return chunks
@@ -203,6 +201,7 @@ def create_embedding_with_chunking(
     overlap_tokens: int = CHUNK_OVERLAP_TOKENS,
     aggregation_method: str = "weighted_average",
     create_embedding_fn=None,
+    identifier: str | None = None,
 ) -> list[float] | None:
     """
     Create embedding for text, using chunking if text exceeds token limit.
@@ -218,6 +217,7 @@ def create_embedding_with_chunking(
         overlap_tokens: Overlap between chunks in tokens
         aggregation_method: How to aggregate chunk embeddings ("average", "weighted_average", "max")
         create_embedding_fn: Function to create embedding: (client, text, model) -> embedding
+        identifier: Optional identifier for logging (e.g., CIK, domain)
 
     Returns:
         Single embedding vector (aggregated if chunked)
@@ -241,13 +241,14 @@ def create_embedding_with_chunking(
         return list(result) if result is not None else None
 
     # Need to chunk
+    id_prefix = f"[{identifier}] " if identifier else ""
     logger.info(
-        f"Text exceeds token limit ({total_tokens:,} tokens > {chunk_size_tokens:,}), "
+        f"{id_prefix}Text exceeds token limit ({total_tokens:,} tokens > {chunk_size_tokens:,}), "
         f"chunking into multiple pieces..."
     )
 
     # Split into chunks
-    chunks = chunk_text(text, chunk_size_tokens, overlap_tokens, model)
+    chunks = chunk_text(text, chunk_size_tokens, overlap_tokens, model, identifier=identifier)
 
     if not chunks:
         logger.warning("No chunks created from text")
@@ -313,17 +314,10 @@ def create_embeddings_for_long_texts_batched(
     """
     Create embeddings for multiple long texts using batched chunk processing.
 
-    Instead of making 1 API call per chunk (slow), this function:
+    This function:
     1. Chunks all texts upfront
-    2. Batches chunks together (up to ~40 per API call)
+    2. Batches chunks together for efficient API usage
     3. Maps results back and aggregates per text
-
-    This reduces API calls by ~40x for long text processing.
-
-    Example:
-        - 100 long texts × 3 chunks each = 300 chunks
-        - Old way: 300 API calls
-        - New way: 300 ÷ 40 = 8 API calls (~40x faster)
 
     Args:
         client: OpenAI client instance
@@ -347,7 +341,7 @@ def create_embeddings_for_long_texts_batched(
         from public_company_graph.embeddings.openai_client import create_embeddings_batch
 
         def batch_embed_fn(c, texts, m):
-            return create_embeddings_batch(c, texts, m, batch_size=MAX_CHUNKS_PER_BATCH)
+            return create_embeddings_batch(c, texts, m, max_tokens_per_batch=MAX_TOKENS_PER_BATCH)
 
     # Step 1: Chunk all texts and collect metadata
     _logger.info(f"Chunking {len(items)} long texts...")
@@ -360,7 +354,7 @@ def create_embeddings_for_long_texts_batched(
         if not text or not text.strip():
             continue
 
-        chunks = chunk_text(text, chunk_size_tokens, overlap_tokens, model)
+        chunks = chunk_text(text, chunk_size_tokens, overlap_tokens, model, identifier=cache_key)
         if not chunks:
             continue
 
@@ -383,11 +377,11 @@ def create_embeddings_for_long_texts_batched(
     # The batch function handles splitting into API-safe batches internally
     _logger.info(f"Embedding {total_chunks} chunks in batched API calls...")
 
-    # Calculate expected API calls for logging
-    expected_api_calls = (total_chunks + MAX_CHUNKS_PER_BATCH - 1) // MAX_CHUNKS_PER_BATCH
-    _logger.info(
-        f"  Estimated API calls: ~{expected_api_calls} (vs {total_chunks} without batching)"
-    )
+    # Estimate API calls: chunks are ~7K tokens, batch limit is 150K tokens
+    # So roughly ~21 chunks per batch (150K / 7K)
+    avg_chunks_per_batch = MAX_TOKENS_PER_BATCH // CHUNK_SIZE_TOKENS
+    expected_api_calls = (total_chunks + avg_chunks_per_batch - 1) // avg_chunks_per_batch
+    _logger.info(f"  Estimated API calls: ~{expected_api_calls}")
 
     all_embeddings = batch_embed_fn(client, all_chunks, model)
 

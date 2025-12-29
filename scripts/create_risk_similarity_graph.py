@@ -15,7 +15,10 @@ Usage:
 
 import argparse
 import sys
+import time
 from pathlib import Path
+
+from tqdm import tqdm
 
 # Add parent directory to path
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -26,6 +29,7 @@ from public_company_graph.cli import (
     setup_logging,
     verify_neo4j_connection,
 )
+from public_company_graph.constants import BATCH_SIZE_SMALL
 from public_company_graph.embeddings import (
     create_embeddings_for_nodes,
     get_openai_client,
@@ -56,6 +60,14 @@ def main():
 
     cache = get_cache()
 
+    # Log cache status upfront
+    cache_stats = cache.stats()
+    logger.info("Cache status:")
+    logger.info(f"  Total entries: {cache_stats['total']:,}")
+    logger.info(f"  Size: {cache_stats['size_mb']} MB")
+    for ns, ns_count in sorted(cache_stats["by_namespace"].items(), key=lambda x: -x[1]):
+        logger.info(f"    {ns}: {ns_count:,}")
+
     # Step 1: Load risk factors from cache into Neo4j
     logger.info("=" * 80)
     logger.info("STEP 1: Load Risk Factors into Neo4j")
@@ -69,30 +81,59 @@ def main():
         driver.close()
         return
 
-    # Update Company nodes with risk factors from cache
+    # Get all companies
     logger.info("Updating Company nodes with risk factors from cache...")
     with driver.session(database=database) as session:
         result = session.run("MATCH (c:Company) RETURN c.cik AS cik")
         companies = [record["cik"] for record in result]
 
-        updated_count = 0
-        for cik in companies:
-            ten_k_data = cache.get("10k_extracted", cik)
-            if ten_k_data and ten_k_data.get("risk_factors"):
-                risk_text = ten_k_data["risk_factors"].strip()
-                # Only update if risk factors are meaningful (not too short)
-                if len(risk_text) >= 200:  # Use same minimum as descriptions
-                    session.run(
-                        """
-                        MATCH (c:Company {cik: $cik})
-                        SET c.risk_factors = $risk_text
-                        """,
-                        cik=cik,
-                        risk_text=risk_text,
-                    )
-                    updated_count += 1
+    # Check cache for risk factors and build batch
+    updates_batch: list[dict] = []
+    cache_hits = 0
+    cache_misses = 0
 
-        logger.info(f"  Updated {updated_count} companies with risk factors")
+    for cik in tqdm(companies, desc="Checking 10-K cache", unit="company"):
+        ten_k_data = cache.get("10k_extracted", cik)
+        if ten_k_data and ten_k_data.get("risk_factors"):
+            risk_text = ten_k_data["risk_factors"].strip()
+            # Only update if risk factors are meaningful (not too short)
+            if len(risk_text) >= 200:
+                updates_batch.append({"cik": cik, "risk_text": risk_text})
+                cache_hits += 1
+            else:
+                cache_misses += 1
+        else:
+            cache_misses += 1
+
+    logger.info(
+        f"  10-K cache: {cache_hits:,} hits, {cache_misses:,} misses "
+        f"({100 * cache_hits / len(companies):.1f}% hit rate)"
+    )
+
+    # Batch update Neo4j (much faster than individual updates)
+    if updates_batch:
+        start_time = time.time()
+        total_updated = 0
+
+        with driver.session(database=database) as session:
+            for i in tqdm(
+                range(0, len(updates_batch), BATCH_SIZE_SMALL),
+                desc="Updating Neo4j",
+                unit="batch",
+            ):
+                batch = updates_batch[i : i + BATCH_SIZE_SMALL]
+                session.run(
+                    """
+                    UNWIND $batch AS row
+                    MATCH (c:Company {cik: row.cik})
+                    SET c.risk_factors = row.risk_text
+                    """,
+                    batch=batch,
+                )
+                total_updated += len(batch)
+
+        elapsed = time.time() - start_time
+        logger.info(f"  Updated {total_updated:,} companies in {elapsed:.1f}s")
 
     logger.info("")
     logger.info("✓ Step 1 complete: Risk factors loaded")
@@ -112,19 +153,18 @@ def main():
         driver.close()
         sys.exit(1)
 
-    # Create embeddings for companies with risk factors (using batch API for speed)
     logger.info("Creating embeddings for companies with risk factors...")
     processed, created, cached, failed = create_embeddings_for_nodes(
         driver=driver,
         cache=cache,
         node_label="Company",
-        text_property="risk_factors",  # Use risk_factors property
+        text_property="risk_factors",
         key_property="cik",
-        embedding_property="risk_factors_embedding",  # Store as risk_factors_embedding
-        openai_client=client,  # Use batch API for ~20x faster embedding
+        embedding_property="risk_factors_embedding",
+        openai_client=client,
         database=database,
         execute=True,
-        log=logger,  # Pass logger for proper output
+        log=logger,
     )
 
     logger.info(f"  Processed: {processed}, Created: {created}, Cached: {cached}, Failed: {failed}")

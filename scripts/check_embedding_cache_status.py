@@ -133,7 +133,6 @@ def main():
         avg_chunks = 0
         total_chunks = 0
 
-    # With batching: ~30 chunks per API call (~30x faster than before)
     chunks_per_batch = 40
     long_api_calls = (total_chunks + chunks_per_batch - 1) // chunks_per_batch
     long_time_sec = long_api_calls * 1.5  # ~1.5 sec per batch
@@ -156,18 +155,6 @@ def main():
     print()
     print(f"⏱️  ESTIMATED TOTAL TIME: ~{total_time_min:.0f} minutes")
     print()
-
-    if long_texts:
-        print("=" * 70)
-        print("OPTIMIZATION APPLIED")
-        print("=" * 70)
-        print("Long texts now use BATCHED chunking (~30 chunks per API call).")
-        print()
-        print("This is NOT a caching bug - these embeddings were never created")
-        print("(likely due to a previous interrupted run).")
-        print()
-        print("Once complete, future runs will use the cache and be fast.")
-        print()
 
     if args.verbose and need_creation:
         print("=" * 70)

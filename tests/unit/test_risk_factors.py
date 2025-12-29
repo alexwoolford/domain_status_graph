@@ -238,184 +238,85 @@ class TestExtractRiskFactors:
 
 
 class TestExtractRiskFactorsWithDatamuleFallback:
-    """Tests for extract_risk_factors_with_datamule_fallback function."""
+    """Tests for extract_risk_factors_with_datamule_fallback function.
+
+    Note: This function now relies on datamule and returns None when datamule
+    fails (no custom fallback). This keeps the code simple and accepts that
+    ~6% of filings won't have risk factors extracted.
+    """
 
     def test_skip_datamule_flag(self, tmp_path):
-        """Test that skip_datamule flag uses custom parser directly."""
+        """Test that skip_datamule flag returns None (no extraction)."""
         html_file = tmp_path / "0001325964" / "10k_2024.html"
         html_file.parent.mkdir(parents=True, exist_ok=True)
-
-        html_content = """
-        <html>
-            <body>
-                <table>
-                    <tr>
-                        <td><b>Item 1A.</b></td>
-                        <td><b><span id="item1a"></span>Risk Factors.</b></td>
-                    </tr>
-                </table>
-                <p>Investing in our common stock involves risks. You should consider carefully
-                the following risk factors in evaluating our business and us. If any of the
-                following events actually occur, our business, operating results, prospects or
-                financial condition could be materially and adversely affected.</p>
-                <p><b>We have incurred substantial operating losses since our inception and will
-                continue to incur substantial operating losses for the foreseeable future.</b></p>
-                <p>Since our inception, we have been engaged primarily in the research and
-                development of our technologies. As a result of these activities, we incurred
-                significant losses and experienced negative cash flow since our inception. We
-                incurred a net loss of $17,230,480 for the year ended December 31, 2022,
-                $18,631,381 for the year ended December 31, 2021 and $6,715,564 for the year
-                ended December 31, 2020.</p>
-                <p>More risk content here with additional details about potential risks and
-                uncertainties that could affect our business operations and financial results.</p>
-                <div id="item1b">Item 1B</div>
-            </body>
-        </html>
-        """
-        html_file.write_text(html_content)
+        html_file.write_text("<html><body>Test</body></html>")
 
         result = extract_risk_factors_with_datamule_fallback(
             html_file,
             cik="0001325964",
-            file_content=html_content,
             skip_datamule=True,
             filings_dir=tmp_path,
         )
 
-        assert result is not None
-        assert "risk" in result.lower() or "operating losses" in result.lower()
+        # skip_datamule=True means no extraction
+        assert result is None
 
-    def test_no_tar_files_uses_custom_parser(self, tmp_path):
-        """Test that custom parser is used when no tar files exist."""
+    def test_no_tar_files_returns_none(self, tmp_path):
+        """Test that missing tar files returns None (no fallback)."""
         html_file = tmp_path / "0001325964" / "10k_2024.html"
         html_file.parent.mkdir(parents=True, exist_ok=True)
+        html_file.write_text("<html><body>Test</body></html>")
 
-        html_content = """
-        <html>
-            <body>
-                <table>
-                    <tr>
-                        <td><b>Item 1A.</b></td>
-                        <td><b><span id="item1a"></span>Risk Factors.</b></td>
-                    </tr>
-                </table>
-                <p>Investing in our common stock involves risks. You should consider carefully
-                the following risk factors in evaluating our business and us. If any of the
-                following events actually occur, our business, operating results, prospects or
-                financial condition could be materially and adversely affected.</p>
-                <p><b>We have incurred substantial operating losses since our inception and will
-                continue to incur substantial operating losses for the foreseeable future.</b></p>
-                <p>Since our inception, we have been engaged primarily in the research and
-                development of our technologies. As a result of these activities, we incurred
-                significant losses and experienced negative cash flow since our inception. We
-                incurred a net loss of $17,230,480 for the year ended December 31, 2022,
-                $18,631,381 for the year ended December 31, 2021 and $6,715,564 for the year
-                ended December 31, 2020.</p>
-                <p>More risk content here with additional details about potential risks and
-                uncertainties that could affect our business operations and financial results.</p>
-                <div id="item1b">Item 1B</div>
-            </body>
-        </html>
-        """
-        html_file.write_text(html_content)
+        # No tar file exists - mock get_data_dir to return tmp_path
+        from unittest.mock import patch
 
-        # No tar file exists
-        result = extract_risk_factors_with_datamule_fallback(
-            html_file,
-            cik="0001325964",
-            file_content=html_content,
-            skip_datamule=False,  # Try datamule first, but no tar exists
-            filings_dir=tmp_path,
-        )
+        with patch("public_company_graph.parsing.risk_factors.get_data_dir", return_value=tmp_path):
+            result = extract_risk_factors_with_datamule_fallback(
+                html_file,
+                cik="0001325964",
+                skip_datamule=False,
+                filings_dir=tmp_path,
+            )
 
-        # Should fall back to custom parser
-        assert result is not None
-        assert "risk" in result.lower()  # Risk content present
+        # No tar files = no datamule document = None
+        assert result is None
 
-    def test_datamule_not_available_fallback(self, tmp_path):
-        """Test that custom parser is used when datamule not available."""
+    def test_datamule_not_available_returns_none(self, tmp_path):
+        """Test that missing datamule library returns None."""
         html_file = tmp_path / "0001325964" / "10k_2024.html"
         html_file.parent.mkdir(parents=True, exist_ok=True)
+        html_file.write_text("<html><body>Test</body></html>")
 
-        html_content = """
-        <html>
-            <body>
-                <table>
-                    <tr>
-                        <td><b>Item 1A.</b></td>
-                        <td><b><span id="item1a"></span>Risk Factors.</b></td>
-                    </tr>
-                </table>
-                <p>Investing in our common stock involves risks. You should consider carefully
-                the following risk factors in evaluating our business and us. If any of the
-                following events actually occur, our business, operating results, prospects or
-                financial condition could be materially and adversely affected.</p>
-                <p><b>We have incurred substantial operating losses since our inception.</b></p>
-                <p>Since our inception, we have been engaged primarily in research and development.
-                As a result, we incurred significant losses and experienced negative cash flow.</p>
-                <div id="item1b">Item 1B</div>
-            </body>
-        </html>
-        """
-        html_file.write_text(html_content)
+        from unittest.mock import patch
 
-        # Test fallback when datamule not available
-        # Simplest approach: Use skip_datamule=True to test fallback path directly
-        # (This tests the same code path as ImportError fallback)
-        result = extract_risk_factors_with_datamule_fallback(
-            html_file,
-            cik="0001325964",
-            file_content=html_content,
-            skip_datamule=True,  # Tests fallback path (same as ImportError)
-            filings_dir=tmp_path,
-        )
+        # Mock ImportError for get_cached_parsed_doc (imported inside the function)
+        with patch(
+            "public_company_graph.utils.datamule.get_cached_parsed_doc",
+            side_effect=ImportError("No module named 'datamule'"),
+        ):
+            with patch(
+                "public_company_graph.parsing.risk_factors.get_data_dir", return_value=tmp_path
+            ):
+                result = extract_risk_factors_with_datamule_fallback(
+                    html_file,
+                    cik="0001325964",
+                    filings_dir=tmp_path,
+                )
 
-        # Should fall back to custom parser
-        assert result is not None
-        assert "risk" in result.lower()  # Risk content present
+        # datamule not available = None
+        assert result is None
 
-    def test_no_cik_fallback(self, tmp_path):
-        """Test that custom parser is used when CIK not provided."""
-        html_file = tmp_path / "0001325964" / "10k_2024.html"
-        html_file.parent.mkdir(parents=True, exist_ok=True)
-
-        html_content = """
-        <html>
-            <body>
-                <table>
-                    <tr>
-                        <td><b>Item 1A.</b></td>
-                        <td><b><span id="item1a"></span>Risk Factors.</b></td>
-                    </tr>
-                </table>
-                <p>Investing in our common stock involves risks. You should consider carefully
-                the following risk factors in evaluating our business and us. If any of the
-                following events actually occur, our business, operating results, prospects or
-                financial condition could be materially and adversely affected.</p>
-                <p><b>We have incurred substantial operating losses since our inception and will
-                continue to incur substantial operating losses for the foreseeable future.</b></p>
-                <p>Since our inception, we have been engaged primarily in the research and
-                development of our technologies. As a result of these activities, we incurred
-                significant losses and experienced negative cash flow since our inception. We
-                incurred a net loss of $17,230,480 for the year ended December 31, 2022,
-                $18,631,381 for the year ended December 31, 2021 and $6,715,564 for the year
-                ended December 31, 2020.</p>
-                <p>More risk content here with additional details about potential risks and
-                uncertainties that could affect our business operations and financial results.</p>
-                <div id="item1b">Item 1B</div>
-            </body>
-        </html>
-        """
-        html_file.write_text(html_content)
+    def test_no_cik_returns_none(self, tmp_path):
+        """Test that missing CIK returns None."""
+        # Create file in a non-numeric directory (can't determine CIK)
+        html_file = tmp_path / "test.html"
+        html_file.write_text("<html><body>Test</body></html>")
 
         result = extract_risk_factors_with_datamule_fallback(
             html_file,
-            cik=None,  # No CIK provided
-            file_content=html_content,
-            skip_datamule=False,
+            cik=None,
             filings_dir=tmp_path,
         )
 
-        # Should fall back to custom parser
-        assert result is not None
-        assert "risk" in result.lower()  # Risk content present
+        # Can't determine CIK from path (non-numeric parent) = None
+        assert result is None

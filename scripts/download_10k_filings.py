@@ -22,6 +22,7 @@ Usage:
 
 import argparse
 import logging
+import os
 import sys
 import time
 from pathlib import Path
@@ -35,17 +36,31 @@ from public_company_graph.cli import (
     verify_neo4j_connection,
 )
 from public_company_graph.config import get_data_dir, get_datamule_api_key
+
+# CRITICAL: Export DATAMULE_API_KEY to environment BEFORE importing datamule
+# The datamule library reads from os.environ directly, not from set_api_key()
+_datamule_key = get_datamule_api_key()
+if _datamule_key:
+    os.environ["DATAMULE_API_KEY"] = _datamule_key
+
+# CRITICAL: Disable tqdm BEFORE importing datamule to prevent progress bar spam
+# tqdm checks TQDM_DISABLE at import time, not at runtime
+os.environ["TQDM_DISABLE"] = "1"
+
 from public_company_graph.constants import (
     DEFAULT_WORKERS,
     DEFAULT_WORKERS_WITH_API,
     SEC_EDGAR_LONG_DURATION_LIMIT,
     SEC_EDGAR_RATE_LIMIT,
 )
+from public_company_graph.sources.datamule_index import (
+    filter_companies_with_10k_fast,
+    mark_cik_no_10k_available,
+)
 from public_company_graph.sources.sec_companies import (
     get_all_companies_from_neo4j,
     get_all_companies_from_sec,
 )
-from public_company_graph.sources.sec_edgar_check import check_company_has_10k
 from public_company_graph.utils.datamule import suppress_datamule_output
 from public_company_graph.utils.parallel import execute_parallel
 from public_company_graph.utils.stats import ExecutionStats
@@ -56,12 +71,21 @@ from public_company_graph.utils.tar_extraction import (
 from public_company_graph.utils.tar_selection import find_tar_with_latest_10k
 
 # Try to import datamule
-# Note: We set TQDM_DISABLE in suppress_datamule_output() context manager
-# to disable datamule's internal progress bars
 try:
     from datamule import Config, Portfolio
 
     DATAMULE_AVAILABLE = True
+
+    # Suppress datamule's verbose logging (API URLs, query results, costs)
+    # These loggers print directly and ignore quiet=True in download_submissions()
+    for _logger_name in [
+        "datamule",
+        "datamule.book",
+        "datamule.datamule",
+        "datamule.datamule.downloader",
+        "datamule.datamule.tar_downloader",
+    ]:
+        logging.getLogger(_logger_name).setLevel(logging.CRITICAL + 1)
 except ImportError:
     DATAMULE_AVAILABLE = False
     Portfolio = None  # type: ignore
@@ -84,7 +108,6 @@ def download_10k_for_company(
     api_key: str | None = None,  # Datamule API key for fast downloads
     filing_date_start: str = "2020-01-01",  # Start date for filing search (focus on recent filings)
     filing_date_end: str = None,  # End date for filing search (None = current date + 1 year for future filings)
-    skip_pre_check: bool = False,  # If True, skip pre-check and try all companies
     force: bool = False,  # If True, delete existing files and re-download
 ) -> tuple[bool, Path | None, str | None]:
     """
@@ -153,7 +176,7 @@ def download_10k_for_company(
         logger.debug(f"  Found {len(tar_files)} existing tar file(s) for {ticker}")
 
         # REPEATABLE PROCESS: Identify tar file with latest 10-K BEFORE extraction
-        tar_file_with_latest = find_tar_with_latest_10k(tar_files)
+        tar_file_with_latest = find_tar_with_latest_10k(tar_files, ticker=ticker, cik=cik_padded)
 
         if not tar_file_with_latest:
             logger.warning(
@@ -222,34 +245,6 @@ def download_10k_for_company(
 
         filing_date_end = (datetime.now() + timedelta(days=365)).strftime("%Y-%m-%d")
 
-    # Pre-check: Use free SEC EDGAR API to verify company has 10-Ks before calling datamule
-    # This prevents expensive API calls for companies without 10-Ks (ETFs, funds, etc.)
-    if api_key and not skip_pre_check:
-        # Only pre-check if using paid API (to save money) and not disabled
-        # For free SEC direct, we can skip pre-check (no cost if no files found)
-        session = requests.Session()
-        session.headers.update(
-            {
-                "User-Agent": "public_company_graph script (contact: alexwoolford@example.com)",
-            }
-        )
-        has_10k = check_company_has_10k(
-            cik_padded,
-            session=session,
-            filing_date_start=filing_date_start,
-            filing_date_end=filing_date_end,
-        )
-        if not has_10k:
-            # Company doesn't have 10-Ks - skip expensive datamule API call
-            logger.debug(
-                f"  ⊘ {ticker}: No 10-K filings found (pre-check) - skipping datamule API call"
-            )
-            return (
-                False,
-                None,
-                f"No 10-K found for {ticker} (CIK: {cik_padded}) - pre-checked via SEC EDGAR",
-            )
-
     # If force=True, also delete existing tar files to force re-download
     # (Shouldn't happen if bulk delete worked, but handle gracefully for any missed files)
     if force and portfolio_path.exists():
@@ -276,11 +271,11 @@ def download_10k_for_company(
                     f"  📅 {ticker}: Downloading 10-K with date range: {filing_date_start} to {filing_date_end}"
                 )
 
-            # Create portfolio in data/10k_portfolios/ directory
-            portfolio = Portfolio(str(portfolio_path))
-
-            # Suppress datamule's verbose output (redirect to log file)
+            # Suppress datamule's verbose output
             with suppress_datamule_output():
+                # Create portfolio in data/10k_portfolios/ directory
+                portfolio = Portfolio(str(portfolio_path))
+
                 # Set API key on portfolio if available (enables fast datamule-sgml provider)
                 if api_key:
                     portfolio.set_api_key(api_key)
@@ -289,18 +284,19 @@ def download_10k_for_company(
                     portfolio.download_submissions(
                         submission_type="10-K",
                         cik=cik_padded,
-                        filing_date=(filing_date_start, filing_date_end),  # Configurable date range
-                        provider="datamule-sgml",  # Fast provider (requires API key)
-                        # No requests_per_second needed - datamule-sgml has no rate limits
+                        filing_date=(filing_date_start, filing_date_end),
+                        provider="datamule-sgml",
+                        quiet=True,  # Suppress datamule's console output
                     )
                 else:
                     # Fallback to SEC direct (free, but rate limited)
                     portfolio.download_submissions(
                         submission_type="10-K",
                         cik=cik_padded,
-                        filing_date=(filing_date_start, filing_date_end),  # Configurable date range
-                        provider="sec",  # Download directly from SEC
-                        requests_per_second=SEC_EDGAR_LONG_DURATION_LIMIT,  # SEC long-duration limit
+                        filing_date=(filing_date_start, filing_date_end),
+                        provider="sec",
+                        requests_per_second=SEC_EDGAR_LONG_DURATION_LIMIT,
+                        quiet=True,  # Suppress datamule's console output
                     )
 
             # Datamule downloads tar files to the portfolio directory
@@ -317,6 +313,8 @@ def download_10k_for_company(
                 # Clean up empty portfolio directory
                 if portfolio_path.exists() and not any(portfolio_path.iterdir()):
                     portfolio_path.rmdir()
+                # Cache this CIK as "no 10-K available" to prevent future wasted API calls
+                mark_cik_no_10k_available(cik_padded)
                 return (
                     False,
                     None,
@@ -338,7 +336,9 @@ def download_10k_for_company(
 
             # REPEATABLE PROCESS: Identify tar file with latest 10-K BEFORE extraction
             logger.debug(f"  Found {len(tar_files)} tar file(s) for {ticker}")
-            tar_file_with_latest = find_tar_with_latest_10k(tar_files)
+            tar_file_with_latest = find_tar_with_latest_10k(
+                tar_files, ticker=ticker, cik=cik_padded
+            )
 
             if not tar_file_with_latest:
                 logger.warning(
@@ -461,8 +461,9 @@ def download_all_10ks(
     workers: int = DEFAULT_WORKERS,  # Number of parallel workers
     filing_date_start: str = "2020-01-01",  # Start date for filing search (focus on recent filings)
     filing_date_end: str = None,  # End date for filing search (None = current date + 1 year for future filings)
-    skip_pre_check: bool = False,  # If True, skip pre-check and try all companies (for investigation)
     force: bool = False,  # If True, delete existing files and re-download
+    pre_filter: bool = True,  # Pre-filter companies using Datamule index (default: True, saves credits)
+    refresh_filter: bool = False,  # If True, force refresh the pre-filter cache
 ) -> dict[str, int]:
     """
     Download 10-K filings for all companies.
@@ -508,6 +509,46 @@ def download_all_10ks(
         companies = companies[:limit]
         logger.info(f"Processing first {limit} companies (--limit specified)")
 
+    # Set default end date to current year + 1 (to include future filings)
+    # MUST be set before pre-filter so the index query uses the correct date range
+    if filing_date_end is None:
+        from datetime import datetime, timedelta
+
+        filing_date_end = (datetime.now() + timedelta(days=365)).strftime("%Y-%m-%d")
+
+    # Pre-filter companies to only those with 10-Ks (saves datamule credits)
+    # Uses Datamule's bulk index search (~60-90 seconds) instead of SEC API (~14 min)
+    # Results are cached for 7 days
+    if pre_filter and execute:
+        logger.info("")
+        logger.info("=" * 80)
+        logger.info("Pre-filtering companies (skipping those without 10-Ks)")
+        logger.info("=" * 80)
+        logger.info("Using Datamule bulk index search (much faster than SEC API)")
+
+        original_count = len(companies)
+
+        # Filter to only companies with 10-Ks using Datamule's bulk index
+        # This is ~10x faster than the old SEC API approach
+        companies_with_10k = list(
+            filter_companies_with_10k_fast(
+                companies,
+                filing_date_start=filing_date_start,
+                filing_date_end=filing_date_end,
+                force_refresh=refresh_filter,
+            )
+        )
+
+        filtered_out = original_count - len(companies_with_10k)
+        logger.info("")
+        logger.info(
+            f"Pre-filter: {len(companies_with_10k):,} companies with 10-Ks "
+            f"({filtered_out:,} without, saving ~${filtered_out * 0.001:.2f} in credits)"
+        )
+        logger.info("")
+
+        companies = companies_with_10k
+
     total = len(companies)
 
     # Track different outcomes (initialized here, used in execute block)
@@ -516,12 +557,6 @@ def download_all_10ks(
     no_10k_available = 0  # Companies that legitimately don't have 10-Ks (ETFs, foreign, etc.)
     errors = 0  # Actual errors (download failures, extraction failures)
     failed_companies = []  # List of (ticker, cik, error_type, error_message)
-
-    # Set default end date to current year + 1 (to include future filings)
-    if filing_date_end is None:
-        from datetime import datetime, timedelta
-
-        filing_date_end = (datetime.now() + timedelta(days=365)).strftime("%Y-%m-%d")
 
     if not execute:
         logger.info("=" * 80)
@@ -534,10 +569,6 @@ def download_all_10ks(
         logger.info(f"Parallel workers: {workers}")
         logger.info(f"Filing date range: {filing_date_start} to {filing_date_end}")
         logger.info("  📅 This range will be used for ALL downloads (ensures recent filings)")
-        if skip_pre_check:
-            logger.info("⚠️  PRE-CHECK DISABLED: Will try all companies (may waste API calls)")
-        else:
-            logger.info("✓ Pre-check enabled: Will filter companies without 10-Ks before API calls")
         logger.info("✓ Tar files will be KEPT after extraction (~100-300 GB estimated total)")
         logger.info(
             "  (Required for high-quality datamule parsing: 86-93% success vs 64% custom parser)"
@@ -545,6 +576,15 @@ def download_all_10ks(
         logger.info(
             "  (Once deleted, you must pay again to re-download - keeping them is recommended)"
         )
+        if pre_filter:
+            logger.info(
+                "✓ Pre-filter enabled: Will skip companies without 10-Ks (saves datamule credits)"
+            )
+            logger.info("  First run: ~60-90 seconds. Subsequent runs: instant (cached 7 days)")
+            if refresh_filter:
+                logger.info("  --refresh-filter: Will re-query Datamule index (ignoring cache)")
+        else:
+            logger.info("⚠️  Pre-filter DISABLED: Will attempt all companies (may waste credits)")
         logger.info("=" * 80)
         logger.info("To execute, run: python scripts/download_10k_filings.py --execute")
         return {
@@ -564,10 +604,6 @@ def download_all_10ks(
     logger.info(f"Portfolio directory (tar files): {PORTFOLIOS_DIR}")
     logger.info(f"Output directory (extracted HTML): {FILINGS_DIR}")
     logger.info(f"Filing date range: {filing_date_start} to {filing_date_end}")
-    if skip_pre_check:
-        logger.info("⚠️  PRE-CHECK DISABLED: Will try all companies (may waste API calls)")
-    else:
-        logger.info("✓ Pre-check enabled: Will filter companies without 10-Ks before API calls")
     logger.info("✓ Tar files will be KEPT after extraction (~100-300 GB estimated total)")
     logger.info(
         "  (Required for high-quality datamule parsing: 86-93% success vs 64% custom parser)"
@@ -656,8 +692,13 @@ def download_all_10ks(
     # Thread-safe stats
     stats = ExecutionStats(downloaded=0, cached=0, no_10k_available=0, errors=0)
 
+    # Time-based progress logging (logs to file every 30 seconds)
+    import threading
+
+    progress_lock = threading.Lock()
+    progress_state = {"start_time": time.time(), "last_log_time": time.time(), "processed": 0}
+
     logger.info("Downloading 10-K filings...")
-    logger.info("Progress bar shows overall progress; detailed logs in log file.")
     logger.info("")
 
     # Worker function for parallel processing
@@ -677,7 +718,6 @@ def download_all_10ks(
             filing_date_start=filing_date_start,
             filing_date_end=filing_date_end,
             force=force,
-            skip_pre_check=skip_pre_check,
         )
 
         return ticker, success, file_path, error
@@ -704,9 +744,8 @@ def download_all_10ks(
                 logger.debug(f"✓ Cached: {ticker} ({cik})")
         else:
             # Distinguish between "no 10-K available" (expected) and actual errors
-            if error and ("No 10-K found" in error or "pre-checked via SEC EDGAR" in error):
+            if error and "No 10-K found" in error:
                 # This is expected for many companies (ETFs, foreign companies, etc.)
-                # Includes both pre-checked (via SEC EDGAR) and post-download (via datamule) results
                 stats.increment("no_10k_available")
                 failed_companies.append((ticker, cik, "no_10k", error))
                 logger.debug(
@@ -718,6 +757,24 @@ def download_all_10ks(
                 failed_companies.append((ticker, cik, "error", error or "Unknown error"))
                 logger.debug(f"✗ Error: {ticker} ({cik}): {error}")
 
+        # Time-based progress logging (every 30 seconds to log file)
+        with progress_lock:
+            progress_state["processed"] += 1
+            current_time = time.time()
+            if current_time - progress_state["last_log_time"] >= 30:
+                elapsed = current_time - progress_state["start_time"]
+                processed = progress_state["processed"]
+                rate = processed / elapsed if elapsed > 0 else 0
+                remaining = (total - processed) / rate if rate > 0 else 0
+                pct = (processed / total * 100) if total > 0 else 0
+                logger.info(
+                    f"  Progress: {processed:,}/{total:,} ({pct:.1f}%) | "
+                    f"Rate: {rate:.1f}/sec | ETA: {remaining / 60:.1f}min | "
+                    f"Downloaded: {stats.get('downloaded'):,} | Cached: {stats.get('cached'):,} | "
+                    f"No 10-K: {stats.get('no_10k_available'):,} | Errors: {stats.get('errors'):,}"
+                )
+                progress_state["last_log_time"] = current_time
+
     # Error handler
     def error_handler(company: dict, error: Exception):
         """Handle errors from worker function."""
@@ -727,21 +784,34 @@ def download_all_10ks(
         stats.increment("errors")
 
     # Process companies in parallel using utility
-    execute_parallel(
-        companies,
-        process_company,
-        max_workers=workers,
-        desc="Downloading 10-Ks",
-        unit="company",
-        result_handler=result_handler,
-        error_handler=error_handler,
-        progress_postfix=lambda: {
-            "downloaded": stats.get("downloaded"),
-            "cached": stats.get("cached"),
-            "no_10k": stats.get("no_10k_available"),
-            "errors": stats.get("errors"),
-        },
-    )
+    # Redirect stdout at FD level to suppress datamule's print() spam
+    # (tqdm uses stderr, so progress bar still shows)
+    stdout_fd = sys.stdout.fileno()
+    stdout_backup = os.dup(stdout_fd)
+    devnull_fd = os.open(os.devnull, os.O_WRONLY)
+    os.dup2(devnull_fd, stdout_fd)
+    os.close(devnull_fd)
+    try:
+        execute_parallel(
+            companies,
+            process_company,
+            max_workers=workers,
+            desc="Downloading 10-Ks",
+            unit="company",
+            result_handler=result_handler,
+            error_handler=error_handler,
+            progress_postfix=lambda: {
+                "downloaded": stats.get("downloaded"),
+                "cached": stats.get("cached"),
+                "no_10k": stats.get("no_10k_available"),
+                "errors": stats.get("errors"),
+            },
+        )
+    finally:
+        # Restore stdout
+        sys.stdout.flush()
+        os.dup2(stdout_backup, stdout_fd)
+        os.close(stdout_backup)
 
     # Get final stats
     downloaded = stats.get("downloaded")
@@ -833,14 +903,20 @@ def main():
         help="End date for filing search (YYYY-MM-DD, default: current date + 1 year to include future filings)",
     )
     parser.add_argument(
-        "--no-pre-check",
-        action="store_true",
-        help="Skip pre-check and try all companies (for investigation - may waste API calls)",
-    )
-    parser.add_argument(
         "--force",
         action="store_true",
         help="Force re-download: delete existing HTML files and tar files, then re-download (ensures latest filings)",
+    )
+    parser.add_argument(
+        "--no-pre-filter",
+        action="store_false",
+        dest="pre_filter",
+        help="Skip pre-filtering (not recommended - wastes credits on companies without 10-Ks)",
+    )
+    parser.add_argument(
+        "--refresh-filter",
+        action="store_true",
+        help="Force refresh the pre-filter cache (re-query Datamule index). Use when new 10-Ks may have been filed.",
     )
     args = parser.parse_args()
 
@@ -876,8 +952,9 @@ def main():
             workers=args.workers,
             filing_date_start=args.filing_date_start,
             filing_date_end=args.filing_date_end,
-            skip_pre_check=args.no_pre_check,
-            force=args.force,  # Pass force flag to actually delete files
+            force=args.force,
+            pre_filter=args.pre_filter,
+            refresh_filter=args.refresh_filter,
         )
 
         if args.execute:

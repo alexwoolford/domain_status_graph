@@ -17,10 +17,20 @@ DEFAULT_CACHE_DIR = Path("data/cache")
 _cache: Optional["AppCache"] = None
 
 
+# 10GB cache size limit - large enough for embeddings + parsed 10-K data
+# Default diskcache limit is 1GB which causes eviction during embedding creation
+DEFAULT_CACHE_SIZE_LIMIT = 10 * 1024 * 1024 * 1024  # 10 GB
+
+
 class AppCache:
     """Unified cache using diskcache (SQLite-backed)."""
 
-    def __init__(self, cache_dir: Path = DEFAULT_CACHE_DIR, timeout: float = 30.0):
+    def __init__(
+        self,
+        cache_dir: Path = DEFAULT_CACHE_DIR,
+        timeout: float = 30.0,
+        size_limit: int = DEFAULT_CACHE_SIZE_LIMIT,
+    ):
         """
         Initialize cache.
 
@@ -28,12 +38,20 @@ class AppCache:
             cache_dir: Directory for cache files
             timeout: Timeout in seconds for acquiring database lock (default: 30.0)
                      Higher timeout needed for high concurrency (many workers)
+            size_limit: Maximum cache size in bytes (default: 10GB)
+                        Set to 0 for unlimited. When limit is reached, oldest entries
+                        are evicted using least-recently-stored policy.
         """
         self.cache_dir = Path(cache_dir)
         self.cache_dir.mkdir(parents=True, exist_ok=True)
         # Use timeout to handle database locks gracefully
         # Higher timeout for high concurrency scenarios (SQLite serializes writes)
-        self._cache = diskcache.Cache(str(self.cache_dir), timeout=timeout)
+        # Size limit prevents disk exhaustion while allowing room for all cached data
+        self._cache = diskcache.Cache(
+            str(self.cache_dir),
+            timeout=timeout,
+            size_limit=size_limit,
+        )
 
     def _make_key(self, namespace: str, key: str) -> str:
         return f"{namespace}:{key}"
@@ -86,14 +104,16 @@ class AppCache:
             ns = key.split(":")[0] if ":" in key else "unknown"
             namespaces[ns] = namespaces.get(ns, 0) + 1
 
-        # Calculate size more efficiently (only check cache.db file, not all files)
-        cache_db = self.cache_dir / "cache.db"
-        size_bytes = cache_db.stat().st_size if cache_db.exists() else 0
+        # Get actual disk usage from diskcache
+        volume_bytes = self._cache.volume()
+        size_limit = self._cache.size_limit
 
         return {
             "total": len(self._cache),
             "by_namespace": namespaces,
-            "size_mb": round(size_bytes / (1024 * 1024), 2),
+            "size_mb": round(volume_bytes / (1024 * 1024), 2),
+            "size_limit_mb": round(size_limit / (1024 * 1024), 2) if size_limit else None,
+            "size_pct": round(volume_bytes / size_limit * 100, 1) if size_limit else None,
             "cache_dir": str(self.cache_dir),
         }
 

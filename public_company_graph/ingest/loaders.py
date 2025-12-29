@@ -28,7 +28,12 @@ def load_domains(
         database: Neo4j database name
         log: Optional logger instance (uses module logger if not provided)
     """
+    import time
+
     _logger = log or logger
+    total = len(domains)
+    start_time = time.time()
+    last_log_time = start_time
 
     with driver.session(database=database) as session:
         for i in range(0, len(domains), batch_size):
@@ -48,9 +53,21 @@ def load_domains(
             """
 
             session.run(query, batch=cleaned_batch)
+            processed = i + len(batch)
 
-            if (i // batch_size + 1) % 10 == 0:
-                _logger.info(f"  Processed {i + len(batch)}/{len(domains)} domains...")
+            # Time-based progress logging (every 30 seconds) or at completion
+            current_time = time.time()
+            if current_time - last_log_time >= 30 or processed >= total:
+                elapsed = current_time - start_time
+                rate = processed / elapsed if elapsed > 0 else 0
+                remaining = (total - processed) / rate if rate > 0 else 0
+                pct = (processed / total * 100) if total > 0 else 0
+                if processed < total:  # Not at the end
+                    _logger.info(
+                        f"  Progress: {processed:,}/{total:,} ({pct:.1f}%) | "
+                        f"Rate: {rate:.1f}/sec | ETA: {remaining / 60:.1f}min"
+                    )
+                last_log_time = current_time
 
 
 def load_technologies(
@@ -70,6 +87,8 @@ def load_technologies(
         database: Neo4j database name
         log: Optional logger instance (uses module logger if not provided)
     """
+    import time
+
     _logger = log or logger
 
     # Extract unique technologies (filter out empty names/categories)
@@ -99,6 +118,10 @@ def load_technologies(
         _logger.info(f"  ✓ Created {len(unique_techs)} Technology nodes")
 
         # Create USES relationships
+        total = len(tech_mappings)
+        start_time = time.time()
+        last_log_time = start_time
+
         for i in range(0, len(tech_mappings), batch_size):
             batch = tech_mappings[i : i + batch_size]
 
@@ -111,6 +134,18 @@ def load_technologies(
             """
 
             session.run(query, batch=batch)
+            processed = i + len(batch)
 
-            if (i // batch_size + 1) % 10 == 0:
-                _logger.info(f"  Processed {i + len(batch)}/{len(tech_mappings)} relationships...")
+            # Time-based progress logging (every 30 seconds) or at completion
+            current_time = time.time()
+            if current_time - last_log_time >= 30 or processed >= total:
+                elapsed = current_time - start_time
+                rate = processed / elapsed if elapsed > 0 else 0
+                remaining = (total - processed) / rate if rate > 0 else 0
+                pct = (processed / total * 100) if total > 0 else 0
+                if processed < total:  # Not at the end
+                    _logger.info(
+                        f"  Progress: {processed:,}/{total:,} ({pct:.1f}%) | "
+                        f"Rate: {rate:.1f}/sec | ETA: {remaining / 60:.1f}min"
+                    )
+                last_log_time = current_time

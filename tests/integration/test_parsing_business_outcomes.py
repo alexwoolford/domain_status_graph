@@ -3,6 +3,10 @@ Business-outcome-focused tests for 10-K parsing.
 
 These tests verify what the parsing should achieve, not how it works.
 When tests fail, question the implementation - don't just fix the test.
+
+Note: BusinessDescriptionParser and RiskFactorsParser now use datamule exclusively.
+When skip_datamule=True or datamule is not available, they return None.
+Tests for extraction quality require real datamule portfolios.
 """
 
 from public_company_graph.domain.validation import is_valid_domain
@@ -19,15 +23,18 @@ class TestParsingBusinessOutcomes:
     Business Outcome: Extract complete, accurate company information from 10-K filings.
 
     These tests verify that parsing achieves business goals, not implementation details.
+
+    Note: Business description and risk factor extraction now require datamule.
+    Tests that use skip_datamule=True will get None for these fields.
     """
 
     def test_parsing_extracts_complete_company_data(self, tmp_path):
         """
-        Business Outcome: Complete company information extracted.
+        Business Outcome: Website extraction works, other fields depend on datamule.
 
-        Given: A 10-K file with website, business description, and risk factors
-        When: We parse it
-        Then: All fields are present and complete
+        Given: A 10-K file with website and other content
+        When: We parse it with skip_datamule=True (no datamule portfolios)
+        Then: Website is extracted; business_description and risk_factors are None
         """
         # Create test file with all data
         html_file = tmp_path / "0000320193" / "10k_2024.html"
@@ -38,13 +45,7 @@ class TestParsingBusinessOutcomes:
             <body>
                 <ix:nonNumeric contextRef="..." name="dei:EntityWebSite">https://www.apple.com</ix:nonNumeric>
                 <div id="item1-business">
-                    <p>Apple Inc. designs, manufactures, and markets smartphones, personal computers,
-                    tablets, wearables, and accessories worldwide. The company's products include iPhone,
-                    Mac, iPad, Apple Watch, and AirPods.</p>
-                </div>
-                <div id="item1a">
-                    <p>Investing in our common stock involves risks. We are subject to various risks
-                    including competition, supply chain disruptions, and regulatory changes.</p>
+                    <p>Apple Inc. designs, manufactures, and markets smartphones.</p>
                 </div>
             </body>
         </html>
@@ -63,27 +64,20 @@ class TestParsingBusinessOutcomes:
             parsers,
             file_content=html_content,
             cik="0000320193",
-            skip_datamule=True,
+            skip_datamule=True,  # No datamule available
             filings_dir=tmp_path,
         )
 
-        # Business Outcome: All fields present
+        # Business Outcome: Website always extracted
         assert result.get("website") is not None, "Website should be extracted"
-        assert result.get("business_description") is not None, (
-            "Business description should be extracted"
-        )
-        assert result.get("risk_factors") is not None, "Risk factors should be extracted"
 
-        # Business Outcome: Data is valid
+        # Business Outcome: Website is valid
         website = result["website"]
         assert is_valid_domain(website), f"Website should be valid domain: {website}"
         assert "apple.com" in website.lower(), "Website should match company"
 
-        # Business Outcome: Data is substantial
-        assert len(result["business_description"]) > 100, (
-            "Business description should be substantial"
-        )
-        assert len(result["risk_factors"]) > 100, "Risk factors should be substantial"
+        # Note: business_description and risk_factors are None when skip_datamule=True
+        # They require real datamule portfolios to extract content
 
     def test_parsing_extracts_accurate_website(self, tmp_path):
         """
@@ -204,11 +198,13 @@ class TestParsingBusinessOutcomes:
 
     def test_parsing_data_quality_meets_standards(self, tmp_path):
         """
-        Business Outcome: Extracted data meets quality standards.
+        Business Outcome: Website extraction meets quality standards.
 
         Given: Parsed data from 10-K
-        When: We validate it
-        Then: Data meets completeness, accuracy, and validity standards
+        When: We validate website extraction
+        Then: Website is valid and accurate
+
+        Note: Business description quality is tested separately with real datamule data.
         """
         html_file = tmp_path / "0000320193" / "10k_2024.html"
         html_file.parent.mkdir(parents=True, exist_ok=True)
@@ -217,12 +213,6 @@ class TestParsingBusinessOutcomes:
         <html>
             <body>
                 <ix:nonNumeric name="dei:EntityWebSite">https://www.apple.com</ix:nonNumeric>
-                <div id="item1-business">
-                    <p>Apple Inc. is a technology company that designs and manufactures consumer
-                    electronics, software, and online services. The company's products include iPhone,
-                    Mac, iPad, Apple Watch, and AirPods. Apple was founded in 1976 and is headquartered
-                    in Cupertino, California.</p>
-                </div>
             </body>
         </html>
         """
@@ -242,29 +232,15 @@ class TestParsingBusinessOutcomes:
             filings_dir=tmp_path,
         )
 
-        # Quality Standard: Completeness
+        # Quality Standard: Website always present
         assert result.get("website") is not None, "Website should be present"
-        assert result.get("business_description") is not None, (
-            "Business description should be present"
-        )
 
-        # Quality Standard: Validity
-        if result.get("website"):
-            assert is_valid_domain(result["website"]), "Website should be valid domain"
+        # Quality Standard: Website validity
+        assert is_valid_domain(result["website"]), "Website should be valid domain"
+        assert "apple.com" in result["website"].lower(), "Website should match company"
 
-        # Quality Standard: Reasonable length
-        if result.get("business_description"):
-            desc_len = len(result["business_description"])
-            assert desc_len > 100, f"Description should be substantial, got {desc_len} chars"
-            assert desc_len < 1000000, f"Description should be reasonable, got {desc_len} chars"
-
-        # Quality Standard: Content relevance
-        if result.get("business_description"):
-            desc_lower = result["business_description"].lower()
-            # Should contain relevant keywords (not just noise)
-            assert any(
-                word in desc_lower for word in ["apple", "technology", "company", "products"]
-            ), "Description should contain relevant content"
+        # Note: business_description is None when skip_datamule=True
+        # Quality tests for business descriptions require real datamule portfolios
 
 
 class TestParsingCriticalPaths:

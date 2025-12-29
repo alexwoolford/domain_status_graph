@@ -30,7 +30,6 @@ from public_company_graph.cli import (
     verify_neo4j_connection,
 )
 from public_company_graph.embeddings import (
-    create_embedding,
     create_embeddings_for_nodes,
     get_openai_client,
     suppress_http_logging,
@@ -163,10 +162,10 @@ def main():
             text_property="description",  # Single property - source indicated by description_source
             key_property="cik",
             embedding_property="description_embedding",
-            create_fn=lambda text, model: create_embedding(client, text, model),
+            openai_client=client,  # Use batch API for speed
             database=database,
             execute=True,
-            log=logger,  # Pass logger for proper output
+            log=logger,
         )
 
         logger.info(
@@ -221,10 +220,10 @@ def main():
                 text_property="description",
                 key_property="final_domain",
                 embedding_property="description_embedding",
-                create_fn=lambda text, model: create_embedding(client, text, model),
+                openai_client=client,  # Use batch API for speed
                 database=database,
                 execute=True,
-                log=logger,  # Pass logger for proper output
+                log=logger,
             )
         )
 

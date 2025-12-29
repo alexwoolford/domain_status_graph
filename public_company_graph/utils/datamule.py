@@ -1,26 +1,23 @@
 """
 Utilities for working with datamule library.
 
-This module provides helpers to suppress datamule's verbose output and redirect
-it to log files, making scripts cleaner and more maintainable.
+This module provides:
+1. Thread-safe Portfolio cache for expensive re-initialization
+2. Parsed document cache for avoiding repeated doc.parse() calls
+3. Helper to suppress datamule's verbose output (Portfolio init messages)
 
-Uses thread-safe output capture to handle datamule printing from worker threads.
-
-Also provides a thread-safe Portfolio cache to avoid expensive re-initialization
-when multiple parsers need the same Portfolio object.
+IMPORTANT: For multi-threaded scripts using datamule:
+1. Set os.environ["TQDM_DISABLE"] = "1" BEFORE importing datamule
+2. Use quiet=True in download_submissions() calls
+3. Redirect stdout at FD level around parallel execution blocks
+   (contextlib.redirect_stdout doesn't work across threads)
 """
 
 import contextlib
-import datetime
 import logging
-import os
 import threading
 from pathlib import Path
 from typing import Any
-
-from public_company_graph.utils.thread_safe_output import (
-    ThreadSafeOutputCapture,
-)
 
 logger = logging.getLogger(__name__)
 
@@ -200,104 +197,33 @@ def _is_tqdm_progress_bar(text: str) -> bool:
 @contextlib.contextmanager
 def suppress_datamule_output():
     """
-    Context manager to suppress datamule's verbose output and redirect it to the log file.
+    Context manager to suppress datamule's verbose output (Portfolio init messages).
 
-    Uses thread-safe output capture to handle datamule printing from worker threads.
-    This is more reliable than previous approaches because it works across thread boundaries.
-
-    IMPORTANT: This must wrap Portfolio() creation to catch "Loading submissions" messages.
+    IMPORTANT: For API output, use quiet=True in download_submissions().
+    For tqdm progress bars, set TQDM_DISABLE=1 BEFORE importing datamule.
 
     Example:
-        from public_company_graph.utils.datamule import suppress_datamule_output
+        import os
+        os.environ["TQDM_DISABLE"] = "1"  # BEFORE datamule import!
+        from datamule import Portfolio
 
         with suppress_datamule_output():
             portfolio = Portfolio(...)
-            portfolio.download_submissions(...)
+        portfolio.download_submissions(..., quiet=True)
 
-    The context manager will:
-    1. Disable tqdm globally using TQDM_DISABLE environment variable
-    2. Install thread-safe stdout/stderr capture
-    3. Filter out progress bars and noise
-    4. Suppress Python warnings from datamule
-    5. Write meaningful content to the log file (if available)
+    This context manager:
+    1. Suppresses Python warnings from datamule
+    2. Redirects stdout/stderr to /dev/null using contextlib (Portfolio init messages)
     """
+    import io
     import warnings
 
-    # Find the log file handler
-    log_file_handler: logging.FileHandler | None = None
-    for handler in logger.handlers:
-        if isinstance(handler, logging.FileHandler):
-            log_file_handler = handler
-            break
+    # Suppress Python warnings (datamule uses warnings.warn for some messages)
+    with warnings.catch_warnings():
+        warnings.filterwarnings("ignore", message=".*extract year.*")
+        warnings.filterwarnings("ignore", message=".*original filename.*")
 
-    # Save original environment state
-    old_tqdm_disable = os.environ.get("TQDM_DISABLE")
-
-    # Use thread-safe output capture (works across thread boundaries)
-    output_capture = ThreadSafeOutputCapture(capture_stdout=True, capture_stderr=True)
-
-    try:
-        # Disable tqdm globally using the official mechanism
-        os.environ["TQDM_DISABLE"] = "1"
-
-        # Suppress Python warnings (datamule uses warnings.warn for some messages)
-        with warnings.catch_warnings():
-            warnings.filterwarnings("ignore", message=".*extract year.*")
-            warnings.filterwarnings("ignore", message=".*original filename.*")
-
-            # Install thread-safe output capture
-            # This works even if datamule prints from worker threads
-            output_capture.install()
-
-            try:
-                yield
-            finally:
-                # Uninstall capture (restores stdout/stderr)
-                output_capture.uninstall()
-    finally:
-        # Restore original environment
-        if old_tqdm_disable is None:
-            os.environ.pop("TQDM_DISABLE", None)
-        else:
-            os.environ["TQDM_DISABLE"] = old_tqdm_disable
-
-        # Write captured output to log file (if available) - but only if there's meaningful content
-        if log_file_handler:
-            log_file = log_file_handler.stream
-
-            # Get captured output
-            stdout_content, stderr_content = output_capture.get_captured_output()
-
-            # Filter out common datamule noise (progress bars, "Loading submissions", etc.)
-            filtered_lines = []
-            for line in stdout_content.splitlines() + stderr_content.splitlines():
-                line = line.strip()
-                if not line:
-                    continue
-                # Skip tqdm progress bars
-                if _is_tqdm_progress_bar(line):
-                    continue
-                # Skip common datamule noise
-                if any(
-                    noise in line.lower()
-                    for noise in [
-                        "loading submissions",
-                        "loading regular submissions",
-                        "successfully loaded",
-                        "could not extract year",  # Harmless filename parsing warning
-                        "using original filename",  # Related to above
-                        "%|",
-                        "it/s",
-                    ]
-                ):
-                    continue
-                # Only log meaningful content
-                if len(line) > 10:  # Skip very short lines (likely progress bar fragments)
-                    filtered_lines.append(line)
-
-            # Only write if there's meaningful content (avoid log spam)
-            if filtered_lines:
-                timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                for line in filtered_lines:
-                    log_file.write(f"[{timestamp}] [datamule] {line}\n")
-                log_file.flush()
+        # Use contextlib.redirect_stdout/stderr for cleaner redirection
+        devnull = io.StringIO()
+        with contextlib.redirect_stdout(devnull), contextlib.redirect_stderr(devnull):
+            yield

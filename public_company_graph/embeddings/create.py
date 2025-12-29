@@ -6,18 +6,17 @@ Simple module that:
 2. Creates/caches embeddings using the unified cache (with batch API for speed)
 3. Updates Neo4j nodes with embeddings
 
-Performance: Uses OpenAI's batch embedding API to process ~100 texts per request,
+Performance: Uses OpenAI's batch embedding API to process texts efficiently,
 reducing embedding time from ~40 minutes to ~2 minutes for 6000+ nodes.
 
-Long text handling: Texts exceeding token limits are processed individually with
-chunking and weighted averaging (earlier chunks weighted higher). This preserves
+Long text handling: Texts exceeding token limits are processed with chunking
+and weighted averaging (earlier chunks weighted higher). This preserves
 accuracy for long 10-K business descriptions while maintaining speed for shorter texts.
 """
 
 import logging
 import re
-import sys
-from collections.abc import Callable
+import time
 from typing import Any
 
 from public_company_graph.cache import AppCache
@@ -29,13 +28,6 @@ from public_company_graph.embeddings.openai_client import (
     EMBEDDING_TRUNCATE_TOKENS,
     count_tokens,
 )
-
-try:
-    from tqdm import tqdm
-
-    TQDM_AVAILABLE = True
-except ImportError:
-    TQDM_AVAILABLE = False
 
 logger = logging.getLogger(__name__)
 
@@ -71,16 +63,17 @@ def create_embeddings_for_nodes(
     dimension_property: str = "embedding_dimension",
     embedding_model: str = "text-embedding-3-small",
     embedding_dimension: int = 1536,
-    create_fn: Callable[[str, str], list[float] | None] | None = None,
+    openai_client: Any = None,
     database: str | None = None,
     execute: bool = False,
-    openai_client: Any | None = None,  # For batch embedding
-    log: logging.Logger | None = None,  # Pass script's logger for proper output
+    log: logging.Logger | None = None,
 ) -> tuple[int, int, int, int]:
     """
     Create/load embeddings for Neo4j nodes and update them.
 
-    Uses batch API calls to OpenAI for ~20x faster embedding creation.
+    Uses OpenAI's batch embedding API for efficient processing:
+    - Short texts: Batched together in single API calls
+    - Long texts: Chunked with weighted averaging for accuracy
 
     Args:
         driver: Neo4j driver
@@ -93,13 +86,16 @@ def create_embeddings_for_nodes(
         dimension_property: Property name to store dimension
         embedding_model: Embedding model name
         embedding_dimension: Expected embedding dimension
-        create_fn: Function to create single embedding (fallback if no client)
+        openai_client: OpenAI client instance (required)
         database: Neo4j database name
         execute: If False, only print plan
-        openai_client: OpenAI client for batch embedding (recommended)
+        log: Logger instance for output
 
     Returns:
         Tuple of (processed, created, cached, failed) counts
+
+    Raises:
+        ValueError: If openai_client is not provided
     """
     # Use passed logger if provided, otherwise use module logger
     _logger = log if log is not None else logger
@@ -160,130 +156,98 @@ def create_embeddings_for_nodes(
     failed = 0
 
     if uncached_items:
-        if openai_client is not None:
-            from public_company_graph.embeddings.openai_client import (
-                create_embeddings_batch,
+        if openai_client is None:
+            raise ValueError("openai_client is required. Use get_openai_client() to create one.")
+
+        from public_company_graph.embeddings.openai_client import (
+            create_embeddings_batch,
+        )
+
+        # Separate short texts (batch-able) from long texts (need chunking)
+        short_items: list[tuple[str, str]] = []
+        long_items: list[tuple[str, str]] = []
+
+        for cache_key, text in uncached_items:
+            token_count = count_tokens(text, embedding_model)
+            if token_count <= EMBEDDING_TRUNCATE_TOKENS:
+                short_items.append((cache_key, text))
+            else:
+                long_items.append((cache_key, text))
+
+        if long_items:
+            _logger.info(
+                f"  Text length distribution: {len(short_items)} short (batch), "
+                f"{len(long_items)} long (chunked)"
             )
 
-            # Separate short texts (batch-able) from long texts (need chunking)
-            short_items: list[tuple[str, str]] = []
-            long_items: list[tuple[str, str]] = []
+        # Process short texts with fast batch API
+        # create_embeddings_batch handles token-based batching internally
+        if short_items:
+            _logger.info(f"Creating {len(short_items)} embeddings via batch API...")
+            batch_keys = [k for k, _ in short_items]
+            batch_texts = [t for _, t in short_items]
 
-            for cache_key, text in uncached_items:
-                token_count = count_tokens(text, embedding_model)
-                if token_count <= EMBEDDING_TRUNCATE_TOKENS:
-                    short_items.append((cache_key, text))
+            # create_embeddings_batch uses token-based batching (max 150K tokens per API call)
+            embeddings = create_embeddings_batch(openai_client, batch_texts, embedding_model)
+
+            start_time = time.time()
+            last_log_time = start_time
+            total_short = len(short_items)
+
+            for i, embedding in enumerate(embeddings):
+                cache_key = batch_keys[i]
+                if embedding and len(embedding) == embedding_dimension:
+                    new_embeddings[cache_key] = embedding
+                    cache.set(
+                        "embeddings",
+                        cache_key,
+                        {
+                            "embedding": embedding,
+                            "text": batch_texts[i],
+                            "model": embedding_model,
+                            "dimension": embedding_dimension,
+                        },
+                    )
                 else:
-                    long_items.append((cache_key, text))
+                    failed += 1
 
-            if long_items:
-                _logger.info(
-                    f"  Text length distribution: {len(short_items)} short (batch), "
-                    f"{len(long_items)} long (chunked)"
-                )
-
-            # Process short texts with fast batch API
-            # Use batch_size=20 to stay under OpenAI's 300K token limit per request
-            if short_items:
-                _logger.info(f"Creating {len(short_items)} embeddings via batch API...")
-                api_batch_size = 20  # ~20 texts * ~8K tokens max = ~160K tokens (under 300K limit)
-                progress_interval = 100
-                for batch_start in range(0, len(short_items), api_batch_size):
-                    batch_end = min(batch_start + api_batch_size, len(short_items))
-                    batch_keys = [k for k, _ in short_items[batch_start:batch_end]]
-                    batch_texts = [t for _, t in short_items[batch_start:batch_end]]
-
-                    embeddings = create_embeddings_batch(
-                        openai_client, batch_texts, embedding_model, batch_size=api_batch_size
+                # Time-based progress logging (every 30 seconds)
+                current_time = time.time()
+                if current_time - last_log_time >= 30:
+                    processed_short = i + 1
+                    elapsed = current_time - start_time
+                    rate = processed_short / elapsed if elapsed > 0 else 0
+                    remaining = (total_short - processed_short) / rate if rate > 0 else 0
+                    pct = (processed_short / total_short * 100) if total_short > 0 else 0
+                    _logger.info(
+                        f"  Progress: {processed_short:,}/{total_short:,} ({pct:.1f}%) | "
+                        f"Rate: {rate:.1f}/sec | ETA: {remaining / 60:.1f}min"
                     )
+                    last_log_time = current_time
 
-                    for i, embedding in enumerate(embeddings):
-                        cache_key = batch_keys[i]
-                        if embedding and len(embedding) == embedding_dimension:
-                            new_embeddings[cache_key] = embedding
-                            cache.set(
-                                "embeddings",
-                                cache_key,
-                                {
-                                    "embedding": embedding,
-                                    "text": batch_texts[i],
-                                    "model": embedding_model,
-                                    "dimension": embedding_dimension,
-                                },
-                            )
-                        else:
-                            failed += 1
+            _logger.info(f"  Completed {len(short_items)} short text embeddings")
 
-                    # Log progress periodically
-                    if batch_end % progress_interval == 0 or batch_end == len(short_items):
-                        _logger.info(
-                            f"  Batch progress: {batch_end}/{len(short_items)} short texts"
-                        )
+        # Process long texts with batched chunking
+        if long_items:
+            from public_company_graph.embeddings.chunking import (
+                create_embeddings_for_long_texts_batched,
+            )
 
-            # Process long texts with BATCHED chunking (much faster than one-at-a-time)
-            # Instead of 1 API call per chunk, we batch all chunks together
-            # This reduces API calls by ~40x (e.g., 3000 calls -> 75 calls)
-            if long_items:
-                from public_company_graph.embeddings.chunking import (
-                    create_embeddings_for_long_texts_batched,
+            _logger.info(f"Creating {len(long_items)} embeddings with chunking...")
+
+            # Create text lookup for caching
+            text_by_key = dict(long_items)
+
+            try:
+                batched_results = create_embeddings_for_long_texts_batched(
+                    client=openai_client,
+                    items=long_items,
+                    model=embedding_model,
+                    log=_logger,
                 )
 
-                _logger.info(
-                    f"Creating {len(long_items)} embeddings with BATCHED chunking "
-                    f"(~40x faster than sequential)..."
-                )
-
-                # Create text lookup for caching
-                text_by_key = dict(long_items)
-
-                try:
-                    batched_results = create_embeddings_for_long_texts_batched(
-                        client=openai_client,
-                        items=long_items,
-                        model=embedding_model,
-                        log=_logger,
-                    )
-
-                    # Process results and update cache
-                    for cache_key, embedding in batched_results.items():
-                        if embedding and len(embedding) == embedding_dimension:
-                            new_embeddings[cache_key] = embedding
-                            cache.set(
-                                "embeddings",
-                                cache_key,
-                                {
-                                    "embedding": embedding,
-                                    "text": text_by_key[cache_key],
-                                    "model": embedding_model,
-                                    "dimension": embedding_dimension,
-                                },
-                            )
-                        else:
-                            failed += 1
-
-                    # Count failures (items not in results)
-                    missing = set(text_by_key.keys()) - set(batched_results.keys())
-                    failed += len(missing)
-
-                except Exception as e:
-                    _logger.error(f"Batched chunking failed: {e}")
-                    failed += len(long_items)
-
-        elif create_fn is not None:
-            # Fallback to one-at-a-time with provided function
-            _logger.warning("No OpenAI client provided - using create_fn for all texts")
-            progress_iter: Any = uncached_items
-            if TQDM_AVAILABLE:
-                progress_iter = tqdm(
-                    uncached_items,
-                    desc="Creating embeddings",
-                    unit="item",
-                    file=sys.stderr,
-                )
-
-            for cache_key, text in progress_iter:
-                try:
-                    embedding = create_fn(text, embedding_model)
+                # Process results and update cache
+                for cache_key, embedding in batched_results.items():
                     if embedding and len(embedding) == embedding_dimension:
                         new_embeddings[cache_key] = embedding
                         cache.set(
@@ -291,18 +255,21 @@ def create_embeddings_for_nodes(
                             cache_key,
                             {
                                 "embedding": embedding,
-                                "text": text,
+                                "text": text_by_key[cache_key],
                                 "model": embedding_model,
                                 "dimension": embedding_dimension,
                             },
                         )
                     else:
                         failed += 1
-                except Exception as e:
-                    _logger.warning(f"Failed to create embedding for {cache_key}: {e}")
-                    failed += 1
-        else:
-            raise ValueError("Either openai_client or create_fn must be provided")
+
+                # Count failures (items not in results)
+                missing = set(text_by_key.keys()) - set(batched_results.keys())
+                failed += len(missing)
+
+            except Exception as e:
+                _logger.error(f"Batched chunking failed: {e}")
+                failed += len(long_items)
 
     # Step 3: Update Neo4j nodes with all embeddings (cached + new)
     all_embeddings = {**cached_embeddings, **new_embeddings}

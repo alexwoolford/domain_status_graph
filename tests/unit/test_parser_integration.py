@@ -11,8 +11,6 @@ These tests verify that the business logic works correctly:
 
 from unittest.mock import patch
 
-import pytest
-
 from public_company_graph.parsing.base import (
     BusinessDescriptionParser,
     CompetitorParser,
@@ -154,73 +152,29 @@ class TestWebsiteParserIntegration:
 
 
 class TestBusinessDescriptionParserIntegration:
-    """Integration tests for BusinessDescriptionParser with real HTML structures."""
+    """Integration tests for BusinessDescriptionParser with real HTML structures.
 
-    def test_extracts_from_toc_link(self, tmp_path):
-        """Test BusinessDescriptionParser extracts via TOC link."""
+    Note: BusinessDescriptionParser now uses datamule exclusively. When datamule
+    is not available or skip_datamule=True, it returns None. This simplifies the
+    code and accepts that ~6% of filings won't have business descriptions extracted.
+    """
+
+    def test_skip_datamule_returns_none(self, tmp_path):
+        """Test that skip_datamule=True returns None (no extraction)."""
         html_file = tmp_path / "0000320193" / "10k_2024.html"
         html_file.parent.mkdir(parents=True, exist_ok=True)
-
-        html_content = """
-        <html>
-            <body>
-                <a href="#item1-business">Item 1: Business</a>
-                <div id="item1-business">
-                    <p>Apple Inc. designs, manufactures, and markets smartphones, personal computers, tablets, wearables, and accessories worldwide.</p>
-                    <p>We sell our products through our retail stores, online stores, and direct sales force, as well as through third-party cellular network carriers, wholesalers, retailers, and resellers.</p>
-                </div>
-                <div id="item1a">Item 1A: Risk Factors</div>
-            </body>
-        </html>
-        """
-        html_file.write_text(html_content)
+        html_file.write_text("<html><body>Test content</body></html>")
 
         parser = BusinessDescriptionParser()
         result = parser.extract(
             html_file,
-            file_content=html_content,
             cik="0000320193",
-            skip_datamule=True,  # Use custom parser
-            filings_dir=tmp_path,
-        )
-
-        assert result is not None
-        assert "Apple Inc." in result
-        assert "smartphones" in result
-        assert "Item 1A" not in result  # Should stop at next section
-        assert parser.validate(result) is True
-        assert len(result) > 100  # Should be substantial
-
-    def test_extracts_from_direct_id(self, tmp_path):
-        """Test BusinessDescriptionParser extracts via direct ID pattern."""
-        html_file = tmp_path / "0000789019" / "10k_2024.html"
-        html_file.parent.mkdir(parents=True, exist_ok=True)
-
-        html_content = """
-        <html>
-            <body>
-                <div id="item1-business">
-                    <p>Microsoft Corporation develops, licenses, and supports software, services, devices, and solutions worldwide.</p>
-                    <p>Our products include operating systems, cross-device productivity applications, server applications, business solution applications, desktop and server management tools, software development tools, video games, and training and certification of computer system integrators and developers.</p>
-                </div>
-            </body>
-        </html>
-        """
-        html_file.write_text(html_content)
-
-        parser = BusinessDescriptionParser()
-        result = parser.extract(
-            html_file,
-            file_content=html_content,
-            cik="0000789019",
             skip_datamule=True,
             filings_dir=tmp_path,
         )
 
-        assert result is not None
-        assert "Microsoft Corporation" in result
-        assert "software" in result
-        assert parser.validate(result) is True
+        # skip_datamule=True means no extraction
+        assert result is None
 
     def test_skips_non_html_files(self, tmp_path):
         """Test BusinessDescriptionParser skips non-HTML files."""
@@ -239,103 +193,78 @@ class TestBusinessDescriptionParserIntegration:
         # Should return None for non-HTML files
         assert result is None
 
-    def test_handles_missing_section(self, tmp_path):
-        """Test BusinessDescriptionParser handles missing Item 1 section."""
+    def test_handles_missing_datamule_document(self, tmp_path):
+        """Test BusinessDescriptionParser returns None when no datamule document."""
         html_file = tmp_path / "0000320193" / "10k_2024.html"
         html_file.parent.mkdir(parents=True, exist_ok=True)
+        html_file.write_text("<html><body>Test content</body></html>")
 
-        # No Item 1 section
-        html_content = """
-        <html>
-            <body>
-                <p>Some other content</p>
-                <div id="item1a">Item 1A: Risk Factors</div>
-            </body>
-        </html>
+        # Mock get_data_dir to return tmp_path (no portfolios exist)
+        with patch(
+            "public_company_graph.parsing.business_description.get_data_dir",
+            return_value=tmp_path,
+        ):
+            parser = BusinessDescriptionParser()
+            result = parser.extract(
+                html_file,
+                cik="0000320193",
+                skip_datamule=False,
+                filings_dir=tmp_path,
+            )
+
+        # No datamule document = None
+        assert result is None
+
+    def test_validate_accepts_any_non_none_text(self, tmp_path):
+        """Test that validate() accepts any non-None text.
+
+        Note: BusinessDescriptionParser inherits the base validate() which
+        returns True for any non-None value. Actual validation (length checks)
+        happens during extraction, not validation.
         """
-        html_file.write_text(html_content)
-
         parser = BusinessDescriptionParser()
-        result = parser.extract(
-            html_file,
-            file_content=html_content,
-            cik="0000320193",
-            skip_datamule=True,
-            filings_dir=tmp_path,
-        )
 
-        # Should return None if section not found
-        assert result is None or len(result) < 100
+        # Any non-None value passes validation
+        valid = "Apple Inc. designs, manufactures, and markets smartphones. " * 10
+        assert parser.validate(valid) is True
+        assert parser.validate("Short") is True  # Base validate() accepts any value
 
-    def test_datamule_fallback_when_tar_exists(self, tmp_path):
-        """Test BusinessDescriptionParser uses datamule when tar file exists."""
-        # Skip if datamule not available
-        try:
-            import datamule  # noqa: F401
-        except ImportError:
-            pytest.skip("datamule not available")
+        # None fails validation
+        assert parser.validate(None) is False
 
+    def test_no_tar_returns_none(self, tmp_path):
+        """Test that missing tar files returns None (no fallback to custom parser)."""
         html_file = tmp_path / "0000320193" / "10k_2024.html"
         html_file.parent.mkdir(parents=True, exist_ok=True)
-        html_file.write_text("<html><body><p>Content</p></body></html>")
+        html_file.write_text("<html><body><p>Test content</p></body></html>")
 
-        # Create portfolio directory with tar file
-        from public_company_graph.config import get_data_dir
+        # Mock get_data_dir to return tmp_path (no tar files exist)
+        with patch(
+            "public_company_graph.parsing.business_description.get_data_dir",
+            return_value=tmp_path,
+        ):
+            parser = BusinessDescriptionParser()
+            result = parser.extract(
+                html_file,
+                cik="0000320193",
+                skip_datamule=False,
+                filings_dir=tmp_path,
+            )
 
-        portfolios_dir = get_data_dir() / "10k_portfolios"
-        portfolio_dir = portfolios_dir / "10k_0000320193"
-        portfolio_dir.mkdir(parents=True, exist_ok=True)
-        (portfolio_dir / "batch_001.tar").write_bytes(b"fake tar")
-
-        parser = BusinessDescriptionParser()
-        result = parser.extract(
-            html_file,
-            cik="0000320193",
-            skip_datamule=False,  # Use datamule
-            filings_dir=tmp_path,
-        )
-
-        # Should attempt to use datamule (may fail if tar is fake, but should try)
-        # If datamule fails, should fall back to custom parser
-        # Either way, should not crash
-        assert result is not None or True  # Just verify it doesn't crash
-
-    def test_custom_parser_fallback_when_no_tar(self, tmp_path):
-        """Test BusinessDescriptionParser falls back to custom parser when no tar."""
-        html_file = tmp_path / "0000320193" / "10k_2024.html"
-        html_file.parent.mkdir(parents=True, exist_ok=True)
-
-        html_content = """
-        <html>
-            <body>
-                <div id="item1-business">
-                    <p>Business description content here.</p>
-                </div>
-            </body>
-        </html>
-        """
-        html_file.write_text(html_content)
-
-        # No tar file exists
-        parser = BusinessDescriptionParser()
-        result = parser.extract(
-            html_file,
-            file_content=html_content,
-            cik="0000320193",
-            skip_datamule=False,  # Try datamule first, but no tar exists
-            filings_dir=tmp_path,
-        )
-
-        # Should fall back to custom parser
-        assert result is not None
-        assert "Business description" in result
+        # No tar files = no datamule document = None (no custom parser fallback)
+        assert result is None
 
 
 class TestParseWithParsersIntegration:
     """Integration tests for parse_10k_with_parsers orchestration."""
 
     def test_all_parsers_work_together(self, tmp_path):
-        """Test that all parsers work together correctly."""
+        """Test that all parsers work together correctly.
+
+        Note: BusinessDescriptionParser returns None when skip_datamule=True
+        (no fallback to custom parser). This test verifies parsers don't
+        interfere with each other.
+        """
         html_file = tmp_path / "0000320193" / "10k_2024.html"
         html_file.parent.mkdir(parents=True, exist_ok=True)
 
@@ -343,10 +272,6 @@ class TestParseWithParsersIntegration:
         <html>
             <body>
                 <span name="dei:EntityWebSite">https://www.apple.com</span>
-                <a href="#item1-business">Item 1: Business</a>
-                <div id="item1-business">
-                    <p>Apple Inc. designs and manufactures consumer electronics.</p>
-                </div>
             </body>
         </html>
         """
@@ -363,15 +288,15 @@ class TestParseWithParsersIntegration:
             parsers,
             file_content=html_content,
             cik="0000320193",
-            skip_datamule=True,
+            skip_datamule=True,  # BusinessDescriptionParser will return None
             filings_dir=tmp_path,
         )
 
-        # Should have all extracted fields
+        # Should have extracted fields
         assert "file_path" in result
         assert result["website"] == "apple.com"
-        assert result["business_description"] is not None
-        assert "Apple Inc." in result["business_description"]
+        # BusinessDescriptionParser returns None when skip_datamule=True
+        assert "business_description" not in result or result["business_description"] is None
         assert result["competitors"] == []  # Placeholder returns empty list
 
     def test_parser_failure_doesnt_break_others(self, tmp_path):
@@ -479,36 +404,27 @@ class TestParserEdgeCases:
         # Should handle gracefully (BeautifulSoup is forgiving)
         assert "file_path" in result
 
-    def test_very_large_description(self, tmp_path):
-        """Test BusinessDescriptionParser handles very large descriptions."""
+    def test_skip_datamule_returns_none(self, tmp_path):
+        """Test BusinessDescriptionParser returns None when skip_datamule=True.
+
+        Note: We no longer have a custom parser fallback. When skip_datamule=True,
+        the parser returns None. Large descriptions are handled by datamule without
+        arbitrary limits when it's available.
+        """
         html_file = tmp_path / "0000320193" / "10k_2024.html"
         html_file.parent.mkdir(parents=True, exist_ok=True)
-
-        # Very large description (simulating real 10-K)
-        large_text = "A" * 100000  # 100k characters
-        html_content = f"""
-        <html>
-            <body>
-                <div id="item1-business">
-                    <p>{large_text}</p>
-                </div>
-            </body>
-        </html>
-        """
-        html_file.write_text(html_content)
+        html_file.write_text("<html><body>Test</body></html>")
 
         parser = BusinessDescriptionParser()
         result = parser.extract(
             html_file,
-            file_content=html_content,
             cik="0000320193",
             skip_datamule=True,
             filings_dir=tmp_path,
         )
 
-        # Should extract (may be truncated, but should be substantial)
-        assert result is not None
-        assert len(result) > 1000
+        # skip_datamule=True returns None (no extraction)
+        assert result is None
 
     def test_multiple_website_mentions(self, tmp_path):
         """Test WebsiteParser chooses best website from multiple mentions."""

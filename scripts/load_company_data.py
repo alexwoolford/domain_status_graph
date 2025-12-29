@@ -301,6 +301,14 @@ def main():
     logger = setup_logging("load_company_data", execute=args.execute)
     cache = get_cache()
 
+    # Log cache status upfront
+    cache_stats = cache.stats()
+    logger.info("Cache status:")
+    logger.info(f"  Total entries: {cache_stats['total']:,}")
+    logger.info(f"  Size: {cache_stats['size_mb']} MB")
+    for ns, ns_count in sorted(cache_stats["by_namespace"].items(), key=lambda x: -x[1]):
+        logger.info(f"    {ns}: {ns_count:,}")
+
     if not args.execute:
         dry_run_plan(cache, logger=logger)
         return

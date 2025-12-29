@@ -254,82 +254,81 @@ def extract_business_description_with_datamule_fallback(
     soup: BeautifulSoup | None = None,
 ) -> str | None:
     """
-    Extract Item 1 Business description using datamule as primary.
+    Extract Item 1 Business description using datamule.
 
-    Strategy: Datamule first (best quality, most reliable), custom parser as fallback.
+    Strategy: Use datamule's get_section() which works for ~94% of filings.
+    For the ~6% where it fails, we log the CIK and return None (accept the gap).
 
-    Quality advantage: Datamule extracts full descriptions (no 50k cap) and is
-    more reliable (~86-93% success vs 64.5% for custom parser).
+    This keeps the code simple and relies on datamule's quality parsing rather than
+    maintaining a parallel custom parser with arbitrary limits.
 
     Args:
-        file_path: Path to 10-K HTML file (for fallback)
+        file_path: Path to 10-K HTML file
         cik: Company CIK (required for datamule)
-        file_content: Optional pre-read file content (avoids re-reading file)
-        skip_datamule: If True, skip datamule and use custom parser only (faster)
-        filings_dir: Optional base directory for path validation
-        soup: Optional pre-parsed BeautifulSoup object (for performance)
+        file_content: Optional pre-read file content (unused, kept for API compatibility)
+        skip_datamule: If True, return None immediately (no extraction)
+        filings_dir: Optional base directory (unused, kept for API compatibility)
+        soup: Optional BeautifulSoup object (unused, kept for API compatibility)
 
     Returns:
-        Business description text or None
+        Business description text or None if extraction fails
     """
-    # If skip_datamule flag is set, use custom parser directly (faster)
+    # If skip_datamule flag is set, skip extraction entirely
     if skip_datamule:
-        return extract_business_description(
-            file_path, file_content=file_content, filings_dir=filings_dir, soup=soup
-        )
+        logger.debug(f"Skipping business description extraction for {file_path.name}")
+        return None
 
     if not cik:
         # Try to extract CIK from file path
         cik = file_path.parent.name
         if not cik.isdigit():
-            logger.warning(f"Could not determine CIK: {file_path}")
-            # Fallback to custom parser
-            return extract_business_description(
-                file_path, file_content=file_content, filings_dir=filings_dir, soup=soup
-            )
+            logger.warning(f"⚠️  Could not determine CIK for business description: {file_path}")
+            return None
 
-    # Try datamule first (best quality)
-    # OPTIMIZATION: Use cached parsed document to avoid expensive re-initialization AND re-parsing
+    # Use datamule for extraction (best quality, ~94% success rate)
     try:
         from public_company_graph.utils.datamule import get_cached_parsed_doc
 
-        # Use portfolio directory (may have existing tar files)
+        # Use portfolio directory (contains tar files from datamule download)
         portfolios_dir = get_data_dir() / "10k_portfolios"
         portfolio_path = portfolios_dir / f"10k_{cik}"
 
-        # Get cached parsed document (or create, parse, and cache it if not exists)
-        # This avoids Portfolio init AND doc.parse() for subsequent parsers on same CIK
+        # Get cached parsed document (or create, parse, and cache it)
         doc = get_cached_parsed_doc(cik, portfolio_path)
 
         if doc is None:
-            # No parsed document available - use custom parser
-            return extract_business_description(
-                file_path, file_content=file_content, filings_dir=filings_dir, soup=soup
+            logger.warning(
+                f"⚠️  No datamule document available for CIK {cik} - skipping business description"
             )
+            return None
 
-        # Extract section from cached parsed document (fast, ~0.1s)
+        # Extract Item 1 section using datamule
         with suppress_datamule_output():
             if hasattr(doc, "get_section"):
                 item1 = doc.get_section(title="item1", format="text")
                 if item1:
                     item1_text = item1[0] if isinstance(item1, list) else str(item1)
                     if len(item1_text) > 1000:
-                        # No cap - return full description for best quality
+                        # Return full description - no arbitrary limits
                         return item1_text
 
-        # Datamule failed - fallback to custom parser
-        return extract_business_description(
-            file_path, file_content=file_content, filings_dir=filings_dir, soup=soup
+        # Datamule couldn't extract Item 1 section - log for investigation
+        # Include accession number and filing date for reproducibility
+        accession = getattr(doc, "accession", "unknown")
+        filing_date = getattr(doc, "filing_date", "unknown")
+        logger.warning(
+            f"⚠️  Datamule could not extract Item 1 for CIK {cik} "
+            f"(accession={accession}, date={filing_date})"
         )
+        logger.debug(
+            f"Item 1 extraction failed - CIK: {cik}, accession: {accession}, "
+            f"filing_date: {filing_date}, path: {getattr(doc, 'path', 'unknown')}"
+        )
+        return None
 
     except ImportError:
-        # datamule not available - silently fall back to custom parser
-        return extract_business_description(
-            file_path, file_content=file_content, filings_dir=filings_dir, soup=soup
-        )
+        logger.error("❌ datamule library not available - cannot extract business descriptions")
+        return None
     except Exception as e:
-        # Datamule error - silently fall back to custom parser (errors logged to file)
-        logger.debug(f"Datamule error for CIK {cik}: {e}, using custom parser")
-        return extract_business_description(
-            file_path, file_content=file_content, filings_dir=filings_dir, soup=soup
-        )
+        logger.warning(f"⚠️  Datamule error for CIK {cik}: {e}")
+        return None

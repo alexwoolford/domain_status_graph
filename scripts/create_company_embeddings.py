@@ -14,6 +14,9 @@ Usage:
 
 import argparse
 import sys
+import time
+
+from tqdm import tqdm
 
 from public_company_graph.cache import get_cache
 from public_company_graph.cli import (
@@ -21,6 +24,7 @@ from public_company_graph.cli import (
     setup_logging,
     verify_neo4j_connection,
 )
+from public_company_graph.constants import BATCH_SIZE_SMALL
 from public_company_graph.embeddings import (
     create_embeddings_for_nodes,
     get_openai_client,
@@ -81,6 +85,14 @@ def main():
 
     cache = get_cache()
 
+    # Log cache status upfront
+    cache_stats = cache.stats()
+    logger.info("Cache status:")
+    logger.info(f"  Total entries: {cache_stats['total']:,}")
+    logger.info(f"  Size: {cache_stats['size_mb']} MB")
+    for ns, ns_count in sorted(cache_stats["by_namespace"].items(), key=lambda x: -x[1]):
+        logger.info(f"    {ns}: {ns_count:,}")
+
     logger.info("=" * 80)
     logger.info("Creating Company Description Embeddings")
     logger.info("=" * 80)
@@ -88,31 +100,62 @@ def main():
     # Step 1: Update Company nodes with 10-K descriptions (if available)
     # This ensures companies have the best available description in the description property
     logger.info("Updating Company nodes with 10-K descriptions (if available)...")
+
+    # Get all companies and check cache for 10-K descriptions
     with driver.session(database=database) as session:
-        # Get all companies
         result = session.run("MATCH (c:Company) RETURN c.cik AS cik")
         companies = [record["cik"] for record in result]
 
-        updated_count = 0
-        for cik in companies:
-            ten_k_data = cache.get("10k_extracted", cik)
-            if ten_k_data and ten_k_data.get("business_description"):
-                # Update Company node with 10-K description (preferred source)
+    # Build batch of updates from cache
+    updates_batch: list[dict] = []
+    cache_hits = 0
+    cache_misses = 0
+
+    for cik in tqdm(companies, desc="Checking 10-K cache", unit="company"):
+        ten_k_data = cache.get("10k_extracted", cik)
+        if ten_k_data and ten_k_data.get("business_description"):
+            updates_batch.append(
+                {
+                    "cik": cik,
+                    "desc": ten_k_data["business_description"],
+                }
+            )
+            cache_hits += 1
+        else:
+            cache_misses += 1
+
+    logger.info(
+        f"  10-K cache: {cache_hits:,} hits, {cache_misses:,} misses "
+        f"({100 * cache_hits / len(companies):.1f}% hit rate)"
+    )
+
+    # Batch update Neo4j (much faster than individual updates)
+    if updates_batch:
+        start_time = time.time()
+        total_updated = 0
+
+        with driver.session(database=database) as session:
+            for i in tqdm(
+                range(0, len(updates_batch), BATCH_SIZE_SMALL),
+                desc="Updating Neo4j",
+                unit="batch",
+            ):
+                batch = updates_batch[i : i + BATCH_SIZE_SMALL]
                 session.run(
                     """
-                    MATCH (c:Company {cik: $cik})
-                    SET c.description = $desc,
+                    UNWIND $batch AS row
+                    MATCH (c:Company {cik: row.cik})
+                    SET c.description = row.desc,
                         c.description_source = '10k'
                     """,
-                    cik=cik,
-                    desc=ten_k_data["business_description"],
+                    batch=batch,
                 )
-                updated_count += 1
+                total_updated += len(batch)
 
-        logger.info(f"  Updated {updated_count} companies with 10-K descriptions")
+        elapsed = time.time() - start_time
+        logger.info(f"  Updated {total_updated:,} companies in {elapsed:.1f}s")
 
     # Step 2: Create embeddings for all companies with descriptions
-    # Uses batch API for ~20x faster embedding creation
     logger.info("Creating embeddings for companies with descriptions...")
     processed, created, cached, failed = create_embeddings_for_nodes(
         driver=driver,
@@ -121,10 +164,10 @@ def main():
         text_property="description",
         key_property="cik",
         embedding_property="description_embedding",
-        openai_client=client,  # Uses fast batch API
+        openai_client=client,
         database=database,
         execute=True,
-        log=logger,  # Pass logger for proper output
+        log=logger,
     )
 
     logger.info("=" * 80)

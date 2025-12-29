@@ -20,6 +20,35 @@ logger = logging.getLogger(__name__)
 # Cache constants
 CACHE_NAMESPACE = "10k_extracted"
 
+# Flag to ensure logging is only configured once per worker process
+_worker_logging_configured = False
+
+
+def _configure_worker_logging():
+    """
+    Configure logging for worker processes to suppress console output.
+
+    In multiprocessing, child processes don't inherit the parent's logging
+    configuration. This function ensures that warnings from parsing modules
+    go to a NullHandler (silently ignored) instead of stderr.
+
+    This is called once per worker process to prevent log spam during parallel parsing.
+    """
+    global _worker_logging_configured
+    if _worker_logging_configured:
+        return
+    _worker_logging_configured = True
+
+    # Suppress all public_company_graph logs from going to stderr
+    # (they would clutter the tqdm progress bar)
+    pkg_logger = logging.getLogger("public_company_graph")
+    pkg_logger.handlers = []
+    pkg_logger.addHandler(logging.NullHandler())
+    pkg_logger.propagate = False
+
+    # Also suppress datamule logs
+    logging.getLogger("datamule").setLevel(logging.CRITICAL + 1)
+
 
 def parse_10k_worker(args: tuple[str, str, str, bool, bool, bool]) -> tuple[str, str, str | None]:
     """
@@ -33,6 +62,10 @@ def parse_10k_worker(args: tuple[str, str, str, bool, bool, bool]) -> tuple[str,
         status is one of: 'parsed', 'updated', 'cached', 'failed'
     """
     warnings.filterwarnings("ignore")
+
+    # Configure logging for this worker process to suppress console output
+    # (multiprocessing workers don't inherit parent's logging config)
+    _configure_worker_logging()
 
     file_path_str, cik, filings_dir_str, force_flag, skip_dm, incremental = args
     file_path = Path(file_path_str)

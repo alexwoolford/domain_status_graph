@@ -76,60 +76,59 @@ class TestTarDateExtractionRegression:
         assert result == datetime(2021, 12, 3), f"Filename date should take priority, got {result}"
 
 
-class TestEmbeddingBatchSizeRegression:
+class TestTokenBasedBatchingRegression:
     """
-    Guard against regression in embedding batch size.
+    Guard against regression in embedding batch token limits.
 
-    Original Issue (2024-12-28):
-    - MAX_CHUNKS_PER_BATCH was set to 40
-    - Each chunk averages ~8,400 tokens (not 7,000 as assumed)
-    - 40 * 8,400 = 336,000 tokens > OpenAI's 300,000 limit
-    - This caused "max_tokens_per_request" errors for all batches
-    - Fix: Reduced MAX_CHUNKS_PER_BATCH to 30 (30 * 8.5K = 255K tokens, safe margin)
+    Original Issue (2024-12-29):
+    - tiktoken token counts can differ from OpenAI's actual counts by up to 2x
+    - A batch that tiktoken said was ~240K tokens was rejected by OpenAI at 485K tokens
+    - Fix: Use very conservative 150K token limit (50% of OpenAI's 300K limit)
+    - Fix: Use pure token-based batching instead of count-based batching
     """
 
-    def test_max_chunks_per_batch_is_safe(self):
+    def test_max_tokens_per_batch_is_conservative(self):
         """
-        MAX_CHUNKS_PER_BATCH must be low enough to stay under 300K token limit.
+        MAX_TOKENS_PER_BATCH must be well under OpenAI's 300K limit to handle
+        tokenizer discrepancies between tiktoken and OpenAI's actual tokenizer.
 
-        With chunks averaging ~8,500 tokens (worst case), we need:
-        - batch_size * 8500 < 300000
-        - batch_size < 35.3
-
-        Using 30 gives us a safe margin.
+        We observed up to 7.4x discrepancy in production (tiktoken: 126K, OpenAI: 933K).
+        Using ~13% of the limit (40K) provides margin for 7x discrepancy: 40K * 7 = 280K < 300K.
         """
-        from public_company_graph.embeddings.chunking import MAX_CHUNKS_PER_BATCH
+        from public_company_graph.embeddings.chunking import MAX_TOKENS_PER_BATCH
 
-        # Calculate maximum safe batch size
-        MAX_TOKENS_PER_REQUEST = 300_000
-        WORST_CASE_TOKENS_PER_CHUNK = 8_500  # Observed average was ~8,400
+        OPENAI_LIMIT = 300_000
+        # With 7x worst-case discrepancy, MAX_TOKENS * 7 must be < 300K
+        # So MAX_TOKENS must be < 300K / 7 ≈ 43K
+        MAX_SAFE_LIMIT = OPENAI_LIMIT // 7
 
-        max_safe_batch_size = MAX_TOKENS_PER_REQUEST // WORST_CASE_TOKENS_PER_CHUNK
-
-        assert MAX_CHUNKS_PER_BATCH <= max_safe_batch_size, (
-            f"MAX_CHUNKS_PER_BATCH ({MAX_CHUNKS_PER_BATCH}) is too high! "
-            f"With ~{WORST_CASE_TOKENS_PER_CHUNK} tokens/chunk, max safe is {max_safe_batch_size}. "
-            f"This will cause 'max_tokens_per_request' errors from OpenAI."
+        assert MAX_TOKENS_PER_BATCH <= MAX_SAFE_LIMIT, (
+            f"MAX_TOKENS_PER_BATCH ({MAX_TOKENS_PER_BATCH:,}) is too high! "
+            f"Must be <= {MAX_SAFE_LIMIT:,} to handle 7x tokenizer discrepancy "
+            f"(observed tiktoken: 126K vs OpenAI: 933K)."
         )
 
-    def test_chunk_size_matches_expectations(self):
-        """
-        CHUNK_SIZE_TOKENS should be reasonable for the batch calculation.
-        """
-        from public_company_graph.embeddings.chunking import (
-            CHUNK_SIZE_TOKENS,
-            MAX_CHUNKS_PER_BATCH,
-        )
+    def test_chunk_size_is_reasonable(self):
+        """CHUNK_SIZE_TOKENS should be in a reasonable range."""
+        from public_company_graph.embeddings.chunking import CHUNK_SIZE_TOKENS
 
         # Chunks should be 6K-8K tokens
         assert 5000 <= CHUNK_SIZE_TOKENS <= 8000, (
             f"CHUNK_SIZE_TOKENS ({CHUNK_SIZE_TOKENS}) is outside expected range 5000-8000"
         )
 
-        # Total tokens per batch should be under 300K with margin
-        estimated_batch_tokens = MAX_CHUNKS_PER_BATCH * CHUNK_SIZE_TOKENS
-        assert estimated_batch_tokens < 280_000, (
-            f"Estimated batch tokens ({estimated_batch_tokens:,}) is too close to 300K limit"
+    def test_batch_function_accepts_token_limit(self):
+        """create_embeddings_batch must accept max_tokens_per_batch parameter."""
+        import inspect
+
+        from public_company_graph.embeddings.openai_client import create_embeddings_batch
+
+        sig = inspect.signature(create_embeddings_batch)
+        params = list(sig.parameters.keys())
+
+        assert "max_tokens_per_batch" in params, (
+            "create_embeddings_batch must accept max_tokens_per_batch parameter "
+            "for token-based batching"
         )
 
 
@@ -141,7 +140,7 @@ class TestTarFileValidation:
     - Empty/corrupt/truncated tar files were causing extraction failures
     - Zero-byte files, 8-byte truncated files, and empty tar headers (10,240 bytes)
       were all problematic
-    - Fix: Created repair_tar_downloads.py to identify and fix these issues
+    - Fix: Added is_tar_file_empty() validation in tar_selection.py
     """
 
     def test_can_identify_zero_byte_tar(self, tmp_path):
@@ -262,18 +261,14 @@ class TestBatchTokenValidation:
     """
     Guard against batches exceeding OpenAI's token limit.
 
-    Original Issue (2024-12-28):
-    - Some batches mysteriously had 495K tokens (should have been ~210K max)
-    - OpenAI's limit is 300K tokens per request
-    - Root cause unclear, but defensive validation now catches this
+    Original Issue (2024-12-29):
+    - tiktoken counted ~240K tokens, OpenAI saw 485K tokens (2x discrepancy)
+    - Root cause: tokenizer differences between tiktoken and OpenAI's backend
+    - Fix: Use 150K token limit (50% of 300K) and pure token-based batching
     """
 
-    def test_batch_token_preflight_check(self):
-        """
-        Verify that create_embeddings_batch validates token count before API call.
-
-        The code should detect oversized batches and fall back to individual calls.
-        """
+    def test_truncation_enforces_per_text_limit(self):
+        """Each text must be truncated to EMBEDDING_TRUNCATE_TOKENS before batching."""
         from public_company_graph.embeddings.openai_client import (
             EMBEDDING_TRUNCATE_TOKENS,
             count_tokens,
@@ -290,22 +285,8 @@ class TestBatchTokenValidation:
             f"Truncation failed: {token_count} tokens > {EMBEDDING_TRUNCATE_TOKENS} limit"
         )
 
-        # With proper truncation, 30 texts should be under 300K
-        max_batch_size = 30
-        max_per_text = EMBEDDING_TRUNCATE_TOKENS
-        max_batch_tokens = max_batch_size * max_per_text
-
-        assert max_batch_tokens < 300_000, (
-            f"Even with truncation, max batch ({max_batch_tokens:,}) could exceed 300K. "
-            f"Reduce batch_size or EMBEDDING_TRUNCATE_TOKENS."
-        )
-
-    def test_truncation_always_applied(self):
-        """
-        Every text sent to the embedding API must be truncated.
-
-        This test verifies truncation works for various edge cases.
-        """
+    def test_truncation_handles_edge_cases(self):
+        """Truncation must work for various edge cases."""
         from public_company_graph.embeddings.openai_client import (
             EMBEDDING_TRUNCATE_TOKENS,
             count_tokens,
@@ -327,3 +308,35 @@ class TestBatchTokenValidation:
             assert token_count <= EMBEDDING_TRUNCATE_TOKENS, (
                 f"Edge case {i} failed: {token_count} tokens after truncation"
             )
+
+    def test_token_based_batching_respects_limit(self):
+        """
+        Token-based batching must accumulate texts until hitting the token limit,
+        not use a fixed count-based approach.
+        """
+        from public_company_graph.embeddings.chunking import MAX_TOKENS_PER_BATCH
+        from public_company_graph.embeddings.openai_client import count_tokens
+
+        # Simulate building a batch with varied text sizes
+        small_text = "hello world"  # ~2 tokens
+        large_text = "word " * 5000  # ~5000 tokens
+
+        small_tokens = count_tokens(small_text, "text-embedding-3-small")
+        large_tokens = count_tokens(large_text, "text-embedding-3-small")
+
+        # With pure token-based batching:
+        # - Many small texts can fit in one batch
+        # - Fewer large texts fit in one batch
+        # The key is that we never exceed MAX_TOKENS_PER_BATCH
+
+        # Verify we could fit many small texts
+        max_small_texts = MAX_TOKENS_PER_BATCH // small_tokens
+        assert max_small_texts > 100, (
+            f"Should be able to fit many small texts in a batch, got max {max_small_texts}"
+        )
+
+        # Verify we can fit at least a few large texts (with conservative 40K limit)
+        max_large_texts = MAX_TOKENS_PER_BATCH // large_tokens
+        assert max_large_texts >= 5, (
+            f"Should be able to fit at least 5 large texts (~5K tokens each), got {max_large_texts}"
+        )

@@ -263,76 +263,77 @@ def extract_risk_factors_with_datamule_fallback(
     soup: BeautifulSoup | None = None,
 ) -> str | None:
     """
-    Extract Item 1A: Risk Factors using datamule as primary, custom parser as fallback.
+    Extract Item 1A: Risk Factors using datamule.
 
-    Strategy: Datamule first (best quality), custom parser as fallback.
+    Strategy: Use datamule's get_section() which works for ~94% of filings.
+    For the ~6% where it fails, we log the CIK and return None (accept the gap).
 
     Args:
-        file_path: Path to 10-K HTML file (for fallback)
+        file_path: Path to 10-K HTML file
         cik: Company CIK (required for datamule)
-        file_content: Optional pre-read file content
-        skip_datamule: If True, skip datamule and use custom parser only (faster)
-        filings_dir: Optional base directory for path validation
-        soup: Optional pre-parsed BeautifulSoup object (for performance)
+        file_content: Optional pre-read file content (unused, kept for API compatibility)
+        skip_datamule: If True, return None immediately (no extraction)
+        filings_dir: Optional base directory (unused, kept for API compatibility)
+        soup: Optional BeautifulSoup object (unused, kept for API compatibility)
 
     Returns:
-        Risk factors text or None
+        Risk factors text or None if extraction fails
     """
-    # If skip_datamule flag is set, use custom parser directly
+    # If skip_datamule flag is set, skip extraction entirely
     if skip_datamule:
-        return extract_risk_factors(
-            file_path, file_content=file_content, filings_dir=filings_dir, soup=soup
-        )
+        logger.debug(f"Skipping risk factors extraction for {file_path.name}")
+        return None
 
     if not cik:
         # Try to extract CIK from file path
         cik = file_path.parent.name
         if not cik.isdigit():
-            logger.warning(f"Could not determine CIK: {file_path}")
-            return extract_risk_factors(
-                file_path, file_content=file_content, filings_dir=filings_dir, soup=soup
-            )
+            logger.warning(f"⚠️  Could not determine CIK for risk factors: {file_path}")
+            return None
 
-    # Try datamule first (best quality)
-    # OPTIMIZATION: Use cached parsed document to avoid expensive re-initialization AND re-parsing
+    # Use datamule for extraction (best quality, ~94% success rate)
     try:
         from public_company_graph.utils.datamule import get_cached_parsed_doc
 
         portfolios_dir = get_data_dir() / "10k_portfolios"
         portfolio_path = portfolios_dir / f"10k_{cik}"
 
-        # Get cached parsed document (or create, parse, and cache it if not exists)
-        # This avoids Portfolio init AND doc.parse() for subsequent parsers on same CIK
+        # Get cached parsed document (or create, parse, and cache it)
         doc = get_cached_parsed_doc(cik, portfolio_path)
 
         if doc is None:
-            # No parsed document available - use custom parser
-            return extract_risk_factors(
-                file_path, file_content=file_content, filings_dir=filings_dir, soup=soup
+            logger.warning(
+                f"⚠️  No datamule document available for CIK {cik} - skipping risk factors"
             )
+            return None
 
-        # Extract section from cached parsed document (fast, ~0.1s)
+        # Extract Item 1A section using datamule
         with suppress_datamule_output():
             if hasattr(doc, "get_section"):
                 item1a = doc.get_section(title="item1a", format="text")
                 if item1a:
                     item1a_text = item1a[0] if isinstance(item1a, list) else str(item1a)
                     if len(item1a_text) > 1000:
+                        # Return full risk factors - no arbitrary limits
                         return item1a_text
 
-        # Datamule failed - fallback to custom parser
-        return extract_risk_factors(
-            file_path, file_content=file_content, filings_dir=filings_dir, soup=soup
+        # Datamule couldn't extract Item 1A section - log for investigation
+        # Include accession number and filing date for reproducibility
+        accession = getattr(doc, "accession", "unknown")
+        filing_date = getattr(doc, "filing_date", "unknown")
+        logger.warning(
+            f"⚠️  Datamule could not extract Item 1A for CIK {cik} "
+            f"(accession={accession}, date={filing_date})"
         )
+        logger.debug(
+            f"Item 1A extraction failed - CIK: {cik}, accession: {accession}, "
+            f"filing_date: {filing_date}, path: {getattr(doc, 'path', 'unknown')}"
+        )
+        return None
 
     except ImportError:
-        # datamule not available - fall back to custom parser
-        return extract_risk_factors(
-            file_path, file_content=file_content, filings_dir=filings_dir, soup=soup
-        )
+        logger.error("❌ datamule library not available - cannot extract risk factors")
+        return None
     except Exception as e:
-        # Datamule error - fall back to custom parser
-        logger.debug(f"Datamule error for CIK {cik}: {e}, using custom parser")
-        return extract_risk_factors(
-            file_path, file_content=file_content, filings_dir=filings_dir, soup=soup
-        )
+        logger.warning(f"⚠️  Datamule error for CIK {cik}: {e}")
+        return None

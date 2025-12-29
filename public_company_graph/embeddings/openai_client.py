@@ -11,6 +11,9 @@ Used by embedding creation scripts to avoid code duplication.
 """
 
 import logging
+import time
+
+from tqdm import tqdm
 
 from public_company_graph.config import get_openai_api_key
 from public_company_graph.constants import EMBEDDING_MODEL
@@ -137,19 +140,17 @@ def create_embedding(
     client: OpenAI,
     text: str,
     model: str = EMBEDDING_MODEL,
-    use_chunking: bool = True,  # Default: use chunking (preserves all info) instead of truncation
 ) -> list[float] | None:
     """
     Create an embedding for a single text using OpenAI.
 
-    For long texts, uses chunking to preserve all information instead of truncating.
+    For long texts, uses chunking to preserve all information.
     Chunks are aggregated using weighted average (earlier chunks weighted higher).
 
     Args:
         client: OpenAI client instance
         text: Text to embed
         model: Embedding model name
-        use_chunking: If True, use chunking for long texts. If False, truncate.
 
     Returns:
         Embedding vector or None if creation failed
@@ -160,33 +161,19 @@ def create_embedding(
     text = text.strip()
     token_count = count_tokens(text, model)
 
-    # If text fits in one chunk, create single embedding
+    # If text fits in one request, create single embedding
     if token_count <= EMBEDDING_TRUNCATE_TOKENS:
         return _create_embedding_with_retry(client, text, model)
 
-    # Text exceeds limit - use chunking if enabled
-    if use_chunking:
-        from public_company_graph.embeddings.chunking import create_embedding_with_chunking
+    # Long text - use chunking to preserve all information
+    from public_company_graph.embeddings.chunking import create_embedding_with_chunking
 
-        return create_embedding_with_chunking(
-            client=client,
-            text=text,
-            model=model,
-            create_embedding_fn=lambda c, t, m: _create_embedding_with_retry(c, t, m),
-        )
-    else:
-        # Fallback to truncation (legacy behavior)
-        truncated_text = truncate_to_token_limit(
-            text, max_tokens=EMBEDDING_TRUNCATE_TOKENS, model=model
-        )
-
-        if len(truncated_text) < len(text):
-            logging.info(
-                f"Truncated text from {token_count:,} tokens to {EMBEDDING_TRUNCATE_TOKENS:,} tokens "
-                f"({len(text):,} chars → {len(truncated_text):,} chars)"
-            )
-
-        return _create_embedding_with_retry(client, truncated_text, model)
+    return create_embedding_with_chunking(
+        client=client,
+        text=text,
+        model=model,
+        create_embedding_fn=lambda c, t, m: _create_embedding_with_retry(c, t, m),
+    )
 
 
 def _create_embedding_with_retry(client: OpenAI, text: str, model: str) -> list[float] | None:
@@ -210,22 +197,26 @@ def create_embeddings_batch(
     client: OpenAI,
     texts: list[str],
     model: str = EMBEDDING_MODEL,
-    batch_size: int = 20,  # Conservative: ~20 texts * ~8K tokens = ~160K tokens (under 300K limit)
+    max_tokens_per_batch: int = 40_000,  # Very conservative due to massive tiktoken discrepancies
 ) -> list[list[float] | None]:
     """
-    Create embeddings for multiple texts in batches (much faster than one-at-a-time).
+    Create embeddings for multiple texts in batches.
 
     OpenAI's embedding API accepts an array of inputs, returning all embeddings
-    in a single response. This amortizes HTTP overhead across many texts.
+    in a single response.
 
-    Note: OpenAI has a 300K token limit per request. With company descriptions
-    averaging ~5-8K tokens, batch_size=20 keeps us safely under the limit.
+    Note: OpenAI has a 300K token limit per request. We use 40K as our limit because
+    tiktoken can undercount by up to 7x in some cases (observed 126K estimate vs 933K actual).
+    With a 7x safety factor: 40K * 7 = 280K, still under 300K.
+
+    Batches are formed based purely on token counts - texts are added to a batch
+    until adding another would exceed max_tokens_per_batch.
 
     Args:
         client: OpenAI client instance
         texts: List of texts to embed
         model: Embedding model name
-        batch_size: Number of texts per API call (default: 20, safe for long texts)
+        max_tokens_per_batch: Max tokens per API call (default: 40K, very conservative)
 
     Returns:
         List of embedding vectors (same order as input texts).
@@ -238,75 +229,160 @@ def create_embeddings_batch(
 
     results: list[list[float] | None] = [None] * len(texts)
 
-    # Process in batches
-    for batch_start in range(0, len(texts), batch_size):
-        batch_end = min(batch_start + batch_size, len(texts))
-        batch_texts = texts[batch_start:batch_end]
+    # Pre-process: truncate all texts and count their tokens upfront
+    processed_texts: list[tuple[int, str, int]] = []  # (original_idx, text, token_count)
+    for i, text in enumerate(texts):
+        if text and text.strip():
+            truncated = truncate_to_token_limit(text.strip(), EMBEDDING_TRUNCATE_TOKENS, model)
+            token_count = count_tokens(truncated, model)
+            processed_texts.append((i, truncated, token_count))
 
-        # Filter out empty texts, keeping track of original indices
-        valid_indices = []
-        valid_texts = []
-        for i, text in enumerate(batch_texts):
-            if text and text.strip():
-                # Truncate long texts to fit token limit
-                truncated = truncate_to_token_limit(text.strip(), EMBEDDING_TRUNCATE_TOKENS, model)
-                valid_texts.append(truncated)
-                valid_indices.append(batch_start + i)
+    if not processed_texts:
+        return results
 
-        if not valid_texts:
-            continue
+    # Build batches based on token counts
+    batches: list[list[tuple[int, str, int]]] = []
+    current_batch: list[tuple[int, str, int]] = []
+    current_batch_tokens = 0
 
-        # Pre-flight check: validate total tokens before API call
-        # This helps catch issues before they hit OpenAI's 300K limit
-        batch_token_count = sum(count_tokens(t, model) for t in valid_texts)
-        MAX_TOKENS_PER_REQUEST = 300_000
+    for item in processed_texts:
+        original_idx, text, token_count = item
 
-        if batch_token_count > MAX_TOKENS_PER_REQUEST:
-            logging.warning(
-                f"Batch {batch_start}-{batch_end} has {batch_token_count:,} tokens "
-                f"(exceeds {MAX_TOKENS_PER_REQUEST:,} limit). "
-                f"Texts: {len(valid_texts)}, avg: {batch_token_count // len(valid_texts):,}/text. "
-                f"Falling back to individual calls."
+        # Start new batch if adding this text would exceed token limit
+        if current_batch and current_batch_tokens + token_count > max_tokens_per_batch:
+            batches.append(current_batch)
+            current_batch = []
+            current_batch_tokens = 0
+
+        current_batch.append(item)
+        current_batch_tokens += token_count
+
+    # Don't forget the last batch
+    if current_batch:
+        batches.append(current_batch)
+
+    logging.debug(
+        f"Token-based batching: {len(processed_texts)} texts -> {len(batches)} batches "
+        f"(max {max_tokens_per_batch:,} tokens per batch)"
+    )
+
+    # Time-based progress logging
+    start_time = time.time()
+    last_log_time = start_time
+    total_batches = len(batches)
+    completed_texts = 0
+    total_texts_count = len(processed_texts)
+
+    # Process each batch with tqdm progress bar for console
+    with tqdm(
+        total=total_texts_count,
+        desc="Embedding texts",
+        unit="text",
+        disable=total_batches < 5,  # Only show progress bar for significant workloads
+    ) as pbar:
+        for batch_idx, batch in enumerate(batches):
+            valid_indices = [item[0] for item in batch]
+            valid_texts = [item[1] for item in batch]
+            token_counts = [item[2] for item in batch]
+            batch_token_count = sum(token_counts)
+            max_text_tokens = max(token_counts) if token_counts else 0
+
+            logging.debug(
+                f"Batch {batch_idx + 1}/{len(batches)}: {len(valid_texts)} texts, "
+                f"{batch_token_count:,} tokens (avg: {batch_token_count // len(valid_texts):,}, "
+                f"max: {max_text_tokens:,})"
             )
-            # Fall back to individual calls for this oversized batch
-            for i, text in enumerate(valid_texts):
-                original_idx = valid_indices[i]
-                try:
-                    embedding = _create_embedding_with_retry(client, text, model)
-                    results[original_idx] = embedding
-                except Exception as e:
-                    logging.warning(f"Individual embedding failed for index {original_idx}: {e}")
-            continue
 
-        @retry_openai
-        def _call_batch_api(texts=valid_texts):
-            response = client.embeddings.create(model=model, input=texts)
-            return response.data
+            # CRITICAL: Bind loop variables as default arguments to avoid closure bugs
+            # Python closures capture by reference, not value - without binding,
+            # the closure could use values from a different loop iteration
+            batch_texts = tuple(valid_texts)  # Immutable copy
 
-        try:
-            response_data = _call_batch_api()
-            # Map embeddings back to original indices
-            for i, embedding_obj in enumerate(response_data):
-                original_idx = valid_indices[i]
-                results[original_idx] = list(embedding_obj.embedding)
-        except Exception as e:
-            logging.warning(f"Batch embedding failed for texts {batch_start}-{batch_end}: {e}")
-            # Fall back to individual calls for this batch
-            for i, text in enumerate(valid_texts):
-                original_idx = valid_indices[i]
+            @retry_openai
+            def _call_batch_api(
+                _texts: tuple = batch_texts,  # Bind to current iteration's value
+                _expected_tokens: int = batch_token_count,
+            ):
+                logging.debug(
+                    f"API call sending {len(_texts)} texts, expect ~{_expected_tokens:,} tokens"
+                )
+                response = client.embeddings.create(model=model, input=list(_texts))
+                # Log actual token usage for debugging (safely handle mock objects)
                 try:
-                    embedding = _create_embedding_with_retry(client, text, model)
-                    results[original_idx] = embedding
-                except Exception as e2:
-                    logging.warning(
-                        f"Individual embedding also failed for index {original_idx}: {e2}"
-                    )
+                    if (
+                        hasattr(response, "usage")
+                        and response.usage is not None
+                        and hasattr(response.usage, "total_tokens")
+                    ):
+                        actual = response.usage.total_tokens
+                        # Ensure actual is a number (handles mock objects)
+                        if isinstance(actual, (int, float)) and _expected_tokens > 0:
+                            ratio = actual / _expected_tokens
+                            if ratio > 1.5:
+                                logging.warning(
+                                    f"TOKEN DISCREPANCY: API used {actual:,} tokens, "
+                                    f"expected {_expected_tokens:,} ({ratio:.1f}x)"
+                                )
+                except (TypeError, AttributeError):
+                    pass  # Skip usage logging if response doesn't have expected structure
+                return response.data
+
+            try:
+                response_data = _call_batch_api()
+                # Map embeddings back to original indices
+                for i, embedding_obj in enumerate(response_data):
+                    original_idx = valid_indices[i]
+                    results[original_idx] = list(embedding_obj.embedding)
+                completed_texts += len(valid_texts)
+                pbar.update(len(valid_texts))
+            except Exception as e:
+                # Include our token estimate vs what OpenAI reported for debugging
+                logging.warning(
+                    f"Batch {batch_idx + 1}/{len(batches)} embedding failed: {e}. "
+                    f"Our token estimate: {batch_token_count:,} ({len(valid_texts)} texts, "
+                    f"avg: {batch_token_count // len(valid_texts):,}/text, "
+                    f"max: {max_text_tokens:,}/text)"
+                )
+                # Fall back to individual calls for this batch
+                for i, text in enumerate(valid_texts):
+                    original_idx = valid_indices[i]
+                    try:
+                        embedding = _create_embedding_with_retry(client, text, model)
+                        results[original_idx] = embedding
+                        completed_texts += 1
+                        pbar.update(1)
+                    except Exception as e2:
+                        logging.warning(
+                            f"Individual embedding also failed for index {original_idx}: {e2}"
+                        )
+                        pbar.update(1)  # Still count as processed
+
+            # Time-based progress logging (every 30 seconds to log file)
+            current_time = time.time()
+            if current_time - last_log_time >= 30:
+                elapsed = current_time - start_time
+                rate = completed_texts / elapsed if elapsed > 0 else 0
+                total_texts = len(processed_texts)
+                remaining = (total_texts - completed_texts) / rate if rate > 0 else 0
+                pct = (completed_texts / total_texts * 100) if total_texts > 0 else 0
+                logging.info(
+                    f"  Batch embedding progress: {completed_texts:,}/{total_texts:,} texts "
+                    f"({pct:.1f}%) | Batch {batch_idx + 1}/{total_batches} | "
+                    f"Rate: {rate:.1f} texts/sec | ETA: {remaining / 60:.1f}min"
+                )
+                last_log_time = current_time
 
     return results
 
 
 def suppress_http_logging():
-    """Suppress verbose HTTP logging from OpenAI, httpx, and httpcore."""
-    logging.getLogger("httpx").setLevel(logging.WARNING)
-    logging.getLogger("openai").setLevel(logging.WARNING)
-    logging.getLogger("httpcore").setLevel(logging.WARNING)
+    """
+    Suppress verbose HTTP logging from OpenAI, httpx, and httpcore.
+
+    Note: If setup_logging() from public_company_graph.cli has been called,
+    these loggers are already suppressed. This function is safe to call
+    redundantly for scripts that may not use setup_logging().
+    """
+    logging.getLogger("httpx").setLevel(logging.ERROR)
+    logging.getLogger("openai").setLevel(logging.ERROR)
+    logging.getLogger("httpcore").setLevel(logging.ERROR)

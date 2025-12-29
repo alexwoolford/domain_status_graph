@@ -221,21 +221,23 @@ class TestRiskFactorsRealFiles:
             "Risk factors should have introduction or structured content"
         )
 
-    def test_risk_factors_parser_integration(self, filings_dir):
+    def test_risk_factors_parser_returns_none_when_skip_datamule(self, filings_dir):
         """
-        Business Outcome: RiskFactorsParser works with real files.
+        Business Outcome: RiskFactorsParser returns None when skip_datamule=True.
 
         Given: Real 10-K file
-        When: Parsed with RiskFactorsParser
-        Then: Risk factors are extracted correctly
+        When: Parsed with RiskFactorsParser and skip_datamule=True
+        Then: Returns None (no extraction without datamule)
+
+        Note: RiskFactorsParser now requires datamule. When skip_datamule=True,
+        it returns None. This simplifies the code and accepts that some filings
+        won't have risk factors extracted.
         """
         cik = "0000004962"  # PepsiCo
-        # Find any 10-K file for this CIK (may be different years)
         cik_dir = filings_dir / cik
         if not cik_dir.exists():
             pytest.skip(f"CIK directory not found: {cik_dir}")
 
-        # Find first available 10-K file
         files = list(cik_dir.glob("10k_*.html"))
         if not files:
             pytest.skip(f"No 10-K files found in {cik_dir}")
@@ -246,29 +248,29 @@ class TestRiskFactorsRealFiles:
         result = parser.extract(
             file_path,
             cik=cik,
-            skip_datamule=True,
+            skip_datamule=True,  # No extraction
             filings_dir=filings_dir,
         )
 
-        # Business Outcome: Risk factors extracted
-        assert result is not None, "RiskFactorsParser should extract risk factors"
-        assert len(result) > 1000, "Risk factors should be substantial"
+        # skip_datamule=True returns None
+        assert result is None, "RiskFactorsParser should return None when skip_datamule=True"
 
-    def test_risk_factors_with_datamule_fallback(self, filings_dir):
+    def test_risk_factors_requires_datamule(self, filings_dir):
         """
-        Business Outcome: Datamule fallback works with real files.
+        Business Outcome: Risk factors extraction requires datamule.
 
         Given: Real 10-K file
-        When: Parsed with datamule fallback
-        Then: Risk factors are extracted (either via datamule or custom parser)
+        When: Parsed with extract_risk_factors_with_datamule_fallback and skip_datamule=True
+        Then: Returns None (datamule is required)
+
+        Note: There is no longer a custom parser fallback. When datamule is not
+        available (skip_datamule=True or no portfolio), returns None.
         """
         cik = "0000004962"  # PepsiCo
-        # Find any 10-K file for this CIK (may be different years)
         cik_dir = filings_dir / cik
         if not cik_dir.exists():
             pytest.skip(f"CIK directory not found: {cik_dir}")
 
-        # Find first available 10-K file
         files = list(cik_dir.glob("10k_*.html"))
         if not files:
             pytest.skip(f"No 10-K files found in {cik_dir}")
@@ -278,13 +280,12 @@ class TestRiskFactorsRealFiles:
         result = extract_risk_factors_with_datamule_fallback(
             file_path,
             cik=cik,
-            skip_datamule=True,  # Use custom parser (tests fallback path)
+            skip_datamule=True,  # Returns None
             filings_dir=filings_dir,
         )
 
-        # Business Outcome: Risk factors extracted via fallback
-        assert result is not None, "Should extract risk factors via custom parser fallback"
-        assert len(result) > 1000, "Risk factors should be substantial"
+        # skip_datamule=True returns None (no custom parser fallback)
+        assert result is None, "Should return None when skip_datamule=True"
 
     def test_multiple_companies_have_risk_factors(self, filings_dir):
         """

@@ -22,11 +22,11 @@ Sources (in priority order):
 
 import logging
 from datetime import UTC, datetime
-from pathlib import Path
 from threading import Lock
 
 import requests
 
+from public_company_graph.cli import setup_logging
 from public_company_graph.utils.parallel import execute_parallel
 
 # Optional dependencies are now handled in the extracted modules
@@ -217,28 +217,8 @@ def main():
 
     args = parser.parse_args()
 
-    # Set up logging
-    log_dir = Path("logs")
-    log_dir.mkdir(parents=True, exist_ok=True)
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    # Use the script's filename (without .py extension) for the log file
-    script_name = Path(__file__).stem
-    log_file = log_dir / f"{script_name}_{timestamp}.log"
-
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(asctime)s - %(levelname)s - %(message)s",
-        handlers=[
-            logging.FileHandler(log_file),
-            # Don't log to stdout - let tqdm handle progress display
-        ],
-    )
-    _logger = logging.getLogger(__name__)
-
-    # Suppress verbose HTTP logging
-    logging.getLogger("httpx").setLevel(logging.WARNING)
-    logging.getLogger("openai").setLevel(logging.WARNING)
-    logging.getLogger("urllib3").setLevel(logging.WARNING)
+    # Set up logging using centralized setup (tqdm-compatible, suppresses noisy loggers)
+    _logger = setup_logging("collect_domains", execute=True)
 
     # Initialize cache
     from public_company_graph.cache import get_cache
@@ -248,7 +228,6 @@ def main():
 
     _logger.info("=" * 80)
     _logger.info("Starting parallel domain collection")
-    _logger.info(f"Log file: {log_file}")
     _logger.info(f"Cache: {cached_count} companies already cached")
 
     # Create session
@@ -284,7 +263,7 @@ def main():
 
     _logger.info(f"Processing {len(companies)} companies...")
 
-    # Pre-load all cached entries (much faster than individual lookups)
+    # Pre-load all cached entries
     _logger.info("Pre-loading cached entries...")
     cached_results = {}
     companies_to_fetch = {}
@@ -374,7 +353,6 @@ def main():
     if skipped_count > 0:
         summary_parts.append(f"Skipped: {skipped_count}")
     _logger.info(f"  {', '.join(summary_parts)}")
-    _logger.info(f"✓ Log file: {log_file}")
     _logger.info("=" * 80)
 
 

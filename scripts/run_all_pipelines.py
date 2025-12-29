@@ -207,7 +207,7 @@ def main():
     cached_10ks = cache.count("10k_extracted")
 
     if cached_10ks == 0 or not args.fast:
-        # Download 10-Ks
+        # Download 10-Ks (pre-filter is enabled by default to save credits)
         if not run_script(
             DOWNLOAD_10K_SCRIPT,
             execute=True,
