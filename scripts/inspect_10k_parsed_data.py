@@ -135,12 +135,14 @@ def show_statistics():
 
     print(f"Total parsed: {total:,}")
     print()
-    print(f"With website: {with_website:,} ({with_website/total*100:.1f}%)")
-    print(f"With business description: {with_description:,} ({with_description/total*100:.1f}%)")
+    print(f"With website: {with_website:,} ({with_website / total * 100:.1f}%)")
+    print(
+        f"With business description: {with_description:,} ({with_description / total * 100:.1f}%)"
+    )
     if with_description > 0:
         avg_length = total_desc_length / with_description
         print(f"  Average description length: {avg_length:,.0f} characters")
-    print(f"With competitors: {with_competitors:,} ({with_competitors/total*100:.1f}%)")
+    print(f"With competitors: {with_competitors:,} ({with_competitors / total * 100:.1f}%)")
     print()
 
 

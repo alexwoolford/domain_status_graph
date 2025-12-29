@@ -109,13 +109,12 @@ def main():
     print("-" * 40)
     with driver.session(database=database) as session:
         result = session.run(
-            "MATCH (d:Domain) WHERE d.description_embedding IS NOT NULL " "RETURN count(d) AS count"
+            "MATCH (d:Domain) WHERE d.description_embedding IS NOT NULL RETURN count(d) AS count"
         )
         domain_embeddings = result.single()["count"]
 
         result = session.run(
-            "MATCH (c:Company) WHERE c.description_embedding IS NOT NULL "
-            "RETURN count(c) AS count"
+            "MATCH (c:Company) WHERE c.description_embedding IS NOT NULL RETURN count(c) AS count"
         )
         company_embeddings = result.single()["count"]
 

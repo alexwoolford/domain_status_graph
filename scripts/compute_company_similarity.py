@@ -236,7 +236,7 @@ def write_size_relationships(
         elapsed_total = time.time() - start_time
         rate_total = (relationships_written / elapsed_total * 60) if elapsed_total > 0 else 0
         log.info(
-            f"Completed in {elapsed_total/60:.1f} minutes "
+            f"Completed in {elapsed_total / 60:.1f} minutes "
             f"({rate_total:,.0f} relationships/minute)"
         )
 

@@ -87,7 +87,7 @@ def compute_domain_similarity(
         # Delete existing SIMILAR_DESCRIPTION relationships
         # between Domains only (not Company-Company)
         logger.info(
-            "   Deleting existing SIMILAR_DESCRIPTION relationships " "(Domain-Domain only)..."
+            "   Deleting existing SIMILAR_DESCRIPTION relationships (Domain-Domain only)..."
         )
         with driver.session(database=database) as session:
             result = session.run(

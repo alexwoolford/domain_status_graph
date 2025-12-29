@@ -64,7 +64,7 @@ def analyze_tar_file(tar_path: Path) -> dict:
 
     if result["size"] < 100:
         result["status"] = "truncated"
-        result["error"] = f'File is only {result["size"]} bytes (truncated)'
+        result["error"] = f"File is only {result['size']} bytes (truncated)"
         return result
 
     # Try to open and analyze
@@ -88,7 +88,7 @@ def analyze_tar_file(tar_path: Path) -> dict:
             if result["html_count"] == 0:
                 if result["txt_count"] > 0:
                     result["status"] = "txt_only"
-                    result["error"] = f'Contains {result["txt_count"]} TXT files but no HTML'
+                    result["error"] = f"Contains {result['txt_count']} TXT files but no HTML"
                 else:
                     result["status"] = "no_html"
                     result["error"] = "Contains files but no HTML or TXT"

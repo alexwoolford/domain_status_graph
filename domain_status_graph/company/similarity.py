@@ -79,7 +79,7 @@ def compute_industry_similarity(
                 pairs.append((cik1, cik2, properties))
 
     logger.info(
-        f"Computed {len(pairs)} industry similarity pairs using {method} " f"({len(groups)} groups)"
+        f"Computed {len(pairs)} industry similarity pairs using {method} ({len(groups)} groups)"
     )
     return pairs
 

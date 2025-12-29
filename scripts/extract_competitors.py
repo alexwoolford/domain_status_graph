@@ -146,8 +146,7 @@ def extract_competitors_from_cache(
             break
 
     logger.info(
-        f"Extraction complete: {processed} companies, "
-        f"{with_competitors} with competitor mentions"
+        f"Extraction complete: {processed} companies, {with_competitors} with competitor mentions"
     )
 
     return dict(relationships)

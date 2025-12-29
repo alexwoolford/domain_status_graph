@@ -296,8 +296,8 @@ def enrich_all_companies(
                         )
                         logger.info(
                             f"  Progress: {counters['processed']}/{len(companies)} "
-                            f"({counters['processed']/len(companies)*100:.1f}%) | "
-                            f"Rate: {rate:.1f}/sec | ETA: {remaining/60:.1f}min | "
+                            f"({counters['processed'] / len(companies) * 100:.1f}%) | "
+                            f"Rate: {rate:.1f}/sec | ETA: {remaining / 60:.1f}min | "
                             f"Cache hits: {counters['cached']} ({cache_pct:.0f}%)"
                         )
                     last_log_time = current_time
@@ -322,8 +322,8 @@ def enrich_all_companies(
     logger.info(f"  Enriched: {counters['enriched']}")
     logger.info(f"  From cache: {counters['cached']}")
     logger.info(f"  Failed: {counters['failed']}")
-    logger.info(f"  Time: {elapsed:.1f}s ({elapsed/60:.1f} min)")
-    logger.info(f"  Rate: {len(companies)/elapsed:.1f} companies/sec")
+    logger.info(f"  Time: {elapsed:.1f}s ({elapsed / 60:.1f} min)")
+    logger.info(f"  Rate: {len(companies) / elapsed:.1f} companies/sec")
 
     return counters["enriched"]
 

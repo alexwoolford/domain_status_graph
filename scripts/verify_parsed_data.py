@@ -96,10 +96,10 @@ for cik in all_ciks:
         with_all += 1
 
 print(f"Total companies in 10-K cache: {total_cached}")
-print(f"Companies with business description: {with_desc} ({with_desc/total_cached*100:.1f}%)")
-print(f"Companies with risk factors: {with_risks} ({with_risks/total_cached*100:.1f}%)")
-print(f"Companies with website: {with_website} ({with_website/total_cached*100:.1f}%)")
-print(f"Companies with all three: {with_all} ({with_all/total_cached*100:.1f}%)")
+print(f"Companies with business description: {with_desc} ({with_desc / total_cached * 100:.1f}%)")
+print(f"Companies with risk factors: {with_risks} ({with_risks / total_cached * 100:.1f}%)")
+print(f"Companies with website: {with_website} ({with_website / total_cached * 100:.1f}%)")
+print(f"Companies with all three: {with_all} ({with_all / total_cached * 100:.1f}%)")
 print()
 
 # Neo4j statistics
@@ -234,7 +234,7 @@ with driver.session(database=database) as session:
             if norm1 > 0 and norm2 > 0:
                 similarity = np.dot(emb1, emb2) / (norm1 * norm2)
                 print(
-                    f"  {company_embeddings[i]['name']} vs {company_embeddings[i+1]['name']}: {similarity:.4f}"
+                    f"  {company_embeddings[i]['name']} vs {company_embeddings[i + 1]['name']}: {similarity:.4f}"
                 )
         print()
         print("(Similarity should be between -1 and 1, typically 0.3-0.9 for similar companies)")

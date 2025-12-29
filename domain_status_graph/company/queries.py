@@ -91,7 +91,7 @@ def get_top_similar_companies_query(
             "risk_matches, desc_matches"
         )
         order_by = (
-            "weighted_score DESC, risk_matches DESC, " "shared_tech_count DESC, desc_matches DESC"
+            "weighted_score DESC, risk_matches DESC, shared_tech_count DESC, desc_matches DESC"
         )
     else:
         shared_tech_clause = f"""
@@ -114,10 +114,10 @@ def get_top_similar_companies_query(
     WHERE type(r) IN ['SIMILAR_RISK', 'SIMILAR_DESCRIPTION']
     WITH c1, c2,
          sum(CASE WHEN type(r) = 'SIMILAR_RISK'
-                  THEN {weights.get('SIMILAR_RISK', 1.0)} * r.score
+                  THEN {weights.get("SIMILAR_RISK", 1.0)} * r.score
                   ELSE 0.0 END) AS risk_score,
          sum(CASE WHEN type(r) = 'SIMILAR_DESCRIPTION'
-                  THEN {weights.get('SIMILAR_DESCRIPTION', 0.5)} * r.score
+                  THEN {weights.get("SIMILAR_DESCRIPTION", 0.5)} * r.score
                   ELSE 0.0 END) AS desc_score,
          sum(CASE WHEN type(r) = 'SIMILAR_RISK' THEN 1 ELSE 0 END) AS risk_matches,
          sum(CASE WHEN type(r) = 'SIMILAR_DESCRIPTION' THEN 1 ELSE 0 END) AS desc_matches
@@ -166,27 +166,27 @@ def get_top_similar_companies_query_extended(
          CASE
            // SIMILAR_RISK: uses cosine similarity score from risk factor embeddings
            WHEN type(r) = 'SIMILAR_RISK' THEN
-             {weights.get('SIMILAR_RISK', 1.0)} * coalesce(r.score, 1.0)
+             {weights.get("SIMILAR_RISK", 1.0)} * coalesce(r.score, 1.0)
            // SIMILAR_INDUSTRY: weight by method specificity (SIC > INDUSTRY > SECTOR)
            WHEN type(r) = 'SIMILAR_INDUSTRY' AND r.method = 'SIC' THEN
-             {weights.get('SIMILAR_INDUSTRY', 0.9)} * 1.2
+             {weights.get("SIMILAR_INDUSTRY", 0.9)} * 1.2
            WHEN type(r) = 'SIMILAR_INDUSTRY' AND r.method = 'INDUSTRY' THEN
-             {weights.get('SIMILAR_INDUSTRY', 0.9)} * 0.8
+             {weights.get("SIMILAR_INDUSTRY", 0.9)} * 0.8
            WHEN type(r) = 'SIMILAR_INDUSTRY' AND r.method = 'SECTOR' THEN
-             {weights.get('SIMILAR_INDUSTRY', 0.9)} * 0.6
+             {weights.get("SIMILAR_INDUSTRY", 0.9)} * 0.6
            WHEN type(r) = 'SIMILAR_INDUSTRY' THEN
-             {weights.get('SIMILAR_INDUSTRY', 0.9)} * 0.7
-           WHEN type(r) = 'SIMILAR_SIZE' THEN {weights.get('SIMILAR_SIZE', 0.6)}
+             {weights.get("SIMILAR_INDUSTRY", 0.9)} * 0.7
+           WHEN type(r) = 'SIMILAR_SIZE' THEN {weights.get("SIMILAR_SIZE", 0.6)}
            // SIMILAR_DESCRIPTION: uses cosine similarity score from description embeddings
            WHEN type(r) = 'SIMILAR_DESCRIPTION' THEN
-             {weights.get('SIMILAR_DESCRIPTION', 0.5)} * coalesce(r.score, 1.0)
+             {weights.get("SIMILAR_DESCRIPTION", 0.5)} * coalesce(r.score, 1.0)
            WHEN type(r) = 'SIMILAR_KEYWORD' THEN
-             {weights.get('SIMILAR_KEYWORD', 0.2)}
-           WHEN type(r) = 'SIMILAR_MARKET' THEN {weights.get('SIMILAR_MARKET', 0.3)}
+             {weights.get("SIMILAR_KEYWORD", 0.2)}
+           WHEN type(r) = 'SIMILAR_MARKET' THEN {weights.get("SIMILAR_MARKET", 0.3)}
            WHEN type(r) = 'COMMON_EXECUTIVE' THEN
-             {weights.get('COMMON_EXECUTIVE', 0.2)}
+             {weights.get("COMMON_EXECUTIVE", 0.2)}
            WHEN type(r) = 'MERGED_OR_ACQUIRED' THEN
-             {weights.get('MERGED_OR_ACQUIRED', 0.1)}
+             {weights.get("MERGED_OR_ACQUIRED", 0.1)}
            ELSE 0.0
          END as rel_score
     WITH c1, c2, sum(rel_score) as base_score,

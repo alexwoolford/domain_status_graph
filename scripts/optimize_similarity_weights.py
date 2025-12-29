@@ -204,7 +204,7 @@ def grid_search_weights(
 
     # Estimate time: ~0.5 seconds per combination per pair
     estimated_seconds = total_combinations * len(pairs) * 0.5
-    logger.info(f"Estimated time: ~{estimated_seconds/60:.1f} minutes")
+    logger.info(f"Estimated time: ~{estimated_seconds / 60:.1f} minutes")
 
     logger.info(f"Testing {total_combinations} weight combinations...")
     logger.info("")
@@ -360,7 +360,7 @@ def main():
         logger.info(f"  Score: {current_score:.2f} → {best_score:.2f} ({score_diff:+.2f})")
         passed_diff = best_stats["passed"] - current_stats["passed"]
         logger.info(
-            f"  Passed: {current_stats['passed']} → {best_stats['passed']} " f"({passed_diff:+d})"
+            f"  Passed: {current_stats['passed']} → {best_stats['passed']} ({passed_diff:+d})"
         )
         logger.info("")
         logger.info("=" * 80)

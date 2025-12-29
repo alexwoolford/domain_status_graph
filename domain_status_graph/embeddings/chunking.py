@@ -259,13 +259,13 @@ def create_embedding_with_chunking(
     chunk_embeddings = []
     for i, chunk in enumerate(chunks):
         chunk_tokens = count_tokens(chunk, model)
-        logger.debug(f"  Chunk {i+1}/{len(chunks)}: {chunk_tokens:,} tokens")
+        logger.debug(f"  Chunk {i + 1}/{len(chunks)}: {chunk_tokens:,} tokens")
 
         embedding = create_embedding_fn(client, chunk, model)
         if embedding:
             chunk_embeddings.append(embedding)
         else:
-            logger.warning(f"  Failed to create embedding for chunk {i+1}")
+            logger.warning(f"  Failed to create embedding for chunk {i + 1}")
 
     if not chunk_embeddings:
         logger.error("Failed to create any chunk embeddings")

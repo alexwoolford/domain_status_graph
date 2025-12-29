@@ -762,7 +762,7 @@ def download_all_10ks(
     )
     logger.info(f"✗ Errors: {errors:,} (actual failures)")
     logger.info("")
-    logger.info(f"Success rate: {100*(downloaded + cached)/total:.1f}% of companies have 10-Ks")
+    logger.info(f"Success rate: {100 * (downloaded + cached) / total:.1f}% of companies have 10-Ks")
 
     if errors > 0:
         logger.info("")

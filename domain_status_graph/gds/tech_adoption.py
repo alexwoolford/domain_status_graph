@@ -131,7 +131,7 @@ def compute_tech_adoption_prediction(
                     pct = batch_end * 100 / total_techs
                     logger.info(
                         f"   Progress: {batch_end}/{total_techs} ({pct:.1f}%) | "
-                        f"Rate: {rate:.1f}/s | ETA: {remaining/60:.1f}m | "
+                        f"Rate: {rate:.1f}/s | ETA: {remaining / 60:.1f}m | "
                         f"Created: {predictions_written}"
                     )
 
