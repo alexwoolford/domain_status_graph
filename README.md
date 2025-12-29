@@ -74,7 +74,7 @@ Both algorithms leverage the graph structure to provide insights that would requ
 ### Prerequisites
 
 - **Neo4j** (5.x or later) with GDS library installed
-- **Python 3.13+** (or use conda environment: `domain_status_graph`)
+- **Python 3.11+** (tested on 3.11, 3.12, 3.13)
 - **SQLite database**: `data/domain_status.db` (source data)
 
 ### Setup (Quick Version)
@@ -83,7 +83,7 @@ Both algorithms leverage the graph structure to provide insights that would requ
    ```bash
    git clone <repository-url>
    cd domain_status_graph
-   pip install -r requirements.txt
+   pip install -e .
    pip install -e .  # Install package in editable mode
    cp .env.sample .env
    # Edit .env with your Neo4j credentials
@@ -282,7 +282,7 @@ domain_status_graph/
 ├── QUICK_START.md              # Quick reference guide
 ├── AGENTS.md                   # Agent guidance and rules
 ├── pyproject.toml              # Python package configuration
-├── requirements.txt            # Python dependencies
+├── pyproject.toml              # Python package configuration (dependencies)
 └── README.md                   # This file
 ```
 
@@ -290,9 +290,11 @@ domain_status_graph/
 
 ## Requirements
 
-- **Python 3.13+** (or use conda environment: `domain_status_graph`)
+- **Python 3.11+** (tested on 3.11, 3.12, 3.13)
 - **Neo4j 5.x+** with GDS library installed and enabled
-- **Python packages**: See `requirements.txt` for complete list. Core dependencies:
+- **Python packages**: See `pyproject.toml` for complete list. Core dependencies:
   - `neo4j` - Neo4j Python driver
   - `graphdatascience` - Neo4j GDS Python client
-  - `python-dotenv` - Environment variable management
+  - `pydantic-settings` - Type-safe configuration management
+  - `openai` - Embedding generation
+  - `tenacity` - Retry logic with rate limiting

@@ -5,7 +5,7 @@ Provides utilities for creating and managing Neo4j driver connections.
 """
 
 import logging
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from neo4j import Driver
@@ -29,7 +29,7 @@ from domain_status_graph.config import (
 logger = logging.getLogger(__name__)
 
 
-def get_neo4j_driver(database: Optional[str] = None) -> "Driver":
+def get_neo4j_driver(database: str | None = None) -> "Driver":
     """
     Get Neo4j driver connection.
 

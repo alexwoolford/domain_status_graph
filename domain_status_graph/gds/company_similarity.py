@@ -6,11 +6,13 @@ Example: Companies in similar industries, with similar business models.
 """
 
 import logging
-from typing import Optional
 
-import numpy as np
-
-from domain_status_graph.constants import DEFAULT_SIMILARITY_THRESHOLD, DEFAULT_TOP_K
+from domain_status_graph.constants import (
+    DEFAULT_SIMILARITY_THRESHOLD,
+    DEFAULT_TOP_K,
+    MIN_DESCRIPTION_LENGTH_FOR_SIMILARITY,
+)
+from domain_status_graph.similarity.cosine import find_top_k_similar_pairs
 
 logger = logging.getLogger(__name__)
 
@@ -19,9 +21,9 @@ def compute_company_description_similarity(
     driver,
     similarity_threshold: float = DEFAULT_SIMILARITY_THRESHOLD,
     top_k: int = DEFAULT_TOP_K,
-    database: Optional[str] = None,
+    database: str | None = None,
     execute: bool = True,
-    logger: Optional[logging.Logger] = None,
+    logger: logging.Logger | None = None,
 ) -> int:
     """
     Company Description Similarity.
@@ -80,68 +82,46 @@ def compute_company_description_similarity(
                 logger.info("   ✓ No existing relationships to delete")
 
         with driver.session(database=database) as session:
-            # Load companies with embeddings
+            # Load companies with embeddings and meaningful descriptions
             logger.info("   Loading Company nodes with embeddings...")
+            logger.info(
+                f"   Filtering out descriptions < {MIN_DESCRIPTION_LENGTH_FOR_SIMILARITY} characters"
+            )
             result = session.run(
                 """
                 MATCH (c:Company)
                 WHERE c.description_embedding IS NOT NULL
+                  AND c.description IS NOT NULL
+                  AND size(c.description) >= $min_length
                 RETURN c.cik AS cik, c.description_embedding AS embedding
-                """
+                """,
+                min_length=MIN_DESCRIPTION_LENGTH_FOR_SIMILARITY,
             )
 
-            companies = []
+            ciks = []
+            embeddings = []
             for record in result:
                 embedding = record["embedding"]
                 if embedding and isinstance(embedding, list):
-                    companies.append(
-                        {
-                            "cik": record["cik"],
-                            "embedding": np.array(embedding, dtype=np.float32),
-                        }
-                    )
+                    ciks.append(record["cik"])
+                    embeddings.append(embedding)
 
-            logger.info(f"   Found {len(companies)} companies with embeddings")
+            logger.info(f"   Found {len(ciks)} companies with embeddings")
 
-            if len(companies) < 2:
+            if len(ciks) < 2:
                 logger.warning("   ⚠ Not enough companies with embeddings")
                 return 0
 
-            # Compute pairwise cosine similarity
+            # Compute pairwise cosine similarity using shared utility
             logger.info("   Computing pairwise cosine similarity...")
             logger.info(f"   Threshold: {similarity_threshold}, Top-K: {top_k}")
 
-            embeddings_matrix = np.array([c["embedding"] for c in companies])
-            ciks = [c["cik"] for c in companies]
-
-            # Normalize embeddings
-            norms = np.linalg.norm(embeddings_matrix, axis=1, keepdims=True)
-            norms[norms == 0] = 1
-            embeddings_normalized = embeddings_matrix / norms
-
-            # Compute similarity matrix
-            similarity_matrix = np.dot(embeddings_normalized, embeddings_normalized.T)
-
-            # Collect pairs above threshold
-            logger.info("   Collecting similar pairs (top-k per company, above threshold)...")
-            pairs = {}
-
-            for i, _company in enumerate(companies):
-                similarities = similarity_matrix[i].copy()
-                similarities[i] = -1  # Exclude self
-
-                top_indices = np.argsort(similarities)[::-1][:top_k]
-
-                for j in top_indices:
-                    similarity_score = float(similarities[j])
-                    if similarity_score >= similarity_threshold:
-                        cik1, cik2 = ciks[i], ciks[j]
-                        if cik1 > cik2:
-                            cik1, cik2 = cik2, cik1
-
-                        pair_key = (cik1, cik2)
-                        if pair_key not in pairs or similarity_score > pairs[pair_key]:
-                            pairs[pair_key] = similarity_score
+            pairs = find_top_k_similar_pairs(
+                keys=ciks,
+                embeddings=embeddings,
+                similarity_threshold=similarity_threshold,
+                top_k=top_k,
+            )
 
             logger.info(f"   Found {len(pairs)} unique similar pairs")
 

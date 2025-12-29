@@ -6,7 +6,6 @@ bipartite graph and running GDS Node Similarity (Jaccard) on Company nodes.
 """
 
 import logging
-from typing import Optional
 
 import pandas as pd
 
@@ -25,10 +24,10 @@ def compute_company_technology_similarity(
     driver,
     similarity_threshold: float = DEFAULT_JACCARD_THRESHOLD,
     top_k: int = DEFAULT_TOP_K,
-    database: Optional[str] = None,
+    database: str | None = None,
     execute: bool = True,
     batch_size: int = BATCH_SIZE_LARGE,
-    logger: Optional[logging.Logger] = None,
+    logger: logging.Logger | None = None,
 ) -> int:
     """
     Company Technology Similarity using GDS Node Similarity (Jaccard).
@@ -152,7 +151,7 @@ def compute_company_technology_similarity(
 
             # Ensure consistent direction
             logger.info("   Ensuring consistent relationship direction...")
-            directed_batch = {}
+            directed_batch: dict[tuple[str, str], dict[str, str | float]] = {}
             for rel in batch:
                 cik1 = cik_map.get(rel["node_id1"])
                 cik2 = cik_map.get(rel["node_id2"])

@@ -9,14 +9,13 @@ Reference: CompanyKG paper - Multiple relationship types for company similarity
 
 import logging
 from collections import defaultdict
-from typing import Dict, List, Tuple
 
 logger = logging.getLogger(__name__)
 
 
 def compute_industry_similarity(
-    companies: List[Dict], method: str = "SIC"
-) -> List[Tuple[str, str, Dict]]:
+    companies: list[dict], method: str = "SIC"
+) -> list[tuple[str, str, dict]]:
     """
     Compute industry similarity between companies.
 
@@ -36,7 +35,7 @@ def compute_industry_similarity(
         return []
 
     # Group companies by the specified classification
-    groups: Dict[str, List[str]] = defaultdict(list)
+    groups: dict[str, list[str]] = defaultdict(list)
 
     for company in companies:
         cik = company.get("cik")
@@ -86,8 +85,8 @@ def compute_industry_similarity(
 
 
 def bucket_companies_by_size(
-    companies: List[Dict], metric: str = "revenue"
-) -> Dict[str, List[str]]:
+    companies: list[dict], metric: str = "revenue"
+) -> dict[str, list[str]]:
     """
     Bucket companies into size tiers.
 
@@ -102,7 +101,7 @@ def bucket_companies_by_size(
     - For revenue/market_cap: <$100M, $100M-$1B, $1B-$10B, >$10B
     - For employees: <100, 100-1000, 1000-10000, >10000
     """
-    buckets: Dict[str, List[str]] = defaultdict(list)
+    buckets: dict[str, list[str]] = defaultdict(list)
 
     for company in companies:
         cik = company.get("cik")
@@ -151,8 +150,8 @@ def bucket_companies_by_size(
 
 
 def compute_size_similarity(
-    companies: List[Dict], method: str = "COMPOSITE"
-) -> List[Tuple[str, str, Dict]]:
+    companies: list[dict], method: str = "COMPOSITE"
+) -> list[tuple[str, str, dict]]:
     """
     Compute size similarity between companies.
 
@@ -172,7 +171,7 @@ def compute_size_similarity(
         return []
 
     pairs = []
-    buckets_by_metric: Dict[str, Dict[str, List[str]]] = {}
+    buckets_by_metric: dict[str, dict[str, list[str]]] = {}
 
     if method == "COMPOSITE":
         # Use all available metrics

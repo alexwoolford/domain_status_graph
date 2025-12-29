@@ -1,24 +1,14 @@
 """
 Unit tests for domain_status_graph.retry module.
+
+Tests actual retry behavior, not just that decorators exist.
 """
 
 from domain_status_graph.retry import retry_http, retry_neo4j, retry_openai
 
 
 class TestRetryDecorators:
-    """Tests for retry decorators."""
-
-    def test_retry_openai_decorator_exists(self):
-        """Test that retry_openai decorator exists and is callable."""
-        assert callable(retry_openai)
-
-    def test_retry_neo4j_decorator_exists(self):
-        """Test that retry_neo4j decorator exists and is callable."""
-        assert callable(retry_neo4j)
-
-    def test_retry_http_decorator_exists(self):
-        """Test that retry_http decorator exists and is callable."""
-        assert callable(retry_http)
+    """Tests for retry decorator behavior."""
 
     def test_retry_openai_wraps_function(self):
         """Test that retry_openai properly wraps a function."""

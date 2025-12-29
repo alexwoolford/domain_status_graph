@@ -1,41 +1,26 @@
-# Pre-commit hooks configuration for Python projects
-# Install: pip install pre-commit (or: brew install pre-commit)
-# Then: pre-commit install
-#
-# To use this file in domain_status_graph:
-# cp .pre-commit-config-python-template.yaml ../domain_status_graph/.pre-commit-config.yaml
-# cd ../domain_status_graph && pre-commit install
+# Pre-commit hooks configuration
+# Install: pip install pre-commit && pre-commit install
 
 repos:
+  # Ruff - Fast Python linter (replaces flake8, isort, and more)
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.14.10
+    hooks:
+      - id: ruff
+        args: [--fix, --exit-non-zero-on-fix]
+        description: "Lint Python code with Ruff"
+
   # Black - Python code formatter
   - repo: https://github.com/psf/black
-    rev: 24.10.0  # Pin to specific version for consistency
+    rev: 25.12.0
     hooks:
       - id: black
         language_version: python3
-        # Auto-format files on commit (remove --check to auto-fix)
-        # If you want to just check without auto-formatting, add: args: ['--check']
         description: "Format Python code with Black"
-
-  # Ruff - Fast Python linter and formatter (optional, but recommended)
-  # Uncomment if you want to use Ruff instead of or alongside Black
-  # - repo: https://github.com/astral-sh/ruff-pre-commit
-  #   rev: v0.8.4
-  #   hooks:
-  #     - id: ruff
-  #       args: [--fix, --exit-non-zero-on-fix]
-  #     - id: ruff-format
-
-  # isort - Import sorting (optional, Black doesn't sort imports)
-  # - repo: https://github.com/pycqa/isort
-  #   rev: 5.13.2
-  #   hooks:
-  #     - id: isort
-  #       args: ["--profile", "black"]  # Compatible with Black
 
   # General file checks
   - repo: https://github.com/pre-commit/pre-commit-hooks
-    rev: v4.5.0
+    rev: v6.0.0
     hooks:
       - id: check-added-large-files
         args: ['--maxkb=1000']
@@ -59,33 +44,12 @@ repos:
       - id: check-case-conflict
         description: "Check for files that would conflict in case-insensitive filesystems"
 
-  # Secret scanning (important for Python projects)
+  # Secret scanning
   - repo: https://github.com/gitleaks/gitleaks
-    rev: v8.18.0
+    rev: v8.30.0
     hooks:
       - id: gitleaks
         args: ['--verbose', '--redact', '--no-banner', '--staged']
         description: "Detect hardcoded secrets before commit"
         pass_filenames: false
         always_run: true
-
-  # Python-specific checks
-  # Pylint disabled - uncomment if needed
-  # - repo: https://github.com/pre-commit/mirrors-pylint
-  #   rev: v3.2.3
-  #   hooks:
-  #     - id: pylint
-  #       # Optional: configure pylint args
-  #       # args: ['--disable=C0111']  # Disable missing-docstring
-  #       description: "Lint Python code with pylint"
-  #       # Uncomment if you want to use pylint
-  #       # additional_dependencies: [pylint]
-
-  # mypy - Type checking (optional but recommended)
-  # - repo: https://github.com/pre-commit/mirrors-mypy
-  #   rev: v1.13.0
-  #   hooks:
-  #     - id: mypy
-  #       additional_dependencies: [types-all]
-  #       args: [--ignore-missing-imports]
-  #       description: "Type check Python code"

@@ -15,30 +15,28 @@ Data Sources:
 Reference: CompanyKG paper - Company node attributes (employees, sector, etc.)
 """
 
+import contextlib
+import io
 import logging
+import sys
 import time
-from threading import Lock
-from typing import Dict, Optional
 
 import requests
+
+from domain_status_graph.utils.rate_limiting import get_rate_limiter
 
 logger = logging.getLogger(__name__)
 
 # Rate limiting for SEC EDGAR API (10 requests per second)
-_sec_rate_limit = {"lock": Lock(), "last_call": 0, "min_interval": 0.1}
+_sec_rate_limiter = get_rate_limiter("sec_edgar_enrichment", requests_per_second=10.0)
 
 
 def _rate_limit_sec():
     """Enforce SEC EDGAR API rate limiting (10 req/sec)."""
-    with _sec_rate_limit["lock"]:
-        current_time = time.time()
-        elapsed = current_time - _sec_rate_limit["last_call"]
-        if elapsed < _sec_rate_limit["min_interval"]:
-            time.sleep(_sec_rate_limit["min_interval"] - elapsed)
-        _sec_rate_limit["last_call"] = time.time()
+    _sec_rate_limiter()
 
 
-def fetch_sec_company_info(cik: str, session: Optional[requests.Session] = None) -> Optional[Dict]:
+def fetch_sec_company_info(cik: str, session: requests.Session | None = None) -> dict | None:
     """
     Fetch company information from SEC EDGAR API.
 
@@ -117,7 +115,34 @@ def fetch_sec_company_info(cik: str, session: Optional[requests.Session] = None)
         return None
 
 
-def fetch_yahoo_finance_info(ticker: str) -> Optional[Dict]:
+@contextlib.contextmanager
+def _suppress_yfinance_errors():
+    """
+    Context manager to suppress yfinance's verbose HTTP error logging.
+
+    yfinance logs raw HTTP errors at ERROR level (e.g., 404 JSON responses)
+    which clutters our logs. This temporarily raises the yfinance logger's
+    level to suppress these expected errors.
+
+    Note: We also capture stderr for any direct printing yfinance might do.
+    """
+    # Suppress yfinance's ERROR level logging
+    yfinance_logger = logging.getLogger("yfinance")
+    old_level = yfinance_logger.level
+    yfinance_logger.setLevel(logging.CRITICAL)  # Only show CRITICAL (none expected)
+
+    # Also capture stderr in case of direct printing
+    old_stderr = sys.stderr
+    try:
+        sys.stderr = io.StringIO()
+        yield sys.stderr
+    finally:
+        # Restore original stderr and logger level
+        sys.stderr = old_stderr
+        yfinance_logger.setLevel(old_level)
+
+
+def fetch_yahoo_finance_info(ticker: str) -> dict | None:
     """
     Fetch company information from Yahoo Finance.
 
@@ -132,8 +157,26 @@ def fetch_yahoo_finance_info(ticker: str) -> Optional[Dict]:
     try:
         import yfinance as yf
 
-        ticker_obj = yf.Ticker(ticker)
-        info = ticker_obj.info
+        # Suppress yfinance's internal HTTP error printing to stderr
+        with _suppress_yfinance_errors() as captured_stderr:
+            ticker_obj = yf.Ticker(ticker)
+            info = ticker_obj.info
+
+        # Check for captured errors (e.g., 404 responses)
+        captured_output = captured_stderr.getvalue()
+        if captured_output:
+            # Check if it's a "not found" error
+            if "Not Found" in captured_output or "404" in captured_output:
+                logger.debug(f"Yahoo Finance: Symbol not found: {ticker}")
+                return None
+            # Log other captured errors at debug level
+            logger.debug(f"Yahoo Finance stderr for {ticker}: {captured_output.strip()}")
+
+        # Check if we got valid data (yfinance returns empty dict for invalid symbols)
+        if not info or info.get("regularMarketPrice") is None:
+            # Symbol exists but no price data - might be delisted or invalid
+            logger.debug(f"Yahoo Finance: No data available for {ticker}")
+            return None
 
         # Extract relevant fields
         result = {
@@ -155,11 +198,16 @@ def fetch_yahoo_finance_info(ticker: str) -> Optional[Dict]:
         logger.warning("yfinance not available. Install with: pip install yfinance")
         return None
     except Exception as e:
-        logger.warning(f"Failed to fetch Yahoo Finance data for {ticker}: {e}")
+        # Log with source context for easier debugging
+        error_str = str(e)
+        if "Not Found" in error_str or "404" in error_str:
+            logger.debug(f"Yahoo Finance: Symbol not found: {ticker}")
+        else:
+            logger.warning(f"Yahoo Finance error for {ticker}: {e}")
         return None
 
 
-def fetch_wikidata_info(ticker: str, company_name: str) -> Optional[Dict]:
+def fetch_wikidata_info(ticker: str, company_name: str) -> dict | None:
     """
     Fetch company information from Wikidata using SPARQL.
 
@@ -180,7 +228,7 @@ def fetch_wikidata_info(ticker: str, company_name: str) -> Optional[Dict]:
     return None
 
 
-def normalize_industry_codes(sic: Optional[str], naics: Optional[str]) -> Dict:
+def normalize_industry_codes(sic: str | None, naics: str | None) -> dict:
     """
     Normalize and validate industry classification codes.
 
@@ -206,8 +254,8 @@ def normalize_industry_codes(sic: Optional[str], naics: Optional[str]) -> Dict:
 
 
 def merge_company_data(
-    sec_data: Optional[Dict], yahoo_data: Optional[Dict], wikidata_data: Optional[Dict]
-) -> Dict:
+    sec_data: dict | None, yahoo_data: dict | None, wikidata_data: dict | None
+) -> dict:
     """
     Merge data from multiple sources, with priority order.
 

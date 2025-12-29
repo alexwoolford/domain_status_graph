@@ -19,7 +19,6 @@ import argparse
 import sys
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, List, Optional
 
 from domain_status_graph.cli import (
     get_driver_and_database,
@@ -46,7 +45,7 @@ DEFAULT_VALIDATION_COMPANIES = [
 ]
 
 
-def get_company_info(driver, ticker: str, database: str) -> Optional[Dict]:
+def get_company_info(driver, ticker: str, database: str) -> dict | None:
     """Get basic company information."""
     with driver.session(database=database) as session:
         result = session.run(
@@ -63,7 +62,7 @@ def get_company_info(driver, ticker: str, database: str) -> Optional[Dict]:
         return None
 
 
-def get_top_similar_companies(driver, ticker: str, top_n: int, database: str) -> List[Dict]:
+def get_top_similar_companies(driver, ticker: str, top_n: int, database: str) -> list[dict]:
     """Get top-N similar companies using the improved query."""
     query = get_top_similar_companies_query(ticker, limit=top_n)
     with driver.session(database=database) as session:
@@ -80,7 +79,7 @@ def get_top_similar_companies(driver, ticker: str, top_n: int, database: str) ->
         return records
 
 
-def analyze_ranking_quality(company_info: Dict, rankings: List[Dict]) -> Dict[str, any]:
+def analyze_ranking_quality(company_info: dict, rankings: list[dict]) -> dict[str, any]:
     """Analyze ranking quality and flag potential issues."""
     issues = []
     checks = {
@@ -142,10 +141,10 @@ def analyze_ranking_quality(company_info: Dict, rankings: List[Dict]) -> Dict[st
 
 def generate_validation_report(
     driver,
-    tickers: List[str],
+    tickers: list[str],
     top_n: int = 20,
     database: str = "neo4j",
-    output_file: Optional[Path] = None,
+    output_file: Path | None = None,
 ) -> str:
     """Generate validation report for multiple companies."""
     lines = []

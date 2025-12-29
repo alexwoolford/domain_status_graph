@@ -5,7 +5,8 @@ Provides decorators and utilities for resilient API calls to OpenAI, Neo4j, etc.
 """
 
 import logging
-from typing import Callable, TypeVar
+from collections.abc import Callable
+from typing import TypeVar
 
 from tenacity import (
     before_sleep_log,
@@ -27,6 +28,7 @@ TRANSIENT_EXCEPTIONS = (
 )
 
 # OpenAI-specific exceptions (imported dynamically to avoid hard dependency)
+OPENAI_TRANSIENT: tuple[type[Exception], ...]
 try:
     from openai import APIConnectionError, APITimeoutError, RateLimitError
 
@@ -35,6 +37,7 @@ except ImportError:
     OPENAI_TRANSIENT = ()
 
 # Neo4j-specific exceptions
+NEO4J_TRANSIENT: tuple[type[Exception], ...]
 try:
     from neo4j.exceptions import ServiceUnavailable, TransientError
 
@@ -98,6 +101,7 @@ def retry_http(func: Callable[..., T]) -> Callable[..., T]:
         def fetch_data(url: str) -> dict:
             return requests.get(url).json()
     """
+    http_exceptions: tuple[type[Exception], ...]
     try:
         from requests.exceptions import ConnectionError as RequestsConnectionError
         from requests.exceptions import Timeout as RequestsTimeout

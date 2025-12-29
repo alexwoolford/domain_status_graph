@@ -17,15 +17,21 @@ Usage:
 import argparse
 import subprocess
 import sys
+import time
 from pathlib import Path
+
+from domain_status_graph.cli import setup_logging
 
 # Script paths
 SCRIPT_DIR = Path(__file__).parent
 BOOTSTRAP_SCRIPT = SCRIPT_DIR / "bootstrap_graph.py"
 COMPUTE_GDS_SCRIPT = SCRIPT_DIR / "compute_gds_features.py"
-COLLECT_DOMAINS_SCRIPT = SCRIPT_DIR / "collect_domains.py"
+DOWNLOAD_10K_SCRIPT = SCRIPT_DIR / "download_10k_filings.py"
+PARSE_10K_SCRIPT = SCRIPT_DIR / "parse_10k_filings.py"
+# Note: collect_domains.py is not used in 10-K first pipeline (website comes from 10-K)
 CREATE_COMPANY_EMBEDDINGS_SCRIPT = SCRIPT_DIR / "create_company_embeddings.py"
 LOAD_COMPANY_DATA_SCRIPT = SCRIPT_DIR / "load_company_data.py"
+ENRICH_COMPANY_IDENTIFIERS_SCRIPT = SCRIPT_DIR / "enrich_company_identifiers.py"
 ENRICH_COMPANY_PROPERTIES_SCRIPT = SCRIPT_DIR / "enrich_company_properties.py"
 COMPUTE_COMPANY_SIMILARITY_SCRIPT = SCRIPT_DIR / "compute_company_similarity.py"
 CREATE_DOMAIN_EMBEDDINGS_SCRIPT = SCRIPT_DIR / "create_domain_embeddings.py"
@@ -34,6 +40,9 @@ COMPUTE_KEYWORD_SIMILARITY_SCRIPT = SCRIPT_DIR / "compute_keyword_similarity.py"
 COMPUTE_COMPANY_SIMILARITY_VIA_DOMAINS_SCRIPT = (
     SCRIPT_DIR / "compute_company_similarity_via_domains.py"
 )
+EXTRACT_COMPETITORS_SCRIPT = SCRIPT_DIR / "extract_competitors.py"
+EXTRACT_BUSINESS_RELATIONSHIPS_SCRIPT = SCRIPT_DIR / "extract_business_relationships.py"
+CREATE_RISK_SIMILARITY_SCRIPT = SCRIPT_DIR / "create_risk_similarity_graph.py"
 
 
 def run_script(
@@ -41,16 +50,23 @@ def run_script(
     execute: bool = False,
     description: str = "",
     extra_args: list = None,
+    logger=None,
 ):
     """Run a script and return success status."""
+    if logger is None:
+        import logging
+
+        logger = logging.getLogger(__name__)
+
     if not script_path.exists():
-        print(f"✗ ERROR: Script not found: {script_path}")
+        logger.error(f"Script not found: {script_path}")
         return False
 
-    print(f"\n{'=' * 70}")
-    print(f"{description}")
-    print(f"{'=' * 70}")
-    print(f"Running: {script_path.name}")
+    logger.info("")
+    logger.info("=" * 70)
+    logger.info(f"{description}")
+    logger.info("=" * 70)
+    logger.info(f"Running: {script_path.name}")
 
     cmd = [sys.executable, str(script_path)]
     if execute:
@@ -58,19 +74,22 @@ def run_script(
     if extra_args:
         cmd.extend(extra_args)
 
+    start_time = time.time()
     try:
         result = subprocess.run(cmd, check=True, capture_output=False)
+        elapsed = time.time() - start_time
         if result.returncode == 0:
-            print(f"✓ {script_path.name} completed successfully")
+            logger.info(f"✓ {script_path.name} completed successfully ({elapsed:.1f}s)")
             return True
         else:
-            print(f"✗ {script_path.name} failed with return code {result.returncode}")
+            logger.error(f"✗ {script_path.name} failed with return code {result.returncode}")
             return False
     except subprocess.CalledProcessError as e:
-        print(f"✗ {script_path.name} failed: {e}")
+        elapsed = time.time() - start_time
+        logger.error(f"✗ {script_path.name} failed after {elapsed:.1f}s: {e}")
         return False
     except KeyboardInterrupt:
-        print("\n⚠ Interrupted by user")
+        logger.warning("Interrupted by user")
         return False
 
 
@@ -89,172 +108,248 @@ def main():
     )
     args = parser.parse_args()
 
+    # Set up logging - always use timestamped logs for the orchestrator
+    logger = setup_logging("full_pipeline", execute=args.execute)
+
     if not args.execute:
-        print("=" * 70)
-        print("PIPELINE ORCHESTRATION PLAN (Dry Run)")
-        print("=" * 70)
-        print()
-        print("This script will recreate the graph from scratch:")
-        print()
-        print("Step 1: Bootstrap Graph")
-        print("  - bootstrap_graph.py - Load Domain and Technology nodes from SQLite")
-        print()
-        print("Step 2: Load Company Data")
-        print("  - collect_domains.py - Collect company domains (if needed)")
-        print(
+        logger.info("=" * 70)
+        logger.info("PIPELINE ORCHESTRATION PLAN (Dry Run)")
+        logger.info("=" * 70)
+        logger.info("")
+        logger.info("This script will recreate the graph from scratch:")
+        logger.info("")
+        logger.info("Step 1: Bootstrap Graph")
+        logger.info("  - bootstrap_graph.py - Load Domain and Technology nodes from SQLite")
+        logger.info("")
+        logger.info("Step 2: Download & Parse 10-K Filings (Start of pipeline)")
+        logger.info("  - download_10k_filings.py - Download most recent 10-K per company")
+        logger.info("  - parse_10k_filings.py - Extract websites, business descriptions")
+        logger.info("")
+        logger.info("Step 3: Load Company Data")
+        logger.info("  - collect_domains.py - Collect company domains (fallback if 10-K missing)")
+        logger.info(
             "  - create_company_embeddings.py - Create embeddings for "
-            "Company descriptions (if needed)"
+            "Company descriptions (uses 10-K if available)"
         )
-        print("  - load_company_data.py - Load Company nodes and HAS_DOMAIN relationships")
-        print("  - enrich_company_properties.py - Enrich Company nodes with properties")
-        print("  - compute_company_similarity.py - Create SIMILAR_INDUSTRY and SIMILAR_SIZE")
-        print()
-        print("Step 3: Domain Embeddings & Similarity")
-        print("  - create_domain_embeddings.py - Create embeddings for Domain descriptions")
-        print("  - compute_domain_similarity.py - Compute Domain-Domain description similarity")
-        print("  - compute_keyword_similarity.py - Compute Domain-Domain keyword similarity")
-        print(
+        logger.info("  - load_company_data.py - Load Company nodes and HAS_DOMAIN relationships")
+        logger.info(
+            "  - enrich_company_identifiers.py - Add name/ticker from SEC EDGAR (required!)"
+        )
+        logger.info("  - enrich_company_properties.py - Enrich Company nodes with properties")
+        logger.info("  - compute_company_similarity.py - Create SIMILAR_INDUSTRY and SIMILAR_SIZE")
+        logger.info(
+            "  - extract_business_relationships.py - Extract business relationships from 10-K filings"
+        )
+        logger.info("    (HAS_COMPETITOR, HAS_CUSTOMER, HAS_SUPPLIER, HAS_PARTNER)")
+        logger.info(
+            "  - create_risk_similarity_graph.py - Create risk factor embeddings & SIMILAR_RISK"
+        )
+        logger.info("")
+        logger.info("Step 4: Domain Embeddings & Similarity")
+        logger.info("  - create_domain_embeddings.py - Create embeddings for Domain descriptions")
+        logger.info(
+            "  - compute_domain_similarity.py - Compute Domain-Domain description similarity"
+        )
+        logger.info("  - compute_keyword_similarity.py - Compute Domain-Domain keyword similarity")
+        logger.info(
             "  - compute_company_similarity_via_domains.py - "
             "Create Company-Company edges from Domain similarity"
         )
-        print()
-        print("Step 4: Compute GDS Features")
-        print("  - compute_gds_features.py - Compute all features:")
-        print("    * Technology adoption predictions")
-        print("    * Technology affinity/bundling")
-        print("    * Company description similarity")
-        print()
-        print("=" * 70)
-        print("To execute, run: python scripts/run_all_pipelines.py --execute")
-        print("=" * 70)
+        logger.info("")
+        logger.info("Step 5: Compute GDS Features")
+        logger.info("  - compute_gds_features.py - Compute all features:")
+        logger.info("    * Technology adoption predictions")
+        logger.info("    * Technology affinity/bundling")
+        logger.info("    * Company description similarity")
+        logger.info("")
+        logger.info("=" * 70)
+        logger.info("To execute, run: python scripts/run_all_pipelines.py --execute")
+        logger.info("=" * 70)
         return
 
     # Execute mode
-    print("=" * 70)
-    print("RUNNING ALL PIPELINES")
-    print("=" * 70)
-    print()
+    pipeline_start = time.time()
+    logger.info("=" * 70)
+    logger.info("RUNNING ALL PIPELINES")
+    logger.info("=" * 70)
+    logger.info("")
 
     # Step 1: Bootstrap Graph (Domain + Technology nodes)
-    print("\n" + "=" * 70)
-    print("STEP 1: Bootstrap Graph")
-    print("=" * 70)
+    logger.info("")
+    logger.info("=" * 70)
+    logger.info("STEP 1: Bootstrap Graph")
+    logger.info("=" * 70)
 
     if not run_script(
         BOOTSTRAP_SCRIPT,
         execute=True,
         description="Loading Domain and Technology nodes from SQLite",
+        logger=logger,
     ):
-        print("\n✗ Failed at bootstrap step")
+        logger.error("Failed at bootstrap step")
         return
 
-    # Step 2: Company Data
-    print("\n" + "=" * 70)
-    print("STEP 2: Load Company Data")
-    print("=" * 70)
+    # Step 2: Download & Parse 10-K Filings (NEW - Start of pipeline)
+    logger.info("")
+    logger.info("=" * 70)
+    logger.info("STEP 2: Download & Parse 10-K Filings")
+    logger.info("=" * 70)
+    logger.info("This is the START of the pipeline - everything cascades from 10-Ks:")
+    logger.info("  - 10-Ks → Company websites → Domain collection")
+    logger.info("  - 10-Ks → Business descriptions → Company embeddings")
+    logger.info("  - 10-Ks → Competitor mentions → Direct competitor relationships")
+    logger.info("")
 
-    # Check cache for company data
+    # Check if 10-Ks already downloaded
     from domain_status_graph.cache import get_cache
 
     cache = get_cache()
-    cached_companies = cache.count("company_domains")
+    cached_10ks = cache.count("10k_extracted")
 
-    # Run collect_domains.py if needed
-    if cached_companies == 0 and not args.fast:
-        print("⚠ No companies in cache")
-        print("  Running collect_domains.py...")
+    if cached_10ks == 0 or not args.fast:
+        # Download 10-Ks
         if not run_script(
-            COLLECT_DOMAINS_SCRIPT,
+            DOWNLOAD_10K_SCRIPT,
             execute=True,
-            description="Step 2.1: Collect Company Domains",
+            description="Step 2.1: Download 10-K Filings",
+            logger=logger,
         ):
-            print("\n✗ Pipeline 2 failed at collect_domains step")
+            logger.error("Pipeline failed at download_10k_filings step")
             return
-    elif cached_companies > 0:
-        if args.fast:
-            print(
-                f"✓ {cached_companies} companies in cache (fast mode: skipping collect_domains.py)"
-            )
-        else:
-            print(f"✓ {cached_companies} companies in cache")
-            print("  Running collect_domains.py with --skip-uncached to check for new companies...")
-            if not run_script(
-                COLLECT_DOMAINS_SCRIPT,
-                execute=True,
-                description="Step 2.1: Collect Company Domains",
-                extra_args=["--skip-uncached"],
-            ):
-                print("\n✗ Pipeline 2 failed at collect_domains step")
-                return
-    else:
-        # cached_companies == 0 and args.fast
-        print("⚠ No companies in cache, but --fast mode enabled")
-        print("  Skipping collect_domains.py (use without --fast to fetch companies)")
 
-    # Load Company nodes first (needed before creating embeddings)
+        # Parse 10-Ks
+        if not run_script(
+            PARSE_10K_SCRIPT,
+            execute=True,
+            description="Step 2.2: Parse 10-K Filings (extract websites, descriptions)",
+            logger=logger,
+        ):
+            logger.error("Pipeline failed at parse_10k_filings step")
+            return
+    else:
+        logger.info(f"✓ {cached_10ks} 10-Ks already parsed (fast mode: skipping)")
+        if args.fast:
+            logger.info("  Use without --fast to re-download/parse 10-Ks")
+
+    # Step 3: Company Data (10-K first approach)
+    # Website and business description come directly from 10-K filings
+    # No external API calls needed (collect_domains.py is skipped)
+    logger.info("")
+    logger.info("=" * 70)
+    logger.info("STEP 3: Load Company Data (from 10-K filings)")
+    logger.info("=" * 70)
+
+    from domain_status_graph.cache import get_cache
+
+    cache = get_cache()
+    ten_k_count = cache.count("10k_extracted")
+    logger.info(f"  Found {ten_k_count} companies with 10-K data")
+
+    # Load Company nodes (uses 10k_extracted cache directly)
     if not run_script(
         LOAD_COMPANY_DATA_SCRIPT,
         execute=True,
         description="Step 2.2: Loading Company nodes and HAS_DOMAIN relationships",
+        logger=logger,
     ):
-        print("\n✗ Failed at load_company_data step")
+        logger.error("Failed at load_company_data step")
+        return
+
+    # CRITICAL: Enrich Company nodes with name/ticker from SEC EDGAR
+    # This is required for business relationship extraction (lookup table needs name/ticker)
+    if not run_script(
+        ENRICH_COMPANY_IDENTIFIERS_SCRIPT,
+        execute=True,
+        description="Step 2.3: Enrich Company Identifiers (name/ticker from SEC EDGAR)",
+        logger=logger,
+    ):
+        logger.error("Failed at enrich_company_identifiers step")
         return
 
     # Enrich Company nodes with properties (SEC, Yahoo Finance, etc.)
     if not run_script(
         ENRICH_COMPANY_PROPERTIES_SCRIPT,
         execute=True,
-        description="Step 2.3: Enrich Company Properties (Industry, Size, etc.)",
+        description="Step 2.4: Enrich Company Properties (Industry, Size, etc.)",
+        logger=logger,
     ):
-        print("\n✗ Failed at enrich_company_properties step")
+        logger.error("Failed at enrich_company_properties step")
         return
 
     # Compute company similarity relationships
     if not run_script(
         COMPUTE_COMPANY_SIMILARITY_SCRIPT,
         execute=True,
-        description="Step 2.4: Compute Company Similarity (Industry & Size)",
+        description="Step 2.5: Compute Company Similarity (Industry & Size)",
+        logger=logger,
     ):
-        print("\n✗ Failed at compute_company_similarity step")
+        logger.error("Failed at compute_company_similarity step")
+        return
+
+    # Extract business relationships from 10-K filings (CompanyKG edge types)
+    # This extracts: HAS_COMPETITOR, HAS_CUSTOMER, HAS_SUPPLIER, HAS_PARTNER
+    # NOTE: Requires name/ticker from enrich_company_identifiers step!
+    if not run_script(
+        EXTRACT_BUSINESS_RELATIONSHIPS_SCRIPT,
+        execute=True,
+        description="Step 2.6: Extract Business Relationships from 10-K Filings (competitor, customer, supplier, partner)",
+        logger=logger,
+    ):
+        logger.error("Failed at extract_business_relationships step")
         return
 
     # Then create embeddings for the Company nodes
     if not run_script(
         CREATE_COMPANY_EMBEDDINGS_SCRIPT,
         execute=True,
-        description="Step 2.5: Create Company Description Embeddings",
+        description="Step 2.7: Create Company Description Embeddings",
+        logger=logger,
     ):
-        print("\n✗ Pipeline 2 failed at create_embeddings step")
+        logger.error("Pipeline 2 failed at create_embeddings step")
         return
 
-    # Step 3: Domain Embeddings
-    print("\n" + "=" * 70)
-    print("STEP 3: Domain Embeddings")
-    print("=" * 70)
+    # Create risk factor embeddings and SIMILAR_RISK relationships
+    if not run_script(
+        CREATE_RISK_SIMILARITY_SCRIPT,
+        execute=True,
+        description="Step 2.8: Create Risk Factor Embeddings and SIMILAR_RISK Relationships",
+        logger=logger,
+    ):
+        logger.error("Pipeline failed at create_risk_similarity step")
+        return
+
+    # Step 4: Domain Embeddings
+    logger.info("")
+    logger.info("=" * 70)
+    logger.info("STEP 4: Domain Embeddings")
+    logger.info("=" * 70)
 
     # Always run create_domain_embeddings (it checks cache internally)
     if not run_script(
         CREATE_DOMAIN_EMBEDDINGS_SCRIPT,
         execute=True,
         description="Step 3.1: Create Domain Description Embeddings",
+        logger=logger,
     ):
-        print("\n✗ Failed at create_domain_embeddings step")
+        logger.error("Failed at create_domain_embeddings step")
         return
 
     if not run_script(
         COMPUTE_DOMAIN_SIMILARITY_SCRIPT,
         execute=True,
         description="Step 3.2: Compute Domain-Domain Description Similarity",
+        logger=logger,
     ):
-        print("\n✗ Failed at compute_domain_similarity step")
+        logger.error("Failed at compute_domain_similarity step")
         return
 
     if not run_script(
         COMPUTE_KEYWORD_SIMILARITY_SCRIPT,
         execute=True,
         description="Step 3.3: Compute Domain-Domain Keyword Similarity",
+        logger=logger,
     ):
-        print("\n✗ Failed at compute_keyword_similarity step")
+        logger.error("Failed at compute_keyword_similarity step")
         return
 
     # Create company similarity from domain similarity
@@ -262,43 +357,57 @@ def main():
         COMPUTE_COMPANY_SIMILARITY_VIA_DOMAINS_SCRIPT,
         execute=True,
         description="Step 3.4: Create Company-Company edges from Domain similarity",
+        logger=logger,
     ):
-        print("\n✗ Failed at compute_company_similarity_via_domains step")
+        logger.error("Failed at compute_company_similarity_via_domains step")
         return
 
-    # Step 4: Compute all GDS features (tech + company similarity in one pass)
-    print("\n" + "=" * 70)
-    print("STEP 4: Compute GDS Features")
-    print("=" * 70)
-    print("Computing all GDS features: Technology adoption, affinity, and company similarity")
+    # Step 5: Compute all GDS features (tech + company similarity in one pass)
+    logger.info("")
+    logger.info("=" * 70)
+    logger.info("STEP 5: Compute GDS Features")
+    logger.info("=" * 70)
+    logger.info("Computing all GDS features: Technology adoption, affinity, and company similarity")
 
     if not run_script(
         COMPUTE_GDS_SCRIPT,
         execute=True,
         description="Computing all GDS features (tech adoption, affinity, company similarity)",
+        logger=logger,
     ):
-        print("\n✗ Failed at GDS computation step")
+        logger.error("Failed at GDS computation step")
         return
 
     # Summary
-    print("\n" + "=" * 70)
-    print("ALL PIPELINES COMPLETE!")
-    print("=" * 70)
-    print()
-    print("Graph is now ready for queries with:")
-    print("  ✓ Domain nodes with title/keywords/description metadata")
-    print("  ✓ Domain nodes with description embeddings")
-    print("  ✓ Technology nodes")
-    print("  ✓ USES relationships (Domain → Technology)")
-    print("  ✓ LIKELY_TO_ADOPT relationships (Domain → Technology)")
-    print("  ✓ CO_OCCURS_WITH relationships (Technology → Technology)")
-    print("  ✓ SIMILAR_DESCRIPTION relationships (Domain → Domain)")
-    print("  ✓ SIMILAR_KEYWORD relationships (Domain → Domain)")
-    print("  ✓ Company nodes with description embeddings")
-    print("  ✓ HAS_DOMAIN relationships (Company → Domain)")
-    print("  ✓ SIMILAR_DESCRIPTION relationships (Company → Company)")
-    print("  ✓ SIMILAR_KEYWORD relationships (Company → Company, from domains)")
-    print()
+    total_elapsed = time.time() - pipeline_start
+    minutes = int(total_elapsed // 60)
+    seconds = int(total_elapsed % 60)
+
+    logger.info("")
+    logger.info("=" * 70)
+    logger.info("ALL PIPELINES COMPLETE!")
+    logger.info("=" * 70)
+    logger.info(f"Total time: {minutes}m {seconds}s")
+    logger.info("")
+    logger.info("Graph is now ready for queries with:")
+    logger.info("  ✓ Domain nodes with title/keywords/description metadata")
+    logger.info("  ✓ Domain nodes with description embeddings")
+    logger.info("  ✓ Technology nodes")
+    logger.info("  ✓ USES relationships (Domain → Technology)")
+    logger.info("  ✓ LIKELY_TO_ADOPT relationships (Domain → Technology)")
+    logger.info("  ✓ CO_OCCURS_WITH relationships (Technology → Technology)")
+    logger.info("  ✓ SIMILAR_DESCRIPTION relationships (Domain → Domain)")
+    logger.info("  ✓ SIMILAR_KEYWORD relationships (Domain → Domain)")
+    logger.info("  ✓ Company nodes with description embeddings")
+    logger.info("  ✓ HAS_DOMAIN relationships (Company → Domain)")
+    logger.info("  ✓ HAS_COMPETITOR relationships (Company → Company, from 10-K filings)")
+    logger.info("  ✓ HAS_CUSTOMER relationships (Company → Company, from 10-K filings)")
+    logger.info("  ✓ HAS_SUPPLIER relationships (Company → Company, from 10-K filings)")
+    logger.info("  ✓ HAS_PARTNER relationships (Company → Company, from 10-K filings)")
+    logger.info("  ✓ SIMILAR_DESCRIPTION relationships (Company → Company)")
+    logger.info("  ✓ SIMILAR_KEYWORD relationships (Company → Company, from domains)")
+    logger.info("  ✓ SIMILAR_RISK relationships (Company → Company, risk factor similarity)")
+    logger.info("")
 
 
 if __name__ == "__main__":

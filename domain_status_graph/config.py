@@ -1,56 +1,146 @@
 """
 Configuration management for domain_status_graph.
 
-Loads environment variables and provides configuration defaults.
+Uses pydantic-settings for type-safe configuration with automatic
+environment variable loading and validation.
 """
 
-import os
+from functools import lru_cache
 from pathlib import Path
 
-from dotenv import load_dotenv
-
-# Load environment variables from .env file
-load_dotenv()
+from pydantic import Field, field_validator
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
-# Neo4j configuration
+class Settings(BaseSettings):
+    """
+    Application settings loaded from environment variables.
+
+    All settings are validated at startup. Required settings will raise
+    an error if not provided, ensuring fail-fast behavior.
+    """
+
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        env_file_encoding="utf-8",
+        extra="ignore",  # Ignore extra env vars
+    )
+
+    # Neo4j Configuration
+    neo4j_uri: str = Field(
+        default="bolt://localhost:7687",
+        description="Neo4j connection URI",
+    )
+    neo4j_user: str = Field(
+        default="neo4j",
+        description="Neo4j username",
+    )
+    neo4j_password: str = Field(
+        default="",
+        description="Neo4j password (required)",
+    )
+    neo4j_database: str = Field(
+        default="neo4j",
+        description="Neo4j database name",
+    )
+
+    # OpenAI Configuration
+    openai_api_key: str = Field(
+        default="",
+        description="OpenAI API key for embeddings",
+    )
+
+    # Finnhub Configuration
+    finnhub_api_key: str | None = Field(
+        default=None,
+        description="Finnhub API key (optional)",
+    )
+
+    # Datamule Configuration
+    datamule_api_key: str | None = Field(
+        default=None,
+        description="Datamule API key (optional)",
+    )
+
+    @field_validator("neo4j_password", "openai_api_key", mode="before")
+    @classmethod
+    def strip_whitespace(cls, v: str) -> str:
+        """Strip whitespace from string values."""
+        if isinstance(v, str):
+            return v.strip()
+        return v
+
+    @field_validator("finnhub_api_key", "datamule_api_key", mode="before")
+    @classmethod
+    def empty_string_to_none(cls, v: str | None) -> str | None:
+        """Convert empty strings to None for optional fields."""
+        if isinstance(v, str):
+            v = v.strip()
+            return v if v else None
+        return v
+
+
+@lru_cache
+def get_settings() -> Settings:
+    """
+    Get cached settings instance.
+
+    Uses lru_cache to ensure settings are only loaded once.
+    """
+    return Settings()
+
+
+# Convenience functions for backwards compatibility
+# These will raise clear errors if required values are missing
+
+
 def get_neo4j_uri() -> str:
-    """Get Neo4j URI from environment or default."""
-    return os.getenv("NEO4J_URI", "bolt://localhost:7687")
+    """Get Neo4j URI from settings."""
+    return get_settings().neo4j_uri
 
 
 def get_neo4j_user() -> str:
-    """Get Neo4j username from environment or default."""
-    return os.getenv("NEO4J_USER", "neo4j")
+    """Get Neo4j username from settings."""
+    return get_settings().neo4j_user
 
 
 def get_neo4j_password() -> str:
-    """Get Neo4j password from environment."""
-    password = os.getenv("NEO4J_PASSWORD", "")
+    """Get Neo4j password from settings."""
+    password = get_settings().neo4j_password
     if not password:
         raise ValueError("NEO4J_PASSWORD not set in .env file")
     return password
 
 
 def get_neo4j_database() -> str:
-    """Get Neo4j database name from environment or default."""
-    return os.getenv("NEO4J_DATABASE", "neo4j")
+    """Get Neo4j database name from settings."""
+    return get_settings().neo4j_database
 
 
-# OpenAI configuration
 def get_openai_api_key() -> str:
-    """Get OpenAI API key from environment."""
-    key = os.getenv("OPENAI_API_KEY", "").strip()
+    """Get OpenAI API key from settings."""
+    key = get_settings().openai_api_key
     if not key:
         raise ValueError("OPENAI_API_KEY not set in .env file")
     return key
 
 
-# Data paths
+def get_finnhub_api_key() -> str | None:
+    """Get Finnhub API key from settings (optional)."""
+    return get_settings().finnhub_api_key
+
+
+def get_datamule_api_key() -> str | None:
+    """Get Datamule API key from settings (optional)."""
+    return get_settings().datamule_api_key
+
+
+# Data paths - not loaded from env, computed from package location
+
+
 def get_data_dir() -> Path:
     """Get data directory path (project root / data)."""
-    # Go up from domain_status_graph/config.py -> domain_status_graph/ -> project root/
-    project_root = Path(__file__).parent.parent.parent
+    project_root = Path(__file__).parent.parent
     return project_root / "data"
 
 

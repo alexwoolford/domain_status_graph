@@ -6,8 +6,7 @@ This is valuable for software companies finding customers for their product.
 """
 
 import logging
-from datetime import datetime, timezone
-from typing import Optional
+from datetime import UTC, datetime
 
 from domain_status_graph.constants import (
     BATCH_SIZE_DELETE,
@@ -24,12 +23,12 @@ logger = logging.getLogger(__name__)
 def compute_tech_adoption_prediction(
     gds,
     driver,
-    database: Optional[str] = None,
+    database: str | None = None,
     max_iterations: int = DEFAULT_MAX_ITERATIONS,
     damping_factor: float = DEFAULT_DAMPING_FACTOR,
     top_k: int = DEFAULT_TOP_K,
     batch_size: int = 20,
-    logger: Optional[logging.Logger] = None,
+    logger: logging.Logger | None = None,
 ) -> int:
     """
     Technology Adopter Prediction (Technology → Domain).
@@ -117,7 +116,7 @@ def compute_tech_adoption_prediction(
             total_techs = len(technologies)
             logger.info(f"   Processing {total_techs} technologies in batches...")
 
-            start_time = datetime.now(timezone.utc)
+            start_time = datetime.now(UTC)
             temp_property = "ppr_score_temp"
 
             for batch_start in range(0, total_techs, batch_size):
@@ -126,7 +125,7 @@ def compute_tech_adoption_prediction(
                 batch_tech_ids = [tech_id for tech_id, _ in batch_techs]
 
                 if (batch_start // batch_size) % 5 == 0 or batch_end >= total_techs:
-                    elapsed = (datetime.now(timezone.utc) - start_time).total_seconds()
+                    elapsed = (datetime.now(UTC) - start_time).total_seconds()
                     rate = batch_end / elapsed if elapsed > 0 else 0
                     remaining = (total_techs - batch_end) / rate if rate > 0 else 0
                     pct = batch_end * 100 / total_techs

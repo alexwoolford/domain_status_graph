@@ -15,6 +15,7 @@ Usage:
 """
 
 import argparse
+import logging
 import sys
 
 from domain_status_graph.cli import (
@@ -33,36 +34,39 @@ from domain_status_graph.gds import (
 )
 
 
-def print_dry_run_plan():
+def print_dry_run_plan(logger: logging.Logger = None):
     """Print the GDS features plan without executing."""
-    print("=" * 70)
-    print("GDS FEATURES PLAN (Dry Run)")
-    print("=" * 70)
-    print()
-    print("This script will compute the following features:")
-    print()
-    print("1. Technology Adopter Prediction (Technology → Domain)")
-    print("   - For each technology, predicts top 50 domains likely to adopt it")
-    print("   - Creates: Domain-[LIKELY_TO_ADOPT {score}]->Technology")
-    print("   - Use case: Software companies finding customers for their product")
-    print()
-    print("2. Technology Affinity and Bundling (Node Similarity)")
-    print("   - Finds technology pairs that commonly co-occur")
-    print("   - Creates: Technology-[CO_OCCURS_WITH {similarity}]->Technology")
-    print()
-    print("3. Company Description Similarity (Cosine Similarity)")
-    print("   - Finds companies with similar business descriptions")
-    print("   - Creates: Company-[SIMILAR_DESCRIPTION {score}]->Company")
-    print("   - Note: Requires Company nodes with description_embedding property")
-    print()
-    print("4. Company Technology Similarity (Jaccard Similarity)")
-    print("   - Finds companies with similar technology stacks")
-    print("   - Creates: Company-[SIMILAR_TECHNOLOGY {score}]->Company")
-    print("   - Algorithm: Jaccard similarity on aggregated technology sets")
-    print()
-    print("=" * 70)
-    print("To execute, run: python scripts/compute_gds_features.py --execute")
-    print("=" * 70)
+    if logger is None:
+        logger = logging.getLogger(__name__)
+
+    logger.info("=" * 70)
+    logger.info("GDS FEATURES PLAN (Dry Run)")
+    logger.info("=" * 70)
+    logger.info("")
+    logger.info("This script will compute the following features:")
+    logger.info("")
+    logger.info("1. Technology Adopter Prediction (Technology → Domain)")
+    logger.info("   - For each technology, predicts top 50 domains likely to adopt it")
+    logger.info("   - Creates: Domain-[LIKELY_TO_ADOPT {score}]->Technology")
+    logger.info("   - Use case: Software companies finding customers for their product")
+    logger.info("")
+    logger.info("2. Technology Affinity and Bundling (Node Similarity)")
+    logger.info("   - Finds technology pairs that commonly co-occur")
+    logger.info("   - Creates: Technology-[CO_OCCURS_WITH {similarity}]->Technology")
+    logger.info("")
+    logger.info("3. Company Description Similarity (Cosine Similarity)")
+    logger.info("   - Finds companies with similar business descriptions")
+    logger.info("   - Creates: Company-[SIMILAR_DESCRIPTION {score}]->Company")
+    logger.info("   - Note: Requires Company nodes with description_embedding property")
+    logger.info("")
+    logger.info("4. Company Technology Similarity (Jaccard Similarity)")
+    logger.info("   - Finds companies with similar technology stacks")
+    logger.info("   - Creates: Company-[SIMILAR_TECHNOLOGY {score}]->Company")
+    logger.info("   - Algorithm: Jaccard similarity on aggregated technology sets")
+    logger.info("")
+    logger.info("=" * 70)
+    logger.info("To execute, run: python scripts/compute_gds_features.py --execute")
+    logger.info("=" * 70)
 
 
 def main():
@@ -91,7 +95,7 @@ def main():
 
         # Dry-run mode (default)
         if not args.execute:
-            print_dry_run_plan()
+            print_dry_run_plan(logger=logger)
             return
 
         # Execute mode
@@ -122,12 +126,12 @@ def main():
             company_count = result.single()["company_count"]
 
         if company_count > 0:
-            logger.info(f"\nFound {company_count} companies with embeddings - computing similarity")
+            logger.info(f"Found {company_count} companies with embeddings - computing similarity")
             compute_company_description_similarity(
                 driver, database=database, execute=True, logger=logger
             )
         else:
-            logger.info("\n⚠ No companies with embeddings found - skipping description similarity")
+            logger.info("⚠ No companies with embeddings found - skipping description similarity")
 
         # Compute technology similarity between companies
         with driver.session(database=database) as session:
@@ -140,12 +144,12 @@ def main():
             company_count = result.single()["company_count"]
 
         if company_count > 0:
-            logger.info(f"\nFound {company_count} companies with technologies")
+            logger.info(f"Found {company_count} companies with technologies")
             compute_company_technology_similarity(
                 gds, driver, database=database, execute=True, logger=logger
             )
         else:
-            logger.info("\n⚠ No companies with technologies found - skipping tech similarity")
+            logger.info("⚠ No companies with technologies found - skipping tech similarity")
 
         # Summary
         logger.info("")
@@ -155,7 +159,7 @@ def main():
 
         with driver.session(database=database) as session:
             result = session.run("MATCH ()-[r:LIKELY_TO_ADOPT]->() RETURN count(r) AS count")
-            logger.info(f"\nTechnology Adoption Predictions: {result.single()['count']}")
+            logger.info(f"Technology Adoption Predictions: {result.single()['count']}")
 
             result = session.run("MATCH ()-[r:CO_OCCURS_WITH]->() RETURN count(r) AS count")
             logger.info(f"Technology Affinity Relationships: {result.single()['count']}")

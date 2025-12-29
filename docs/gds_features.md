@@ -246,7 +246,7 @@ All features are idempotent - running them multiple times will update existing r
 ### Installation
 
 ```bash
-pip install -r requirements.txt
+pip install -e .
 ```
 
 ---

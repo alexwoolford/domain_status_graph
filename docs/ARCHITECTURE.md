@@ -44,7 +44,7 @@ domain_status_graph/
 - `get_openai_api_key()` - OpenAI API credentials
 - `get_data_dir()`, `get_domain_status_db()` - Data file paths
 
-**Design**: Uses environment variables with sensible defaults. Path resolution handles both package and script execution contexts.
+**Design**: Uses `pydantic-settings` for type-safe configuration with automatic `.env` file loading. Path resolution handles both package and script execution contexts.
 
 ### `cli.py`
 
@@ -203,7 +203,7 @@ Neo4j Nodes (with embedding properties)
 - **Unit Tests**: `tests/unit/` - Test individual functions in isolation
 - **Integration Tests**: `tests/integration/` - Test full workflows (requires Neo4j)
 
-**Test Coverage**: Currently 28% (focused on core utilities like `config.py` and `embeddings/cache.py`).
+**Test Coverage**: Currently 60% (520 tests across unit and integration suites).
 
 ## Dependencies
 
@@ -211,12 +211,18 @@ Neo4j Nodes (with embedding properties)
 - `neo4j` - Neo4j Python driver
 - `graphdatascience` - Neo4j GDS Python client
 - `openai` - OpenAI API client
-- `python-dotenv` - Environment variable management
+- `pydantic-settings` - Type-safe configuration management (replaces python-dotenv)
 - `numpy` - Vector operations (similarity computation)
+- `tenacity` - Retry logic with rate limiting
+- `tiktoken` - Token counting for embedding truncation
+- `beautifulsoup4`, `lxml` - HTML/XML parsing for SEC filings
 
 ### Development Dependencies
-- `pytest`, `pytest-cov` - Testing framework
-- `black`, `isort`, `flake8`, `mypy` - Code quality tools
+- `pytest`, `pytest-cov`, `pytest-mock` - Testing framework
+- `ruff` - Fast linter and formatter (replaces flake8, isort)
+- `black` - Code formatter
+- `mypy` - Static type checking
+- `pre-commit` - Git hooks for code quality
 
 ## Configuration
 
@@ -234,4 +240,4 @@ Configuration is managed via:
 
 ---
 
-*Last Updated: 2024-12-14*
+*Last Updated: 2024-12-27*

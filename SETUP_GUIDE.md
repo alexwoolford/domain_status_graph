@@ -49,20 +49,14 @@ cd domain_status_graph
 conda create -n domain_status_graph python=3.13
 conda activate domain_status_graph
 
-# Install dependencies
-pip install -r requirements.txt
-
-# Install package in editable mode (required for imports)
+# Install package in editable mode (includes all dependencies from pyproject.toml)
 pip install -e .
 ```
 
 ### Option B: Use System Python
 
 ```bash
-# Install dependencies
-pip install -r requirements.txt
-
-# Install package in editable mode (required for imports)
+# Install package in editable mode (includes all dependencies from pyproject.toml)
 pip install -e .
 ```
 
@@ -397,7 +391,7 @@ LIMIT 10;
 
 **Solution**:
 1. Ensure you're using the correct Python environment
-2. Reinstall dependencies: `pip install -r requirements.txt --force-reinstall`
+2. Reinstall dependencies: `pip install -e . --force-reinstall`
 3. Check Python version: `python3 --version` (should be 3.13+)
 
 ---
@@ -415,7 +409,7 @@ conda create -n domain_status_graph python=3.13
 conda activate domain_status_graph
 
 # 3. Install dependencies
-pip install -r requirements.txt
+pip install -e .
 
 # 4. Configure Neo4j
 cp .env.sample .env

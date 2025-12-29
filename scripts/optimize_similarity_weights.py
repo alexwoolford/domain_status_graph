@@ -22,7 +22,6 @@ Usage:
 import argparse
 import logging
 import sys
-from typing import Dict, List, Optional, Tuple
 
 from domain_status_graph.cli import (
     get_driver_and_database,
@@ -104,8 +103,8 @@ logger = logging.getLogger(__name__)
 
 
 def get_company_rank(
-    driver, ticker1: str, ticker2: str, weights: Dict[str, float], top_n: int, database: str
-) -> Optional[int]:
+    driver, ticker1: str, ticker2: str, weights: dict[str, float], top_n: int, database: str
+) -> int | None:
     """Get the rank of ticker2 in ticker1's similar companies list."""
     query = get_top_similar_companies_query(ticker1, limit=top_n, weights=weights)
     with driver.session(database=database) as session:
@@ -119,8 +118,8 @@ def get_company_rank(
 
 
 def score_weights(
-    driver, weights: Dict[str, float], pairs: List[Tuple[str, str, int]], database: str
-) -> Tuple[float, Dict[str, int]]:
+    driver, weights: dict[str, float], pairs: list[tuple[str, str, int]], database: str
+) -> tuple[float, dict[str, int]]:
     """
     Score a set of weights based on validation pairs.
 
@@ -180,8 +179,8 @@ def score_weights(
 
 
 def grid_search_weights(
-    driver, pairs: List[Tuple[str, str, int]], database: str
-) -> Tuple[Dict[str, float], float, Dict[str, int]]:
+    driver, pairs: list[tuple[str, str, int]], database: str
+) -> tuple[dict[str, float], float, dict[str, int]]:
     """Grid search over weight combinations."""
     best_weights = None
     best_score = float("-inf")
@@ -257,11 +256,11 @@ def grid_search_weights(
 
 def optimize_weights(
     driver,
-    pairs: List[Tuple[str, str, int]],
+    pairs: list[tuple[str, str, int]],
     method: str = "grid",
     iterations: int = 100,
     database: str = "neo4j",
-) -> Tuple[Dict[str, float], float, Dict[str, int]]:
+) -> tuple[dict[str, float], float, dict[str, int]]:
     """
     Optimize similarity weights.
 

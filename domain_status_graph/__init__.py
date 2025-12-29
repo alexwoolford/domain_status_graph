@@ -9,6 +9,12 @@ This package provides utilities for:
 - Common CLI utilities for scripts
 """
 
+import logging
+
+# Set up NullHandler to prevent "No handler found" warnings
+# when used as a library. Applications should configure their own handlers.
+logging.getLogger(__name__).addHandler(logging.NullHandler())
+
 __version__ = "0.1.0"
 
 # Re-export commonly used items

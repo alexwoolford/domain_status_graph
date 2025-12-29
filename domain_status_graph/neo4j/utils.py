@@ -4,10 +4,48 @@ Neo4j utility functions for common operations.
 
 import logging
 import re
-from typing import Optional
+from typing import Any
 
 # Relationship type pattern: uppercase letters, numbers, and underscores
 REL_TYPE_PATTERN = re.compile(r"^[A-Z][A-Z0-9_]*$")
+
+
+def clean_properties(props: dict[str, Any]) -> dict[str, Any]:
+    """
+    Remove empty string and None values from a properties dictionary.
+
+    Neo4j does not support null property values - setting a property to null
+    removes it entirely. Empty strings are semantically equivalent to "no value"
+    and should also be omitted to keep the graph clean and queries simple.
+
+    Args:
+        props: Dictionary of property name -> value
+
+    Returns:
+        New dictionary with empty strings and None values removed
+
+    Example:
+        >>> clean_properties({"name": "Test", "desc": "", "count": None, "active": True})
+        {"name": "Test", "active": True}
+    """
+    return {
+        k: v
+        for k, v in props.items()
+        if v is not None and v != "" and not (isinstance(v, str) and not v.strip())
+    }
+
+
+def clean_properties_batch(batch: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """
+    Apply clean_properties to each dictionary in a batch.
+
+    Args:
+        batch: List of property dictionaries
+
+    Returns:
+        New list with cleaned dictionaries
+    """
+    return [clean_properties(props) for props in batch]
 
 
 def _validate_relationship_type(rel_type: str) -> None:
@@ -24,8 +62,8 @@ def delete_relationships_in_batches(
     driver,
     rel_type: str,
     batch_size: int = 10000,
-    database: Optional[str] = None,
-    logger: Optional[logging.Logger] = None,
+    database: str | None = None,
+    logger: logging.Logger | None = None,
 ):
     """
     Delete all relationships of a given type in batches using Neo4j's native IN TRANSACTIONS.

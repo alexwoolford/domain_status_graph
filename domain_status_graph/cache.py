@@ -20,15 +20,25 @@ _cache: Optional["AppCache"] = None
 class AppCache:
     """Unified cache using diskcache (SQLite-backed)."""
 
-    def __init__(self, cache_dir: Path = DEFAULT_CACHE_DIR):
+    def __init__(self, cache_dir: Path = DEFAULT_CACHE_DIR, timeout: float = 30.0):
+        """
+        Initialize cache.
+
+        Args:
+            cache_dir: Directory for cache files
+            timeout: Timeout in seconds for acquiring database lock (default: 30.0)
+                     Higher timeout needed for high concurrency (many workers)
+        """
         self.cache_dir = Path(cache_dir)
         self.cache_dir.mkdir(parents=True, exist_ok=True)
-        self._cache = diskcache.Cache(str(self.cache_dir))
+        # Use timeout to handle database locks gracefully
+        # Higher timeout for high concurrency scenarios (SQLite serializes writes)
+        self._cache = diskcache.Cache(str(self.cache_dir), timeout=timeout)
 
     def _make_key(self, namespace: str, key: str) -> str:
         return f"{namespace}:{key}"
 
-    def get(self, namespace: str, key: str) -> Optional[Any]:
+    def get(self, namespace: str, key: str) -> Any | None:
         """Get a value from cache."""
         full_key = self._make_key(namespace, key)
         return self._cache.get(full_key)
@@ -38,7 +48,7 @@ class AppCache:
         namespace: str,
         key: str,
         value: Any,
-        ttl_days: Optional[int] = None,
+        ttl_days: int | None = None,
     ) -> None:
         """Set a value in cache with optional TTL."""
         full_key = self._make_key(namespace, key)
@@ -48,7 +58,7 @@ class AppCache:
     def delete(self, namespace: str, key: str) -> bool:
         """Delete a value from cache."""
         full_key = self._make_key(namespace, key)
-        return self._cache.delete(full_key)
+        return bool(self._cache.delete(full_key))
 
     def clear_namespace(self, namespace: str) -> int:
         """Clear all keys in a namespace."""
@@ -60,7 +70,7 @@ class AppCache:
             self._cache.delete(key)
         return count
 
-    def count(self, namespace: Optional[str] = None) -> int:
+    def count(self, namespace: str | None = None) -> int:
         """Count entries, optionally filtered by namespace."""
         if namespace is None:
             return len(self._cache)
@@ -87,7 +97,7 @@ class AppCache:
             "cache_dir": str(self.cache_dir),
         }
 
-    def keys(self, namespace: Optional[str] = None, limit: int = 100) -> list[str]:
+    def keys(self, namespace: str | None = None, limit: int = 100) -> list[str]:
         """Get keys, optionally filtered by namespace."""
         prefix = f"{namespace}:" if namespace else ""
         keys = []
@@ -103,9 +113,16 @@ class AppCache:
         self._cache.close()
 
 
-def get_cache(cache_dir: Path = DEFAULT_CACHE_DIR) -> AppCache:
-    """Get or create the global cache instance."""
+def get_cache(cache_dir: Path = DEFAULT_CACHE_DIR, timeout: float = 30.0) -> AppCache:
+    """
+    Get or create the global cache instance.
+
+    Args:
+        cache_dir: Directory for cache files
+        timeout: Timeout in seconds for acquiring database lock (default: 30.0)
+                 Higher timeout needed for high concurrency (many workers)
+    """
     global _cache
     if _cache is None:
-        _cache = AppCache(cache_dir)
+        _cache = AppCache(cache_dir, timeout=timeout)
     return _cache

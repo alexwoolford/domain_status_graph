@@ -72,7 +72,7 @@
       Always use the dedicated conda env: domain_status_graph (Python 3.13)
       conda activate domain_status_graph
       pip install -e .[dev]
-      pip install -r requirements.txt
+      pip install -e .
       cp .env.sample .env  # set NEO4J_URI, NEO4J_USER, NEO4J_PASSWORD
     </env>
     <quality_tools>

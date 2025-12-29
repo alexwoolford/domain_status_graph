@@ -19,7 +19,6 @@ Usage:
 import argparse
 import logging
 import sys
-from typing import Optional
 
 from domain_status_graph.cli import (
     add_execute_argument,
@@ -34,10 +33,10 @@ logger = logging.getLogger(__name__)
 
 def compute_company_similarity_via_domains(
     driver,
-    database: Optional[str] = None,
+    database: str | None = None,
     execute: bool = False,
     min_score: float = 0.6,
-    logger_instance: Optional[logging.Logger] = None,
+    logger_instance: logging.Logger | None = None,
 ) -> int:
     """
     Compute Company-Company similarity via Domain-Domain relationships.

@@ -13,7 +13,6 @@ import argparse
 import sys
 from datetime import datetime
 from pathlib import Path
-from typing import List, Optional, Tuple
 
 from domain_status_graph.cli import (
     get_driver_and_database,
@@ -93,9 +92,7 @@ FAMOUS_PAIRS = [
 ]
 
 
-def get_company_rank(
-    driver, ticker1: str, ticker2: str, top_n: int, database: str
-) -> Optional[int]:
+def get_company_rank(driver, ticker1: str, ticker2: str, top_n: int, database: str) -> int | None:
     """Get the rank of ticker2 in ticker1's similar companies list."""
     query = get_top_similar_companies_query(ticker1, limit=top_n)
     with driver.session(database=database) as session:
@@ -111,10 +108,10 @@ def get_company_rank(
 
 def validate_famous_pairs(
     driver,
-    pairs: List[Tuple[str, str, str, int]],
+    pairs: list[tuple[str, str, str, int]],
     top_n: int = 20,
     database: str = "neo4j",
-    output_file: Optional[Path] = None,
+    output_file: Path | None = None,
 ) -> str:
     """Validate famous pairs and generate report."""
     lines = []
@@ -224,21 +221,21 @@ def validate_famous_pairs(
     if results["failed"]:
         lines.append("### Failed Pairs")
         lines.append("")
-        for ticker1, ticker2, desc, rank, expected in results["failed"]:
+        for _ticker1, _ticker2, desc, rank, expected in results["failed"]:
             lines.append(f"- {desc}: Rank #{rank} (expected ≤{expected})")
         lines.append("")
 
     if results["not_found"]:
         lines.append("### Not Found in Top-N")
         lines.append("")
-        for ticker1, ticker2, desc, expected in results["not_found"]:
+        for _ticker1, _ticker2, desc, _expected in results["not_found"]:
             lines.append(f"- {desc}: Not in top-{top_n}")
         lines.append("")
 
     if results["missing_company"]:
         lines.append("### Missing Companies")
         lines.append("")
-        for ticker1, ticker2, desc in results["missing_company"]:
+        for _ticker1, _ticker2, desc in results["missing_company"]:
             lines.append(f"- {desc}: Company missing from database")
         lines.append("")
 

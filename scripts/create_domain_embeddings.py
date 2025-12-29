@@ -27,7 +27,6 @@ from domain_status_graph.cli import (
 from domain_status_graph.embeddings import (
     EMBEDDING_DIMENSION,
     EMBEDDING_MODEL,
-    create_embedding,
     create_embeddings_for_nodes,
     get_openai_client,
     suppress_http_logging,
@@ -59,7 +58,7 @@ def update_domain_embeddings(
     if logger is None:
         logger = logging.getLogger(__name__)
 
-    # Use general-purpose function
+    # Use general-purpose function with batch API for speed
     processed, created, cached, failed = create_embeddings_for_nodes(
         driver=driver,
         cache=cache,
@@ -71,9 +70,10 @@ def update_domain_embeddings(
         dimension_property="embedding_dimension",
         embedding_model=EMBEDDING_MODEL,
         embedding_dimension=EMBEDDING_DIMENSION,
-        create_fn=lambda text, model: create_embedding(client, text, model),
+        openai_client=client,  # Uses fast batch API
         database=database,
         execute=execute,
+        log=logger,  # Pass logger for proper output
     )
 
     if execute:
@@ -155,8 +155,8 @@ def main():
             logger.info("=" * 80)
             logger.info("This script will:")
             logger.info(f"  1. Load {domain_count} domains with descriptions")
-            logger.info(f"  2. Create/load embeddings using model: {args.model}")
-            logger.info(f"  3. Cache embeddings in: {args.cache_db}")
+            logger.info(f"  2. Create/load embeddings using model: {EMBEDDING_MODEL}")
+            logger.info(f"  3. Cache embeddings in: {cache.cache_dir}")
             logger.info("  4. Update Domain nodes in Neo4j with embeddings")
             logger.info("")
             logger.info("Estimated cost (text-embedding-3-small):")

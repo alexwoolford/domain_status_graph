@@ -2,28 +2,25 @@
 """
 CLI for managing the embedding cache.
 
+Uses the unified AppCache (diskcache-based) with the 'embeddings' namespace.
+
 Usage:
     python scripts/embedding_cache.py stats           # Show cache statistics
     python scripts/embedding_cache.py list            # List recent keys
-    python scripts/embedding_cache.py list --type keywords --limit 20
-    python scripts/embedding_cache.py clear --type keywords  # Clear keyword embeddings
+    python scripts/embedding_cache.py list --limit 20
     python scripts/embedding_cache.py clear --all     # Clear all embeddings
 """
 
 import argparse
-from pathlib import Path
 
-from domain_status_graph.embeddings import SQLiteEmbeddingCache
+from domain_status_graph.cache import get_cache
+
+# Namespace for embeddings in the unified cache
+EMBEDDINGS_NAMESPACE = "embeddings"
 
 
 def main():
     parser = argparse.ArgumentParser(description="Manage embedding cache")
-    parser.add_argument(
-        "--db",
-        type=Path,
-        default=Path("data/embeddings.db"),
-        help="Path to cache database (default: data/embeddings.db)",
-    )
 
     subparsers = parser.add_subparsers(dest="command", help="Command to run")
 
@@ -33,11 +30,6 @@ def main():
     # list command
     list_parser = subparsers.add_parser("list", help="List cache keys")
     list_parser.add_argument(
-        "--type",
-        choices=["description", "keywords"],
-        help="Filter by embedding type",
-    )
-    list_parser.add_argument(
         "--limit",
         type=int,
         default=20,
@@ -46,15 +38,10 @@ def main():
 
     # clear command
     clear_parser = subparsers.add_parser("clear", help="Clear cache entries")
-    clear_group = clear_parser.add_mutually_exclusive_group(required=True)
-    clear_group.add_argument(
-        "--type",
-        choices=["description", "keywords"],
-        help="Clear specific embedding type",
-    )
-    clear_group.add_argument(
+    clear_parser.add_argument(
         "--all",
         action="store_true",
+        required=True,
         help="Clear all embeddings",
     )
     clear_parser.add_argument(
@@ -69,58 +56,40 @@ def main():
         parser.print_help()
         return
 
-    if not args.db.exists():
-        print(f"Cache database not found: {args.db}")
-        return
-
-    cache = SQLiteEmbeddingCache(args.db)
+    cache = get_cache()
 
     if args.command == "stats":
         stats = cache.stats()
-        print(f"Embedding Cache: {args.db}")
-        print(f"  Total embeddings: {stats['total']}")
-        print(f"  Database size: {stats['db_size_mb']} MB")
-        print(f"  Models: {stats['models']}")
-        print(f"  Oldest: {stats['oldest']}")
-        print(f"  Newest: {stats['newest']}")
-        print("  By type:")
-        for typ, count in stats["by_type"].items():
-            print(f"    {typ}: {count}")
+        embeddings_count = stats["by_namespace"].get(EMBEDDINGS_NAMESPACE, 0)
+        print(f"Embedding Cache: {stats['cache_dir']}")
+        print(f"  Total cache entries: {stats['total']}")
+        print(f"  Embeddings: {embeddings_count}")
+        print(f"  Database size: {stats['size_mb']} MB")
+        print("  By namespace:")
+        for ns, count in sorted(stats["by_namespace"].items()):
+            print(f"    {ns}: {count}")
 
     elif args.command == "list":
-        keys = cache.list_keys(embedding_type=args.type, limit=args.limit)
+        keys = cache.keys(namespace=EMBEDDINGS_NAMESPACE, limit=args.limit)
         if not keys:
             print("No embeddings found")
             return
-        print("Recent embeddings ({} shown):".format(len(keys)))
+        print(f"Recent embeddings ({len(keys)} shown):")
         for key in keys:
             print(f"  {key}")
 
     elif args.command == "clear":
-        if args.all:
-            count = cache.count()
-            if count == 0:
-                print("Cache is already empty")
+        count = cache.count(namespace=EMBEDDINGS_NAMESPACE)
+        if count == 0:
+            print("No embeddings found in cache")
+            return
+        if not args.yes:
+            confirm = input(f"Delete ALL {count} embeddings? [y/N] ")
+            if confirm.lower() != "y":
+                print("Cancelled")
                 return
-            if not args.yes:
-                confirm = input(f"Delete ALL {count} embeddings? [y/N] ")
-                if confirm.lower() != "y":
-                    print("Cancelled")
-                    return
-            deleted = cache.clear_all()
-            print(f"Deleted {deleted} embeddings")
-        else:
-            count = cache.count_by_type().get(args.type, 0)
-            if count == 0:
-                print(f"No {args.type} embeddings found")
-                return
-            if not args.yes:
-                confirm = input(f"Delete {count} {args.type} embeddings? [y/N] ")
-                if confirm.lower() != "y":
-                    print("Cancelled")
-                    return
-            deleted = cache.clear_by_type(args.type)
-            print(f"Deleted {deleted} {args.type} embeddings")
+        deleted = cache.clear_namespace(EMBEDDINGS_NAMESPACE)
+        print(f"Deleted {deleted} embeddings")
 
 
 if __name__ == "__main__":

@@ -7,6 +7,7 @@ These tests verify that running loaders multiple times produces consistent resul
 import os
 import sqlite3
 import tempfile
+from contextlib import closing
 from pathlib import Path
 
 import pytest
@@ -51,71 +52,71 @@ def sample_sqlite_db():
     with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as f:
         db_path = Path(f.name)
 
-    conn = sqlite3.connect(db_path)
-    cursor = conn.cursor()
+    # Use closing() to ensure connection is closed in Python 3.13+
+    with closing(sqlite3.connect(db_path)) as conn:
+        cursor = conn.cursor()
 
-    # Create tables
-    cursor.execute(
+        # Create tables
+        cursor.execute(
+            """
+            CREATE TABLE url_status (
+                id INTEGER PRIMARY KEY,
+                final_domain TEXT,
+                initial_domain TEXT,
+                http_status INTEGER,
+                http_status_text TEXT,
+                response_time_seconds REAL,
+                observed_at_ms INTEGER,
+                is_mobile_friendly INTEGER,
+                spf_record TEXT,
+                dmarc_record TEXT,
+                title TEXT,
+                keywords TEXT,
+                description TEXT
+            )
         """
-        CREATE TABLE url_status (
-            id INTEGER PRIMARY KEY,
-            final_domain TEXT,
-            domain TEXT,
-            status INTEGER,
-            status_description TEXT,
-            response_time REAL,
-            timestamp INTEGER,
-            is_mobile_friendly INTEGER,
-            spf_record TEXT,
-            dmarc_record TEXT,
-            title TEXT,
-            keywords TEXT,
-            description TEXT
         )
-    """
-    )
 
-    cursor.execute(
+        cursor.execute(
+            """
+            CREATE TABLE url_technologies (
+                id INTEGER PRIMARY KEY,
+                url_status_id INTEGER,
+                technology_name TEXT,
+                technology_category TEXT
+            )
         """
-        CREATE TABLE url_technologies (
-            id INTEGER PRIMARY KEY,
-            url_status_id INTEGER,
-            technology_name TEXT,
-            technology_category TEXT
         )
-    """
-    )
 
-    cursor.execute(
+        cursor.execute(
+            """
+            CREATE TABLE url_whois (
+                id INTEGER PRIMARY KEY,
+                url_status_id INTEGER,
+                creation_date_ms INTEGER,
+                expiration_date_ms INTEGER,
+                registrar TEXT,
+                registrant_country TEXT,
+                registrant_org TEXT
+            )
         """
-        CREATE TABLE url_whois (
-            id INTEGER PRIMARY KEY,
-            url_status_id INTEGER,
-            creation_date TEXT,
-            expiration_date TEXT,
-            registrar TEXT,
-            registrant_country TEXT,
-            registrant_org TEXT
         )
-    """
-    )
 
-    # Insert sample data
-    cursor.execute(
+        # Insert sample data
+        cursor.execute(
+            """
+            INSERT INTO url_status (id, final_domain, initial_domain, http_status, http_status_text, title, description)
+            VALUES (1, 'test-idempotent.com', 'www.test-idempotent.com', 200, 'OK', 'Test', 'Test domain')
         """
-        INSERT INTO url_status (id, final_domain, domain, status, title, description)
-        VALUES (1, 'test-idempotent.com', 'www.test-idempotent.com', 200, 'Test', 'Test domain')
-    """
-    )
-    cursor.execute(
+        )
+        cursor.execute(
+            """
+            INSERT INTO url_technologies (url_status_id, technology_name, technology_category)
+            VALUES (1, 'TestTech', 'Testing')
         """
-        INSERT INTO url_technologies (url_status_id, technology_name, technology_category)
-        VALUES (1, 'TestTech', 'Testing')
-    """
-    )
+        )
 
-    conn.commit()
-    conn.close()
+        conn.commit()
 
     yield db_path
 

@@ -10,7 +10,11 @@ from domain_status_graph.neo4j.constraints import (
     create_domain_constraints,
     create_technology_constraints,
 )
-from domain_status_graph.neo4j.utils import delete_relationships_in_batches
+from domain_status_graph.neo4j.utils import (
+    clean_properties,
+    clean_properties_batch,
+    delete_relationships_in_batches,
+)
 
 __all__ = [
     "get_neo4j_driver",
@@ -19,5 +23,7 @@ __all__ = [
     "create_company_constraints",
     "create_domain_constraints",
     "create_technology_constraints",
+    "clean_properties",
+    "clean_properties_batch",
     "delete_relationships_in_batches",
 ]

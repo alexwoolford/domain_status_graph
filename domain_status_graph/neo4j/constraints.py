@@ -6,16 +6,15 @@ for Domain and Technology nodes.
 """
 
 import logging
-from typing import List, Optional
 
 logger = logging.getLogger(__name__)
 
 
 def _run_constraints(
     driver,
-    constraints: List[str],
-    database: Optional[str] = None,
-    log: Optional[logging.Logger] = None,
+    constraints: list[str],
+    database: str | None = None,
+    log: logging.Logger | None = None,
 ) -> None:
     """
     Run a list of constraint/index creation statements.
@@ -44,7 +43,7 @@ def _run_constraints(
 
 
 def create_domain_constraints(
-    driver, database: Optional[str] = None, logger: Optional[logging.Logger] = None
+    driver, database: str | None = None, logger: logging.Logger | None = None
 ) -> None:
     """
     Create constraints and indexes for Domain nodes.
@@ -65,7 +64,7 @@ def create_domain_constraints(
 
 
 def create_technology_constraints(
-    driver, database: Optional[str] = None, logger: Optional[logging.Logger] = None
+    driver, database: str | None = None, logger: logging.Logger | None = None
 ) -> None:
     """
     Create constraints for Technology nodes.
@@ -85,7 +84,7 @@ def create_technology_constraints(
 
 
 def create_company_constraints(
-    driver, database: Optional[str] = None, logger: Optional[logging.Logger] = None
+    driver, database: str | None = None, logger: logging.Logger | None = None
 ) -> None:
     """
     Create constraints and indexes for Company nodes.
@@ -103,12 +102,16 @@ def create_company_constraints(
         "CREATE INDEX company_industry IF NOT EXISTS FOR (c:Company) ON (c.industry)",
         "CREATE INDEX company_sic_code IF NOT EXISTS FOR (c:Company) ON (c.sic_code)",
         "CREATE INDEX company_naics_code IF NOT EXISTS FOR (c:Company) ON (c.naics_code)",
+        # Indexes for filing metadata
+        "CREATE INDEX company_filing_date IF NOT EXISTS FOR (c:Company) ON (c.filing_date)",
+        "CREATE INDEX company_filing_year IF NOT EXISTS FOR (c:Company) ON (c.filing_year)",
+        "CREATE INDEX company_accession_number IF NOT EXISTS FOR (c:Company) ON (c.accession_number)",
     ]
     _run_constraints(driver, constraints, database=database, log=logger)
 
 
 def create_bootstrap_constraints(
-    driver, database: Optional[str] = None, logger: Optional[logging.Logger] = None
+    driver, database: str | None = None, logger: logging.Logger | None = None
 ) -> None:
     """
     Create all constraints needed for bootstrap (Domain + Technology).

@@ -51,8 +51,8 @@ def compute_domain_similarity(
 
     try:
         import numpy as np
-    except ImportError:
-        raise ImportError("numpy not available. Install with: pip install numpy")
+    except ImportError as err:
+        raise ImportError("numpy not available. Install with: pip install numpy") from err
 
     logger.info("")
     logger.info("=" * 70)

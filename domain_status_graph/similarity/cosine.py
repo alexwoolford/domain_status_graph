@@ -6,7 +6,6 @@ Used by both Domain and Company similarity calculations.
 """
 
 import logging
-from typing import Dict, List, Optional, Tuple
 
 import numpy as np
 from numpy.typing import NDArray
@@ -17,7 +16,7 @@ logger = logging.getLogger(__name__)
 
 
 def validate_embedding(
-    embedding: List[float],
+    embedding: list[float],
     expected_dimension: int = EMBEDDING_DIMENSION,
 ) -> bool:
     """
@@ -69,7 +68,7 @@ def validate_similarity_score(score: float) -> bool:
 
 
 def compute_cosine_similarity_matrix(
-    embeddings: List[List[float]],
+    embeddings: list[list[float]],
 ) -> NDArray[np.float32]:
     """
     Compute pairwise cosine similarity matrix for a list of embeddings.
@@ -94,15 +93,15 @@ def compute_cosine_similarity_matrix(
     # Compute similarity matrix
     similarity = np.dot(normalized, normalized.T)
 
-    return similarity
+    return np.array(similarity, dtype=np.float32)
 
 
 def find_top_k_similar_pairs(
-    keys: List[str],
-    embeddings: List[List[float]],
+    keys: list[str],
+    embeddings: list[list[float]],
     similarity_threshold: float = 0.7,
     top_k: int = 50,
-) -> Dict[Tuple[str, str], float]:
+) -> dict[tuple[str, str], float]:
     """
     Find top-k similar pairs above a threshold.
 
@@ -126,7 +125,7 @@ def find_top_k_similar_pairs(
     similarity_matrix = compute_cosine_similarity_matrix(embeddings)
 
     # Collect pairs above threshold
-    pairs: Dict[Tuple[str, str], float] = {}
+    pairs: dict[tuple[str, str], float] = {}
 
     for i, key_i in enumerate(keys):
         # Get similarities for this item
@@ -160,9 +159,9 @@ def compute_similarity_for_node_type(
     embedding_property: str,
     similarity_threshold: float = 0.7,
     top_k: int = 50,
-    database: Optional[str] = None,
-    logger_instance: Optional[logging.Logger] = None,
-) -> Dict[Tuple[str, str], float]:
+    database: str | None = None,
+    logger_instance: logging.Logger | None = None,
+) -> dict[tuple[str, str], float]:
     """
     Compute pairwise similarity for all nodes of a given type.
 
@@ -220,13 +219,13 @@ def compute_similarity_for_node_type(
 
 def write_similarity_relationships(
     driver,
-    pairs: Dict[Tuple[str, str], float],
+    pairs: dict[tuple[str, str], float],
     node_label: str,
     key_property: str,
     relationship_type: str,
-    database: Optional[str] = None,
+    database: str | None = None,
     batch_size: int = 1000,
-    logger_instance: Optional[logging.Logger] = None,
+    logger_instance: logging.Logger | None = None,
 ) -> int:
     """
     Write similarity relationships to Neo4j.

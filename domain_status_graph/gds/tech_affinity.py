@@ -6,7 +6,6 @@ Example: WordPress + MySQL, Google Analytics + Google Tag Manager.
 """
 
 import logging
-from typing import Optional
 
 import pandas as pd
 
@@ -23,11 +22,11 @@ logger = logging.getLogger(__name__)
 def compute_tech_affinity_bundling(
     gds,
     driver,
-    database: Optional[str] = None,
+    database: str | None = None,
     similarity_cutoff: float = DEFAULT_SIMILARITY_CUTOFF,
     top_k: int = DEFAULT_TOP_K,
     batch_size: int = BATCH_SIZE_LARGE,
-    logger: Optional[logging.Logger] = None,
+    logger: logging.Logger | None = None,
 ) -> int:
     """
     Technology Affinity and Bundling.
@@ -110,17 +109,14 @@ def compute_tech_affinity_bundling(
             else:
                 for row in similarity_result:
                     if isinstance(row, dict):
+                        node_id1 = row.get("nodeId1") or row.get("node1") or row.get("source")
+                        node_id2 = row.get("nodeId2") or row.get("node2") or row.get("target")
+                        sim_val = row.get("similarity") or row.get("score") or row.get("weight")
                         batch.append(
                             {
-                                "node_id1": int(
-                                    row.get("nodeId1", row.get("node1", row.get("source")))
-                                ),
-                                "node_id2": int(
-                                    row.get("nodeId2", row.get("node2", row.get("target")))
-                                ),
-                                "similarity": float(
-                                    row.get("similarity", row.get("score", row.get("weight")))
-                                ),
+                                "node_id1": int(node_id1) if node_id1 is not None else 0,
+                                "node_id2": int(node_id2) if node_id2 is not None else 0,
+                                "similarity": float(sim_val) if sim_val is not None else 0.0,
                             }
                         )
                     else:

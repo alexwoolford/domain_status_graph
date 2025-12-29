@@ -4,6 +4,7 @@ Unit tests for domain_status_graph.ingest.sqlite_readers module.
 
 import sqlite3
 import tempfile
+from contextlib import closing
 from pathlib import Path
 
 import pytest
@@ -24,99 +25,100 @@ def test_db():
     with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as f:
         db_path = Path(f.name)
 
-    conn = sqlite3.connect(db_path)
-    cursor = conn.cursor()
+    # Use closing() to ensure connection is closed in Python 3.13+
+    with closing(sqlite3.connect(db_path)) as conn:
+        cursor = conn.cursor()
 
-    # Create tables
-    cursor.execute(
+        # Create tables
+        # Note: Schema matches production - uses initial_domain (not domain)
+        cursor.execute(
+            """
+            CREATE TABLE url_status (
+                id INTEGER PRIMARY KEY,
+                final_domain TEXT,
+                initial_domain TEXT,
+                http_status INTEGER,
+                http_status_text TEXT,
+                response_time_seconds REAL,
+                observed_at_ms INTEGER,
+                is_mobile_friendly INTEGER,
+                spf_record TEXT,
+                dmarc_record TEXT,
+                title TEXT,
+                keywords TEXT,
+                description TEXT
+            )
         """
-        CREATE TABLE url_status (
-            id INTEGER PRIMARY KEY,
-            final_domain TEXT,
-            domain TEXT,
-            status INTEGER,
-            status_description TEXT,
-            response_time REAL,
-            timestamp INTEGER,
-            is_mobile_friendly INTEGER,
-            spf_record TEXT,
-            dmarc_record TEXT,
-            title TEXT,
-            keywords TEXT,
-            description TEXT
         )
-    """
-    )
 
-    cursor.execute(
+        cursor.execute(
+            """
+            CREATE TABLE url_technologies (
+                id INTEGER PRIMARY KEY,
+                url_status_id INTEGER,
+                technology_name TEXT,
+                technology_category TEXT,
+                FOREIGN KEY (url_status_id) REFERENCES url_status(id)
+            )
         """
-        CREATE TABLE url_technologies (
-            id INTEGER PRIMARY KEY,
-            url_status_id INTEGER,
-            technology_name TEXT,
-            technology_category TEXT,
-            FOREIGN KEY (url_status_id) REFERENCES url_status(id)
         )
-    """
-    )
 
-    cursor.execute(
+        cursor.execute(
+            """
+            CREATE TABLE url_whois (
+                id INTEGER PRIMARY KEY,
+                url_status_id INTEGER,
+                creation_date_ms INTEGER,
+                expiration_date_ms INTEGER,
+                registrar TEXT,
+                registrant_country TEXT,
+                registrant_org TEXT,
+                FOREIGN KEY (url_status_id) REFERENCES url_status(id)
+            )
         """
-        CREATE TABLE url_whois (
-            id INTEGER PRIMARY KEY,
-            url_status_id INTEGER,
-            creation_date TEXT,
-            expiration_date TEXT,
-            registrar TEXT,
-            registrant_country TEXT,
-            registrant_org TEXT,
-            FOREIGN KEY (url_status_id) REFERENCES url_status(id)
         )
-    """
-    )
 
-    # Insert sample data
-    cursor.execute(
+        # Insert sample data
+        cursor.execute(
+            """
+            INSERT INTO url_status (id, final_domain, initial_domain, http_status, http_status_text, title, description)
+            VALUES (1, 'example.com', 'www.example.com', 200, 'OK', 'Example', 'An example domain')
         """
-        INSERT INTO url_status (id, final_domain, domain, status, title, description)
-        VALUES (1, 'example.com', 'www.example.com', 200, 'Example', 'An example domain')
-    """
-    )
-    cursor.execute(
+        )
+        cursor.execute(
+            """
+            INSERT INTO url_status (id, final_domain, initial_domain, http_status, http_status_text, title)
+            VALUES (2, 'test.com', 'test.com', 200, 'OK', 'Test Site')
         """
-        INSERT INTO url_status (id, final_domain, domain, status, title)
-        VALUES (2, 'test.com', 'test.com', 200, 'Test Site')
-    """
-    )
-    cursor.execute(
+        )
+        cursor.execute(
+            """
+            INSERT INTO url_status (id, final_domain, initial_domain, http_status, http_status_text)
+            VALUES (3, 'another.com', 'another.com', 404, 'Not Found')
         """
-        INSERT INTO url_status (id, final_domain, domain, status)
-        VALUES (3, 'another.com', 'another.com', 404)
-    """
-    )
+        )
 
-    # Insert technologies
-    cursor.execute(
+        # Insert technologies
+        cursor.execute(
+            """
+            INSERT INTO url_technologies (url_status_id, technology_name, technology_category)
+            VALUES (1, 'WordPress', 'CMS')
         """
-        INSERT INTO url_technologies (url_status_id, technology_name, technology_category)
-        VALUES (1, 'WordPress', 'CMS')
-    """
-    )
-    cursor.execute(
+        )
+        cursor.execute(
+            """
+            INSERT INTO url_technologies (url_status_id, technology_name, technology_category)
+            VALUES (1, 'jQuery', 'JavaScript')
         """
-        INSERT INTO url_technologies (url_status_id, technology_name, technology_category)
-        VALUES (1, 'jQuery', 'JavaScript')
-    """
-    )
-    cursor.execute(
+        )
+        cursor.execute(
+            """
+            INSERT INTO url_technologies (url_status_id, technology_name, technology_category)
+            VALUES (2, 'React', 'JavaScript')
         """
-        INSERT INTO url_technologies (url_status_id, technology_name, technology_category)
-        VALUES (2, 'React', 'JavaScript')
-    """
-    )
+        )
 
-    conn.commit()
-    conn.close()
+        conn.commit()
 
     yield db_path
 
@@ -195,18 +197,18 @@ def test_get_domain_count_zero():
     with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as f:
         db_path = Path(f.name)
 
-    conn = sqlite3.connect(db_path)
-    cursor = conn.cursor()
-    cursor.execute(
+    # Use closing() to ensure connection is closed in Python 3.13+
+    with closing(sqlite3.connect(db_path)) as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            CREATE TABLE url_status (
+                id INTEGER PRIMARY KEY,
+                final_domain TEXT
+            )
         """
-        CREATE TABLE url_status (
-            id INTEGER PRIMARY KEY,
-            final_domain TEXT
         )
-    """
-    )
-    conn.commit()
-    conn.close()
+        conn.commit()
 
     try:
         count = get_domain_count(db_path)

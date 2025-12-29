@@ -18,12 +18,12 @@ Usage:
 import argparse
 import sys
 
+from domain_status_graph.cache import get_cache
 from domain_status_graph.cli import (
     get_driver_and_database,
     setup_logging,
     verify_neo4j_connection,
 )
-from domain_status_graph.cache import get_cache
 from domain_status_graph.embeddings import (
     EMBEDDING_MODEL,
     create_embedding,
@@ -92,8 +92,8 @@ def validate_keyword_embeddings(driver, database: str, logger) -> bool:
     logger.info("Pairwise similarities (should be higher for related domains):")
     logger.info("-" * 50)
 
-    for i, (d1, k1, e1) in enumerate(embeddings):
-        for j, (d2, k2, e2) in enumerate(embeddings):
+    for i, (d1, _k1, e1) in enumerate(embeddings):
+        for j, (d2, _k2, e2) in enumerate(embeddings):
             if i < j:
                 # Cosine similarity
                 sim = np.dot(e1, e2) / (np.linalg.norm(e1) * np.linalg.norm(e2))
@@ -214,6 +214,7 @@ def main():
         create_fn=create_fn,
         database=database,
         execute=True,
+        log=logger,  # Pass logger for proper output
     )
 
     logger.info(f"Processed: {processed}, Created: {created}, Cached: {cached}, Failed: {failed}")

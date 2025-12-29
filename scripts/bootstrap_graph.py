@@ -16,6 +16,7 @@ Usage:
 """
 
 import argparse
+import logging
 import sys
 from pathlib import Path
 
@@ -40,17 +41,20 @@ from domain_status_graph.ingest import (
 from domain_status_graph.neo4j import create_bootstrap_constraints
 
 
-def dry_run_plan(db_path: Path):
+def dry_run_plan(db_path: Path, logger: logging.Logger = None):
     """Print the ETL plan without executing."""
-    print("=" * 70)
-    print("ETL PLAN (Dry Run)")
-    print("=" * 70)
-    print()
-    print("This script loads only Domain and Technology nodes + USES relationships.")
-    print("This is all that's needed for the two useful GDS features:")
-    print("  1. Technology Adoption Prediction (Personalized PageRank)")
-    print("  2. Technology Affinity Bundling (Node Similarity)")
-    print()
+    if logger is None:
+        logger = logging.getLogger(__name__)
+
+    logger.info("=" * 70)
+    logger.info("ETL PLAN (Dry Run)")
+    logger.info("=" * 70)
+    logger.info("")
+    logger.info("This script loads only Domain and Technology nodes + USES relationships.")
+    logger.info("This is all that's needed for the two useful GDS features:")
+    logger.info("  1. Technology Adoption Prediction (Personalized PageRank)")
+    logger.info("  2. Technology Affinity Bundling (Node Similarity)")
+    logger.info("")
 
     # Get counts
     domain_count = get_domain_count(db_path)
@@ -58,22 +62,24 @@ def dry_run_plan(db_path: Path):
     uses_count = get_uses_relationship_count(db_path)
     metadata_counts = get_domain_metadata_counts(db_path)
 
-    print("Data to be loaded:")
-    print("-" * 70)
-    print(f"  Domains: {domain_count:,}")
+    logger.info("Data to be loaded:")
+    logger.info("-" * 70)
+    logger.info(f"  Domains: {domain_count:,}")
     title_pct = metadata_counts["with_title"] / metadata_counts["total"] * 100
-    print(f"    - With title: {metadata_counts['with_title']:,} ({title_pct:.1f}%)")
+    logger.info(f"    - With title: {metadata_counts['with_title']:,} ({title_pct:.1f}%)")
     keywords_pct = metadata_counts["with_keywords"] / metadata_counts["total"] * 100
-    print(f"    - With keywords: {metadata_counts['with_keywords']:,} ({keywords_pct:.1f}%)")
+    logger.info(f"    - With keywords: {metadata_counts['with_keywords']:,} ({keywords_pct:.1f}%)")
     desc_pct = metadata_counts["with_description"] / metadata_counts["total"] * 100
-    print(f"    - With description: {metadata_counts['with_description']:,} ({desc_pct:.1f}%)")
-    print(f"  Technologies: {tech_count:,}")
-    print(f"  USES relationships: {uses_count:,}")
+    logger.info(
+        f"    - With description: {metadata_counts['with_description']:,} ({desc_pct:.1f}%)"
+    )
+    logger.info(f"  Technologies: {tech_count:,}")
+    logger.info(f"  USES relationships: {uses_count:,}")
 
-    print()
-    print("=" * 70)
-    print("To execute this plan, run: python scripts/bootstrap_graph.py --execute")
-    print("=" * 70)
+    logger.info("")
+    logger.info("=" * 70)
+    logger.info("To execute this plan, run: python scripts/bootstrap_graph.py --execute")
+    logger.info("=" * 70)
 
 
 def main():
@@ -92,7 +98,7 @@ def main():
 
     # Dry-run mode (default)
     if not args.execute:
-        dry_run_plan(db_path)
+        dry_run_plan(db_path, logger=logger)
         return
 
     # Execute mode
@@ -146,14 +152,16 @@ def main():
             result = session.run(
                 "MATCH (n) RETURN labels(n)[0] AS label, count(*) AS count ORDER BY count DESC"
             )
-            logger.info("\nNode counts:")
+            logger.info("")
+            logger.info("Node counts:")
             for record in result:
                 logger.info(f"  {record['label']:20s}: {record['count']:,}")
 
             result = session.run(
                 "MATCH ()-[r]->() RETURN type(r) AS type, count(*) AS count ORDER BY count DESC"
             )
-            logger.info("\nRelationship counts:")
+            logger.info("")
+            logger.info("Relationship counts:")
             for record in result:
                 logger.info(f"  {record['type']:20s}: {record['count']:,}")
 

@@ -5,7 +5,6 @@ Provides helper functions for Graph Data Science operations.
 """
 
 import logging
-from typing import Optional
 
 import pandas as pd
 
@@ -32,7 +31,7 @@ def safe_drop_graph(gds, graph_name: str) -> bool:
 
 
 def cleanup_leftover_graphs(
-    gds, database: Optional[str] = None, logger: Optional[logging.Logger] = None
+    gds, database: str | None = None, logger: logging.Logger | None = None
 ) -> None:
     """
     Drop any leftover graph projections from previous runs.
@@ -61,7 +60,7 @@ def cleanup_leftover_graphs(
         logger.warning(f"⚠ Warning: Could not clean up leftover graphs: {e}")
 
 
-def get_gds_client(driver, database: Optional[str] = None):
+def get_gds_client(driver, database: str | None = None):
     """
     Get GraphDataScience client connection from existing driver.
 
@@ -77,10 +76,10 @@ def get_gds_client(driver, database: Optional[str] = None):
     """
     try:
         from graphdatascience import GraphDataScience
-    except ImportError:
+    except ImportError as err:
         raise ImportError(
             "graphdatascience not available. Install with: pip install graphdatascience"
-        )
+        ) from err
 
     from domain_status_graph.config import (
         get_neo4j_password,

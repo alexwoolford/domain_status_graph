@@ -18,15 +18,24 @@ Data Sources:
 - Yahoo Finance: Sector, industry, market cap, revenue, employees, HQ location
 - Wikidata: Supplemental data (optional, lower priority)
 
+Performance:
+- Uses parallel processing with ThreadPoolExecutor
+- SEC and Yahoo APIs have independent rate limits (10 req/sec each)
+- Parallel processing allows ~2x throughput vs sequential
+- First run: ~15-20 minutes for 5000 companies
+- Subsequent runs: seconds (all cached for 30 days)
+
 Usage:
     python scripts/enrich_company_properties.py          # Dry-run (plan only)
     python scripts/enrich_company_properties.py --execute  # Actually enrich data
+    python scripts/enrich_company_properties.py --execute --workers 20  # More parallelism
 """
 
 import argparse
 import sys
+import threading
 import time
-from typing import Dict, List, Optional
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import requests
 
@@ -43,27 +52,29 @@ from domain_status_graph.company.enrichment import (
     fetch_yahoo_finance_info,
     merge_company_data,
 )
-from domain_status_graph.constants import BATCH_SIZE_SMALL
-from domain_status_graph.neo4j import create_company_constraints
+from domain_status_graph.constants import BATCH_SIZE_SMALL, CACHE_TTL_COMPANY_PROPERTIES
+from domain_status_graph.neo4j import clean_properties_batch, create_company_constraints
 
 # Rate limiting for Yahoo Finance (be conservative)
-_yahoo_last_call = 0
-_yahoo_min_interval = 0.1  # 10 requests per second max
+# 10 requests per second max
+from domain_status_graph.utils.rate_limiting import get_rate_limiter
+
+_yahoo_rate_limiter = get_rate_limiter("yahoo_finance", requests_per_second=10.0)
+
+# Default number of parallel workers
+# With rate limits of 10 req/sec per API and ~200ms latency per call,
+# 20 workers keeps both APIs saturated at their rate limits
+DEFAULT_WORKERS = 20
 
 
 def rate_limit_yahoo():
     """Simple rate limiting for Yahoo Finance."""
-    global _yahoo_last_call
-    current_time = time.time()
-    elapsed = current_time - _yahoo_last_call
-    if elapsed < _yahoo_min_interval:
-        time.sleep(_yahoo_min_interval - elapsed)
-    _yahoo_last_call = time.time()
+    _yahoo_rate_limiter()
 
 
 def enrich_company(
     cik: str, ticker: str, name: str, session: requests.Session, cache
-) -> tuple[Optional[Dict], bool]:
+) -> tuple[dict | None, bool]:
     """
     Enrich a single company with data from all sources.
 
@@ -101,7 +112,7 @@ def enrich_company(
     # Store final merged result in cache (TTL: 30 days)
     # Cache even if partial - avoids re-fetching if one source fails
     if enriched:
-        cache.set("company_properties", cache_key, enriched, ttl_days=30)
+        cache.set("company_properties", cache_key, enriched, ttl_days=CACHE_TTL_COMPANY_PROPERTIES)
         return enriched, False
 
     # If no data at all, return None (don't cache negative results)
@@ -116,9 +127,14 @@ def enrich_all_companies(
     database: str = None,
     execute: bool = False,
     logger=None,
+    max_workers: int = DEFAULT_WORKERS,
 ) -> int:
     """
     Enrich all Company nodes with properties from public data sources.
+
+    Uses parallel processing to maximize throughput while respecting rate limits.
+    SEC and Yahoo APIs have independent rate limits, so calling them in parallel
+    roughly doubles throughput compared to sequential processing.
 
     Args:
         driver: Neo4j driver
@@ -127,6 +143,7 @@ def enrich_all_companies(
         database: Neo4j database name
         execute: If False, only print plan
         logger: Logger instance
+        max_workers: Number of parallel worker threads (default: 20)
 
     Returns:
         Number of companies enriched
@@ -137,8 +154,8 @@ def enrich_all_companies(
         logger = logging.getLogger(__name__)
 
     # Get all companies from Neo4j
-    with driver.session(database=database) as session:
-        result = session.run(
+    with driver.session(database=database) as neo4j_session:
+        result = neo4j_session.run(
             """
             MATCH (c:Company)
             RETURN c.cik AS cik, c.ticker AS ticker, c.name AS name
@@ -158,105 +175,181 @@ def enrich_all_companies(
         logger.info("DRY RUN MODE")
         logger.info("=" * 80)
         logger.info(f"Would enrich {len(companies)} companies")
+        logger.info(f"Workers: {max_workers} (parallel threads)")
         logger.info("Sources: SEC EDGAR, Yahoo Finance, Wikidata")
         logger.info("=" * 80)
         return 0
 
-    # Create HTTP session for SEC API
-    session = requests.Session()
-    adapter = requests.adapters.HTTPAdapter(
-        pool_connections=10,
-        pool_maxsize=10,
-        max_retries=requests.adapters.Retry(total=3, backoff_factor=0.3),
-    )
-    session.mount("http://", adapter)
-    session.mount("https://", adapter)
+    # Thread-local storage for HTTP sessions (one per thread)
+    thread_local = threading.local()
 
-    # Enrich companies
-    enriched_count = 0
-    failed_count = 0
-    cached_count = 0
-    update_batch = []
+    def get_session():
+        """Get or create thread-local HTTP session."""
+        if not hasattr(thread_local, "session"):
+            session = requests.Session()
+            adapter = requests.adapters.HTTPAdapter(
+                pool_connections=10,
+                pool_maxsize=10,
+                max_retries=requests.adapters.Retry(total=3, backoff_factor=0.3),
+            )
+            session.mount("http://", adapter)
+            session.mount("https://", adapter)
+            thread_local.session = session
+        return thread_local.session
 
-    logger.info("=" * 80)
-    logger.info("Enriching Company Properties")
-    logger.info("=" * 80)
+    # Thread-safe counters
+    counters_lock = threading.Lock()
+    counters = {"enriched": 0, "failed": 0, "cached": 0, "processed": 0}
 
-    for i, company in enumerate(companies, 1):
+    # Thread-safe results collection
+    results_lock = threading.Lock()
+    results = []
+
+    def process_company(company: dict) -> tuple[str, dict | None, bool]:
+        """Process a single company (thread worker function)."""
         cik = company.get("cik")
         ticker = company.get("ticker", "")
         name = company.get("name", "")
 
         if not cik:
-            logger.warning(f"Skipping company without CIK: {ticker}")
-            failed_count += 1
-            continue
+            return cik, None, False
 
-        # Enrich company (returns tuple: data, was_cached)
-        enriched_data, was_cached = enrich_company(cik, ticker, name, session, cache)
+        # Get thread-local HTTP session
+        http_session = get_session()
 
-        if not enriched_data:
-            failed_count += 1
-            logger.debug(f"Failed to enrich {ticker} (CIK: {cik})")
-            continue
+        # Enrich company (rate limiters are thread-safe)
+        enriched_data, was_cached = enrich_company(cik, ticker, name, http_session, cache)
 
-        if was_cached:
-            cached_count += 1
+        return cik, enriched_data, was_cached
 
-        enriched_count += 1
+    logger.info("=" * 80)
+    logger.info("Enriching Company Properties (Parallel)")
+    logger.info("=" * 80)
+    logger.info(f"  Workers: {max_workers} parallel threads")
+    logger.info("  Rate limits: SEC 10/sec, Yahoo 10/sec (independent)")
+    logger.info(
+        f"  Estimated time: ~{len(companies) // 10} seconds ({len(companies) // 600} minutes)"
+    )
+    logger.info("")
 
-        # Add to batch for Neo4j update
-        if enriched_data:
-            update_batch.append({"cik": cik, **enriched_data})
+    start_time = time.time()
+    last_log_time = start_time
 
-        # Update Neo4j in batches
-        if len(update_batch) >= batch_size or i == len(companies):
-            if update_batch:
-                _update_companies_batch(driver, update_batch, database=database, logger=logger)
-                logger.info(
-                    f"  Updated {len(update_batch)} companies in Neo4j... ({i}/{len(companies)})"
-                )
-                update_batch = []
+    # Process companies in parallel
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        # Submit all tasks
+        future_to_company = {
+            executor.submit(process_company, company): company for company in companies
+        }
 
+        # Process results as they complete
+        for future in as_completed(future_to_company):
+            company = future_to_company[future]
+            try:
+                cik, enriched_data, was_cached = future.result()
+
+                with counters_lock:
+                    counters["processed"] += 1
+
+                    if enriched_data is None:
+                        counters["failed"] += 1
+                    else:
+                        counters["enriched"] += 1
+                        if was_cached:
+                            counters["cached"] += 1
+
+                # Collect result for Neo4j batch update
+                if enriched_data:
+                    batch_to_update = None
+                    with results_lock:
+                        results.append({"cik": cik, **enriched_data})
+
+                        # Batch update to Neo4j when we have enough
+                        if len(results) >= batch_size:
+                            batch_to_update = results.copy()
+                            results.clear()
+
+                    # Update Neo4j outside the lock to avoid blocking other threads
+                    if batch_to_update:
+                        _update_companies_batch(
+                            driver, batch_to_update, database=database, logger=logger
+                        )
+                        with counters_lock:
+                            logger.info(
+                                f"  Updated {len(batch_to_update)} companies in Neo4j... "
+                                f"({counters['processed']}/{len(companies)})"
+                            )
+
+                # Progress logging every 5 seconds
+                current_time = time.time()
+                if current_time - last_log_time >= 5:
+                    with counters_lock:
+                        elapsed = current_time - start_time
+                        rate = counters["processed"] / elapsed if elapsed > 0 else 0
+                        remaining = (
+                            (len(companies) - counters["processed"]) / rate if rate > 0 else 0
+                        )
+                        cache_pct = (
+                            (counters["cached"] / counters["processed"] * 100)
+                            if counters["processed"] > 0
+                            else 0
+                        )
+                        logger.info(
+                            f"  Progress: {counters['processed']}/{len(companies)} "
+                            f"({counters['processed']/len(companies)*100:.1f}%) | "
+                            f"Rate: {rate:.1f}/sec | ETA: {remaining/60:.1f}min | "
+                            f"Cache hits: {counters['cached']} ({cache_pct:.0f}%)"
+                        )
+                    last_log_time = current_time
+
+            except Exception as e:
+                logger.warning(f"Error processing {company.get('ticker', 'unknown')}: {e}")
+                with counters_lock:
+                    counters["processed"] += 1
+                    counters["failed"] += 1
+
+    # Final batch update
+    with results_lock:
+        if results:
+            _update_companies_batch(driver, results, database=database, logger=logger)
+            logger.info(f"  Updated final {len(results)} companies in Neo4j")
+
+    elapsed = time.time() - start_time
     logger.info("=" * 80)
     logger.info("Enrichment Complete")
     logger.info("=" * 80)
     logger.info(f"  Total companies: {len(companies)}")
-    logger.info(f"  Enriched: {enriched_count}")
-    logger.info(f"  From cache: {cached_count}")
-    logger.info(f"  Failed: {failed_count}")
+    logger.info(f"  Enriched: {counters['enriched']}")
+    logger.info(f"  From cache: {counters['cached']}")
+    logger.info(f"  Failed: {counters['failed']}")
+    logger.info(f"  Time: {elapsed:.1f}s ({elapsed/60:.1f} min)")
+    logger.info(f"  Rate: {len(companies)/elapsed:.1f} companies/sec")
 
-    return enriched_count
+    return counters["enriched"]
 
 
-def _update_companies_batch(driver, batch: List[Dict], database: str = None, logger=None) -> None:
+def _update_companies_batch(driver, batch: list[dict], database: str = None, logger=None) -> None:
     """Update a batch of Company nodes in Neo4j."""
     if logger is None:
         import logging
 
         logger = logging.getLogger(__name__)
 
+    # Clean empty strings and None values - Neo4j doesn't store nulls
+    # This prevents storing "" values that should be absent
+    cleaned_batch = clean_properties_batch(batch)
+
+    # Use SET c += to merge only non-empty properties from the cleaned batch
+    # The cik is used for matching, other properties are merged
     query = """
     UNWIND $batch AS company
     MATCH (c:Company {cik: company.cik})
-    SET c.sic_code = company.sic_code,
-        c.naics_code = company.naics_code,
-        c.sector = company.sector,
-        c.industry = company.industry,
-        c.market_cap = company.market_cap,
-        c.revenue = company.revenue,
-        c.employees = company.employees,
-        c.headquarters_city = company.headquarters_city,
-        c.headquarters_state = company.headquarters_state,
-        c.headquarters_country = company.headquarters_country,
-        c.founded_year = company.founded_year,
-        c.data_source = company.data_source,
-        c.data_updated_at = company.data_updated_at
+    SET c += company
     """
 
     try:
         with driver.session(database=database) as session:
-            session.run(query, batch=batch)
+            session.run(query, batch=cleaned_batch)
     except Exception as e:
         logger.error(f"Error updating companies batch: {e}")
         raise
@@ -273,6 +366,12 @@ def main():
         type=int,
         default=BATCH_SIZE_SMALL,
         help=f"Batch size for Neo4j updates (default: {BATCH_SIZE_SMALL})",
+    )
+    parser.add_argument(
+        "--workers",
+        type=int,
+        default=DEFAULT_WORKERS,
+        help=f"Number of parallel worker threads (default: {DEFAULT_WORKERS})",
     )
 
     args = parser.parse_args()
@@ -291,6 +390,7 @@ def main():
                 database=database,
                 execute=False,
                 logger=logger,
+                max_workers=args.workers,
             )
         finally:
             driver.close()
@@ -320,6 +420,7 @@ def main():
             database=database,
             execute=True,
             logger=logger,
+            max_workers=args.workers,
         )
 
         logger.info("\n" + "=" * 80)

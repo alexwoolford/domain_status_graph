@@ -6,12 +6,12 @@ and return structured data that can be loaded into Neo4j.
 """
 
 import sqlite3
-from datetime import datetime, timezone
+from contextlib import closing
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import Dict, List
 
 
-def read_domains(db_path: Path) -> List[Dict]:
+def read_domains(db_path: Path) -> list[dict]:
     """
     Read Domain data from SQLite url_status table.
 
@@ -21,7 +21,9 @@ def read_domains(db_path: Path) -> List[Dict]:
     Returns:
         List of domain dictionaries with all properties
     """
-    with sqlite3.connect(db_path) as conn:
+    # Use closing() to ensure connection is closed in Python 3.13+
+    # The 'with sqlite3.connect()' context manager only manages transactions, not connection closure
+    with closing(sqlite3.connect(db_path)) as conn:
         conn.row_factory = sqlite3.Row
         cursor = conn.cursor()
         cursor.execute(
@@ -63,7 +65,7 @@ def read_domains(db_path: Path) -> List[Dict]:
             observed_ms = domain_dict.get("observed_at_ms")
             if observed_ms:
                 domain_dict["timestamp"] = datetime.fromtimestamp(
-                    observed_ms / 1000.0, tz=timezone.utc
+                    observed_ms / 1000.0, tz=UTC
                 ).isoformat()
             else:
                 domain_dict["timestamp"] = None
@@ -71,14 +73,14 @@ def read_domains(db_path: Path) -> List[Dict]:
             creation_ms = domain_dict.get("creation_date_ms")
             if creation_ms:
                 domain_dict["creation_date"] = datetime.fromtimestamp(
-                    creation_ms / 1000.0, tz=timezone.utc
+                    creation_ms / 1000.0, tz=UTC
                 ).isoformat()
             else:
                 domain_dict["creation_date"] = None
             expiration_ms = domain_dict.get("expiration_date_ms")
             if expiration_ms:
                 domain_dict["expiration_date"] = datetime.fromtimestamp(
-                    expiration_ms / 1000.0, tz=timezone.utc
+                    expiration_ms / 1000.0, tz=UTC
                 ).isoformat()
             else:
                 domain_dict["expiration_date"] = None
@@ -86,7 +88,7 @@ def read_domains(db_path: Path) -> List[Dict]:
         return domains
 
 
-def read_technologies(db_path: Path) -> List[Dict]:
+def read_technologies(db_path: Path) -> list[dict]:
     """
     Read Technology data and domain-technology mappings from SQLite.
 
@@ -96,7 +98,8 @@ def read_technologies(db_path: Path) -> List[Dict]:
     Returns:
         List of dictionaries with final_domain, technology_name, technology_category
     """
-    with sqlite3.connect(db_path) as conn:
+    # Use closing() to ensure connection is closed in Python 3.13+
+    with closing(sqlite3.connect(db_path)) as conn:
         conn.row_factory = sqlite3.Row
         cursor = conn.cursor()
         cursor.execute(
@@ -112,17 +115,20 @@ def read_technologies(db_path: Path) -> List[Dict]:
 
 def get_domain_count(db_path: Path) -> int:
     """Get count of distinct domains in database."""
-    with sqlite3.connect(db_path) as conn:
+    # Use closing() to ensure connection is closed in Python 3.13+
+    with closing(sqlite3.connect(db_path)) as conn:
         cursor = conn.cursor()
         cursor.execute(
             "SELECT COUNT(DISTINCT final_domain) FROM url_status WHERE final_domain IS NOT NULL"
         )
-        return cursor.fetchone()[0]
+        result = cursor.fetchone()[0]
+        return int(result) if result is not None else 0
 
 
 def get_technology_count(db_path: Path) -> int:
     """Get count of distinct technologies in database."""
-    with sqlite3.connect(db_path) as conn:
+    # Use closing() to ensure connection is closed in Python 3.13+
+    with closing(sqlite3.connect(db_path)) as conn:
         cursor = conn.cursor()
         cursor.execute(
             """
@@ -131,12 +137,14 @@ def get_technology_count(db_path: Path) -> int:
             WHERE ut.technology_name IS NOT NULL AND ut.technology_name != ''
             """
         )
-        return cursor.fetchone()[0]
+        result = cursor.fetchone()[0]
+        return int(result) if result is not None else 0
 
 
 def get_uses_relationship_count(db_path: Path) -> int:
     """Get count of domain-technology relationships in database."""
-    with sqlite3.connect(db_path) as conn:
+    # Use closing() to ensure connection is closed in Python 3.13+
+    with closing(sqlite3.connect(db_path)) as conn:
         cursor = conn.cursor()
         cursor.execute(
             """
@@ -145,17 +153,19 @@ def get_uses_relationship_count(db_path: Path) -> int:
             WHERE ut.technology_name IS NOT NULL AND ut.technology_name != ''
             """
         )
-        return cursor.fetchone()[0]
+        result = cursor.fetchone()[0]
+        return int(result) if result is not None else 0
 
 
-def get_domain_metadata_counts(db_path: Path) -> Dict[str, int]:
+def get_domain_metadata_counts(db_path: Path) -> dict[str, int]:
     """
     Get counts of domains with metadata (title, keywords, description).
 
     Returns:
         Dictionary with keys: total, with_title, with_keywords, with_description
     """
-    with sqlite3.connect(db_path) as conn:
+    # Use closing() to ensure connection is closed in Python 3.13+
+    with closing(sqlite3.connect(db_path)) as conn:
         cursor = conn.cursor()
 
         cursor.execute(

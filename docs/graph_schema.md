@@ -18,10 +18,12 @@ The Domain Status Graph is a focused knowledge graph that models domains and the
   - Domains: ~5,978
   - Technologies: ~566
 
-- **Total Relationships**: ~40,000
+- **Total Relationships**: ~40,000+
   - USES (Domain → Technology): ~37,343 (from bootstrap)
+  - HAS_COMPETITOR (Company → Company): ~2,100+ (from 10-K filings)
   - LIKELY_TO_ADOPT (Domain → Technology): ~varies (from GDS)
   - CO_OCCURS_WITH (Technology → Technology): ~varies (from GDS)
+  - SIMILAR_DESCRIPTION (Company → Company): ~varies (from embeddings)
 
 ---
 
@@ -199,6 +201,53 @@ LIMIT 10
 
 ---
 
+### HAS_COMPETITOR
+
+**Type**: `(Company)-[:HAS_COMPETITOR {confidence, raw_mention}]->(Company)`
+
+**Description**: Indicates that a company cited another company as a competitor in their 10-K filing. This is a **directional relationship** - it means "Company A explicitly mentioned Company B as a competitor in their SEC 10-K filing". The reverse relationship may not exist.
+
+**Data Source**: Extracted from Item 1 (Business) and Item 1A (Risk Factors) sections of 10-K filings using NLP-based entity resolution.
+
+**Properties**:
+- `confidence` (FLOAT) - Entity resolution confidence (0-1, higher = more confident match)
+- `raw_mention` (STRING) - How the competitor was mentioned in the 10-K (e.g., "Intel", "NVIDIA Corporation")
+- `source` (STRING) - Always "ten_k_filing"
+- `extracted_at` (DATETIME) - When the relationship was extracted
+
+**Example**:
+```cypher
+// Find who NVIDIA cites as competitors
+MATCH (c:Company {ticker:'NVDA'})-[r:HAS_COMPETITOR]->(comp:Company)
+RETURN comp.ticker, comp.name, r.confidence, r.raw_mention
+ORDER BY r.confidence DESC
+
+// Find who cites Intel as a competitor
+MATCH (c:Company)-[r:HAS_COMPETITOR]->(comp:Company {ticker:'INTC'})
+RETURN c.ticker, c.name, r.raw_mention
+ORDER BY c.name
+
+// Find mutual competitors (both cite each other)
+MATCH (a:Company)-[:HAS_COMPETITOR]->(b:Company)-[:HAS_COMPETITOR]->(a)
+WHERE a.ticker < b.ticker
+RETURN a.ticker, a.name, b.ticker, b.name
+```
+
+**Use Cases**:
+- Map competitive landscapes by industry
+- Find mutual competitors (bidirectional citations)
+- Identify companies that cite many competitors (transparent about competition)
+- Find the most-cited competitors (market leaders / targets)
+- Validate company similarity using explicit competitor declarations
+
+**Statistics**:
+- Total relationships: ~2,100+
+- Companies citing competitors: ~480
+- Companies cited as competitors: ~700+
+- Mutual competitor pairs: ~20+
+
+---
+
 ## Constraints and Indexes
 
 ### Constraints
@@ -206,12 +255,16 @@ LIMIT 10
 ```cypher
 CREATE CONSTRAINT domain_name IF NOT EXISTS FOR (d:Domain) REQUIRE d.final_domain IS UNIQUE;
 CREATE CONSTRAINT technology_name IF NOT EXISTS FOR (t:Technology) REQUIRE t.name IS UNIQUE;
+CREATE CONSTRAINT company_cik IF NOT EXISTS FOR (c:Company) REQUIRE c.cik IS UNIQUE;
 ```
 
 ### Indexes
 
 ```cypher
 CREATE INDEX domain_domain IF NOT EXISTS FOR (d:Domain) ON (d.domain);
+CREATE INDEX company_ticker IF NOT EXISTS FOR (c:Company) ON (c.ticker);
+CREATE INDEX company_sector IF NOT EXISTS FOR (c:Company) ON (c.sector);
+CREATE INDEX has_competitor_confidence IF NOT EXISTS FOR ()-[r:HAS_COMPETITOR]->() ON (r.confidence);
 ```
 
 ---

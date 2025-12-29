@@ -12,7 +12,6 @@ Architecture:
 - Early stopping when confidence threshold is met (2+ sources agree)
 - Rate limiting per source with proper concurrency control
 - Caching to avoid redundant API calls
-- LLM adjudication only when sources disagree
 
 Sources (in priority order):
 1. yfinance (weight: 3) - Fast, reliable, good coverage
@@ -22,326 +21,32 @@ Sources (in priority order):
 """
 
 import logging
-import os
-import time
-from collections import defaultdict
-from concurrent.futures import ThreadPoolExecutor, as_completed
-from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from threading import Lock
-from typing import Dict, List, Optional, Tuple
 
 import requests
-from dotenv import load_dotenv
-from tqdm import tqdm
 
-# Load environment variables
-load_dotenv()
+from domain_status_graph.utils.parallel import execute_parallel
 
-# Try to import optional dependencies
-try:
-    import yfinance as yf
-
-    YFINANCE_AVAILABLE = True
-except ImportError:
-    YFINANCE_AVAILABLE = False
-
-try:
-    import openai
-
-    OPENAI_AVAILABLE = True
-except ImportError:
-    OPENAI_AVAILABLE = False
-
-FINNHUB_API_KEY = os.getenv("FINNHUB_API_KEY", "").strip()
+# Optional dependencies are now handled in the extracted modules
 
 # Global logger
-_logger: Optional[logging.Logger] = None
+_logger: logging.Logger | None = None
 
 # Thread-safe cache for domain validation
-_domain_cache: Dict[str, bool] = {}
+_domain_cache: dict[str, bool] = {}
 _cache_lock = Lock()
 
-# Rate limiting locks per source
-# Limits are conservative to avoid getting blocked, but optimized for throughput
-# With 20 concurrent workers, each making 4 parallel API calls, we need per-source limits
-_rate_limits = {
-    "sec": {
-        "lock": Lock(),
-        "last_call": 0,
-        "min_interval": 1.0 / 10.0,  # SEC EDGAR official limit: 10 req/sec
-    },
-    "finviz": {
-        "lock": Lock(),
-        "last_call": 0,
-        "min_interval": 1.0 / 5.0,  # Finviz: No official API, web scraping. 5 req/sec is safe.
-    },
-    "finnhub": {
-        "lock": Lock(),
-        "last_call": 0,
-        "min_interval": 1.0 / 1.0,  # Finnhub free tier: 60 req/min = 1 req/sec
-        # Paid tier can be higher, adjust if you have paid access
-    },
-    "yfinance": {
-        "lock": Lock(),
-        "last_call": 0,
-        "min_interval": 0.0,  # yfinance: No explicit limit, library handles throttling
-    },
-}
-
-
-@dataclass
-class DomainResult:
-    """Result from a single data source."""
-
-    domain: Optional[str]
-    source: str
-    confidence: float  # 0.0 to 1.0
-    description: Optional[str] = None  # Company description from this source
-    metadata: Dict = field(default_factory=dict)
-
-
-@dataclass
-class CompanyResult:
-    """Final result for a company."""
-
-    cik: str
-    ticker: str
-    name: str
-    domain: Optional[str]
-    sources: List[str]
-    confidence: float
-    votes: int
-    all_candidates: Dict[str, List[str]]  # domain -> list of sources
-    description: Optional[str] = None  # Company description (best available)
-    description_source: Optional[str] = None  # Source of the description
-    metadata: Dict = field(default_factory=dict)
-
-
-def rate_limit(source: str):
-    """Enforce rate limiting for a specific source."""
-    if source not in _rate_limits:
-        return
-
-    limit = _rate_limits[source]
-    with limit["lock"]:
-        current_time = time.time()
-        elapsed = current_time - limit["last_call"]
-        if elapsed < limit["min_interval"]:
-            time.sleep(limit["min_interval"] - elapsed)
-        limit["last_call"] = time.time()
-
-
-def normalize_domain(url: Optional[str]) -> Optional[str]:
-    """Extract and normalize domain from URL."""
-    if not url:
-        return None
-
-    try:
-        from urllib.parse import urlparse
-
-        parsed = urlparse(url if "://" in url else f"https://{url}")
-        domain = parsed.netloc or parsed.path.split("/")[0]
-        domain = domain.lower().replace("www.", "")
-        domain = domain.split(":")[0].split("/")[0].split("?")[0]
-
-        if "." in domain and len(domain) > 3:
-            return domain
-    except Exception:
-        pass
-
-    return None
-
-
-def is_infrastructure_domain(domain: str) -> bool:
-    """Check if domain is infrastructure (sec.gov, xbrl.org, etc.)."""
-    import re
-
-    # Specific infrastructure domains
-    infrastructure_patterns = [
-        r"sec\.gov",
-        r"xbrl\.org",
-        r"fasb\.org",
-        r"gaap\.org",
-        r"\.gov$",  # All .gov domains
-    ]
-
-    # Check patterns
-    if any(re.search(pattern, domain, re.IGNORECASE) for pattern in infrastructure_patterns):
-        return True
-
-    # Known infrastructure domains
-    known_infrastructure = {
-        "w3.org",
-        "xbrl.sec.gov",
-        "sec.gov",
-        "fasb.org",
-        "gaap.org",
-        "finviz.com",
-        "yahoo.com",
-        "google.com",  # Don't return these as company domains
-    }
-
-    return domain.lower() in known_infrastructure
-
-
-def get_domain_from_yfinance(ticker: str, company_name: str = "") -> DomainResult:
-    """Get domain and description from yfinance (high confidence source)."""
-    if not YFINANCE_AVAILABLE:
-        return DomainResult(None, "yfinance", 0.0)
-
-    rate_limit("yfinance")
-
-    try:
-        stock = yf.Ticker(ticker)
-        info = stock.info
-        website = info.get("website")
-
-        # Extract description (prefer longBusinessSummary, fallback to description)
-        description = info.get("longBusinessSummary") or info.get("description")
-        if description:
-            # Clean up description: remove extra whitespace, limit length
-            description = " ".join(description.split())
-            if len(description) > 2000:  # Truncate very long descriptions
-                description = description[:2000] + "..."
-
-        if website:
-            domain = normalize_domain(website)
-            if domain and not is_infrastructure_domain(domain):
-                return DomainResult(
-                    domain,
-                    "yfinance",
-                    0.9,
-                    description=description,
-                    metadata={"raw_website": website},
-                )
-    except Exception as e:
-        if _logger:
-            _logger.debug(f"yfinance error for {ticker}: {e}")
-
-    return DomainResult(None, "yfinance", 0.0)
-
-
-def get_domain_from_finviz(session: requests.Session, ticker: str) -> DomainResult:
-    """Get domain from Finviz (medium confidence source)."""
-    rate_limit("finviz")
-
-    try:
-        url = f"https://finviz.com/quote.ashx?t={ticker}"
-        headers = {
-            "User-Agent": (
-                "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
-                "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-            )
-        }
-        response = session.get(url, headers=headers, timeout=5)
-
-        if response.status_code == 200:
-            import re
-
-            # Finviz has website in a table:
-            # <td>Website</td><td><a href="https://www.company.com">Website</a></td>
-            # More specific pattern to avoid catching Yahoo Finance links
-            # Look for the Website label followed by a link that's NOT yahoo.com
-            website_pattern = (
-                r'Website["\']?\s*</td>\s*<td[^>]*>\s*<a[^>]*href=["\']'
-                r"(https?://(?:www\.)?([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?"
-                r"(\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)+))"
-            )
-            match = re.search(website_pattern, response.text, re.IGNORECASE)
-            if match:
-                domain = normalize_domain(match.group(1))
-                # Filter out infrastructure and known bad domains
-                if (
-                    domain
-                    and not is_infrastructure_domain(domain)
-                    and "finviz.com" not in domain
-                    and "yahoo.com" not in domain
-                    and "google.com" not in domain
-                ):
-                    return DomainResult(domain, "finviz", 0.7)
-    except Exception as e:
-        if _logger:
-            _logger.debug(f"Finviz error for {ticker}: {e}")
-
-    return DomainResult(None, "finviz", 0.0)
-
-
-def get_domain_from_sec(
-    session: requests.Session, cik: str, ticker: str, company_name: str
-) -> DomainResult:
-    """Get domain from SEC EDGAR (authoritative but slower)."""
-    rate_limit("sec")
-
-    try:
-        # Fetch SEC submission
-        url = f"https://data.sec.gov/submissions/CIK{cik.zfill(10)}.json"
-        headers = {
-            "User-Agent": "domain_status_graph script (contact: your-email@example.com)",
-            "Accept": "application/json",
-        }
-        response = session.get(url, headers=headers, timeout=10)
-
-        if response.status_code == 200:
-            submission = response.json()
-
-            # Check website field first (fastest, most reliable)
-            website = submission.get("website")
-            if website:
-                domain = normalize_domain(website)
-                if domain and not is_infrastructure_domain(domain):
-                    return DomainResult(domain, "sec_edgar", 0.85, {"field": "website"})
-
-            # Fallback: check investor website (sometimes populated when website isn't)
-            investor_website = submission.get("investorWebsite")
-            if investor_website:
-                domain = normalize_domain(investor_website)
-                if domain and not is_infrastructure_domain(domain):
-                    # Prefer main domain over investor relations subdomain
-                    # e.g., "investor.apple.com" -> "apple.com"
-                    if domain.startswith("investor."):
-                        domain = domain.replace("investor.", "")
-                    return DomainResult(domain, "sec_edgar", 0.75, {"field": "investorWebsite"})
-    except Exception as e:
-        if _logger:
-            _logger.debug(f"SEC error for {ticker} (CIK {cik}): {e}")
-
-    return DomainResult(None, "sec_edgar", 0.0)
-
-
-def get_domain_from_finnhub(ticker: str) -> DomainResult:
-    """Get domain and description from Finnhub (low confidence, incomplete coverage)."""
-    if not FINNHUB_API_KEY:
-        return DomainResult(None, "finnhub", 0.0)
-
-    rate_limit("finnhub")
-
-    try:
-        url = "https://finnhub.io/api/v1/stock/profile2"
-        params = {"symbol": ticker, "token": FINNHUB_API_KEY}
-        response = requests.get(url, params=params, timeout=5)
-
-        if response.status_code == 200:
-            data = response.json()
-            weburl = data.get("weburl")
-
-            # Extract description if available (Finnhub may have finnhubIndustry or description)
-            description = data.get("description") or data.get("finnhubIndustry")
-            if description:
-                description = " ".join(str(description).split())
-                if len(description) > 2000:
-                    description = description[:2000] + "..."
-
-            if weburl:
-                domain = normalize_domain(weburl)
-                if domain and not is_infrastructure_domain(domain):
-                    return DomainResult(domain, "finnhub", 0.6, description=description)
-    except Exception as e:
-        if _logger:
-            _logger.debug(f"Finnhub error for {ticker}: {e}")
-
-    return DomainResult(None, "finnhub", 0.0)
+# Import constants and extracted modules
+from domain_status_graph.consensus.domain_consensus import (
+    collect_domains as _collect_domains,
+)
+from domain_status_graph.constants import (
+    CACHE_TTL_COMPANY_DOMAINS,
+    CACHE_TTL_NEGATIVE_RESULT,
+)
+from domain_status_graph.domain.models import CompanyResult
 
 
 def collect_domains(
@@ -354,202 +59,13 @@ def collect_domains(
     """
     Collect domains from all sources in parallel with early stopping.
 
-    Strategy:
-    1. Launch all sources concurrently
-    2. As results arrive, check for consensus
-    3. Stop early if 2+ high-confidence sources agree (weighted score >= threshold)
-    4. Use weighted voting to determine final domain
-    5. LLM adjudication only when sources disagree
-
-    Args:
-        session: HTTP session
-        cik: Company CIK
-        ticker: Stock ticker
-        company_name: Company name
-        early_stop_confidence: Stop early if weighted confidence >= this (default 0.75)
-
-    Returns:
-        CompanyResult with domain, sources, confidence, etc.
+    This function is now in domain_status_graph/consensus/domain_consensus.py.
+    This is kept here for backward compatibility but delegates to the extracted module.
     """
-    # Source weights (higher = more reliable)
-    source_weights = {
-        "yfinance": 3.0,
-        "sec_edgar": 2.5,
-        "finviz": 2.0,
-        "finnhub": 1.0,
-    }
-
-    # Execute all sources concurrently
-    with ThreadPoolExecutor(max_workers=4) as executor:
-        futures = {
-            executor.submit(get_domain_from_yfinance, ticker, company_name): "yfinance",
-            executor.submit(get_domain_from_finviz, session, ticker): "finviz",
-            executor.submit(get_domain_from_sec, session, cik, ticker, company_name): "sec",
-            executor.submit(get_domain_from_finnhub, ticker): "finnhub",
-        }
-
-        results: List[DomainResult] = []
-        domain_scores: Dict[str, float] = defaultdict(float)
-
-        # Collect results as they complete, with early stopping
-        # Each source has individual timeout, and we break early when confident
-        for future in as_completed(futures):
-            try:
-                result = future.result(timeout=30)  # 30s per individual source
-                if result.domain:
-                    results.append(result)
-
-                    # Update scores (weighted by source reliability and result confidence)
-                    weight = source_weights.get(result.source, 1.0)
-                    domain_scores[result.domain] += weight * result.confidence
-
-                    # Early stopping: if we have high confidence, stop waiting
-                    if domain_scores:
-                        max_score = max(domain_scores.values())
-                        max_possible = sum(source_weights.values())  # All sources agree
-                        current_confidence = max_score / max_possible
-
-                        # If we have 2+ sources agreeing on same domain, we're confident
-                        if len(results) >= 2:
-                            domains_found = [r.domain for r in results]
-                            unique_domains = set(domains_found)
-
-                            # All sources agree on same domain - very high confidence
-                            if len(unique_domains) == 1:
-                                # High confidence - stop waiting for other sources
-                                break
-
-                            # Or if weighted confidence exceeds threshold
-                            if current_confidence >= early_stop_confidence:
-                                break
-            except TimeoutError:
-                if _logger:
-                    _logger.debug(f"Timeout collecting domain for {ticker} from one source")
-            except Exception as e:
-                if _logger:
-                    _logger.debug(f"Error collecting domain for {ticker}: {e}")
-
-    if not results or not domain_scores:
-        return CompanyResult(
-            cik=cik,
-            ticker=ticker,
-            name=company_name,
-            domain=None,
-            sources=[],
-            confidence=0.0,
-            votes=0,
-            all_candidates={},
-            description=None,
-            description_source=None,
-        )
-
-    # Build domain votes for reporting
-    domain_votes: Dict[str, List[str]] = defaultdict(list)
-    for result in results:
-        if result.domain:
-            domain_votes[result.domain].append(result.source)
-
-    # Collect descriptions from all sources (weighted by source reliability)
-    description_scores: Dict[str, Tuple[float, str]] = {}  # description -> (score, source)
-    for result in results:
-        if result.description:
-            weight = source_weights.get(result.source, 1.0)
-            # Use existing score if description already seen, otherwise add new
-            if result.description in description_scores:
-                description_scores[result.description] = (
-                    description_scores[result.description][0] + weight * result.confidence,
-                    description_scores[result.description][1],  # Keep first source
-                )
-            else:
-                description_scores[result.description] = (
-                    weight * result.confidence,
-                    result.source,
-                )
-
-    # Get winner (already calculated during early stopping)
-    winner_domain = max(domain_scores.items(), key=lambda x: x[1])[0]
-    winner_sources = domain_votes[winner_domain]
-    total_score = domain_scores[winner_domain]
-
-    # Get best description (highest weighted score)
-    best_description = None
-    best_description_source = None
-    if description_scores:
-        best_description, (_, best_description_source) = max(
-            description_scores.items(), key=lambda x: x[1][0]
-        )
-
-    # Calculate confidence: normalize by sources that actually responded
-    # Sum of weights for sources that provided results (not just winner)
-    sources_that_responded = set()
-    for result in results:
-        if result.domain:
-            sources_that_responded.add(result.source)
-
-    # Max possible score given the sources that actually responded
-    max_possible_given_sources = sum(
-        source_weights.get(source, 1.0) for source in sources_that_responded
-    )
-
-    # Confidence: how much of the available sources agree on this domain?
-    # If all responding sources agree: confidence = 1.0
-    # If only some agree: confidence = their_score / max_possible_from_responders
-    if max_possible_given_sources > 0:
-        confidence = min(total_score / max_possible_given_sources, 1.0)
-    else:
-        confidence = 0.0
-
-    # If sources disagree (multiple domains with votes), use LLM adjudication
-    if len(domain_votes) > 1 and OPENAI_AVAILABLE:
-        top_candidates = sorted(domain_scores.items(), key=lambda x: -x[1])[:3]
-        candidate_domains = [d[0] for d in top_candidates]
-
-        try:
-            client = openai.OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
-            prompt = f"""Given ticker {ticker} and company name "{company_name}", which is the correct company website domain?
-
-Candidates:
-{chr(10).join(f"- {d}" for d in candidate_domains)}
-
-Respond with ONLY the domain name (e.g., "apple.com"), nothing else."""
-
-            response = client.chat.completions.create(
-                model="gpt-4o-mini",
-                messages=[
-                    {
-                        "role": "system",
-                        "content": "You identify correct company website domains.",
-                    },
-                    {"role": "user", "content": prompt},
-                ],
-                temperature=0.1,
-                max_tokens=50,
-            )
-
-            adjudicated = normalize_domain(response.choices[0].message.content.strip())
-            if adjudicated in candidate_domains:
-                winner_domain = adjudicated
-                winner_sources = ["llm_adjudicated"] + winner_sources
-                confidence = 0.95
-        except Exception as e:
-            if _logger:
-                _logger.debug(f"LLM adjudication failed for {ticker}: {e}")
-
-    return CompanyResult(
-        cik=cik,
-        ticker=ticker,
-        name=company_name,
-        domain=winner_domain,
-        sources=winner_sources,
-        confidence=confidence,
-        votes=len(winner_sources),
-        all_candidates={d: sources for d, sources in domain_votes.items()},
-        description=best_description,
-        description_source=best_description_source,
-    )
+    return _collect_domains(session, cik, ticker, company_name, early_stop_confidence)
 
 
-def fetch_company_tickers(session: requests.Session) -> Dict[str, Dict[str, str]]:
+def fetch_company_tickers(session: requests.Session) -> dict[str, dict[str, str]]:
     """Fetch all company tickers from SEC EDGAR."""
     url = "https://www.sec.gov/files/company_tickers.json"
     headers = {
@@ -577,11 +93,12 @@ def fetch_company_tickers(session: requests.Session) -> Dict[str, Dict[str, str]
 def process_company(
     session: requests.Session,
     cik: str,
-    company_info: Dict[str, str],
+    company_info: dict[str, str],
     cache,
-    ttl_days: int = 30,
-) -> Tuple[Optional[Dict], bool]:
-    """Process a single company - check cache first, then API calls.
+) -> tuple[dict | None, bool]:
+    """Process a single company.
+
+    Check 10-K cache first, then company_domains cache, then API calls.
 
     Returns:
         Tuple of (result_dict, was_cached)
@@ -589,7 +106,31 @@ def process_company(
     ticker = company_info["ticker"]
     name = company_info["name"]
 
-    # Check cache first
+    # Check 10-K cache first (most authoritative source)
+    ten_k_data = cache.get("10k_extracted", cik)
+    if ten_k_data and ten_k_data.get("website"):
+        # Use 10-K website directly (most reliable source)
+        output = {
+            "cik": cik,
+            "ticker": ticker,
+            "name": name,
+            "domain": ten_k_data["website"],
+            "source": "10k",
+            "confidence": 1.0,
+            "votes": 1,
+            "all_sources": {"10k": ten_k_data["website"]},
+            "collected_at": datetime.now(UTC).isoformat(),
+        }
+        # Add 10-K business description if available
+        if ten_k_data.get("business_description"):
+            output["description"] = ten_k_data["business_description"]
+            output["description_source"] = "10k"
+
+        # Store in cache (TTL from constants.py)
+        cache.set("company_domains", cik, output, ttl_days=CACHE_TTL_COMPANY_DOMAINS)
+        return output, False  # Not cached in company_domains, but from 10-K
+
+    # Check company_domains cache
     cached = cache.get("company_domains", cik)
     if cached:
         return cached, True
@@ -607,18 +148,19 @@ def process_company(
             "confidence": result.confidence,
             "votes": result.votes,
             "all_sources": result.all_candidates,
-            "collected_at": datetime.now(timezone.utc).isoformat(),
+            "collected_at": datetime.now(UTC).isoformat(),
         }
         # Add description if available
         if result.description:
             output["description"] = result.description
             output["description_source"] = result.description_source
 
-        # Store in cache
-        cache.set("company_domains", cik, output, ttl_days=ttl_days)
+        # Store in cache (TTL from constants.py)
+        cache.set("company_domains", cik, output, ttl_days=CACHE_TTL_COMPANY_DOMAINS)
         return output, False
     else:
         # Cache negative result (no domain found) to avoid retrying
+        # Uses shorter TTL so we retry sooner if data becomes available
         negative_result = {
             "cik": cik,
             "ticker": ticker,
@@ -628,10 +170,10 @@ def process_company(
             "confidence": 0.0,
             "votes": 0,
             "all_sources": {},
-            "collected_at": datetime.now(timezone.utc).isoformat(),
+            "collected_at": datetime.now(UTC).isoformat(),
             "no_domain_found": True,
         }
-        cache.set("company_domains", cik, negative_result, ttl_days=7)
+        cache.set("company_domains", cik, negative_result, ttl_days=CACHE_TTL_NEGATIVE_RESULT)
         return negative_result, False
 
 
@@ -657,12 +199,6 @@ def main():
         help="Quick test with a few major companies (AAPL, MSFT, GOOGL, etc.)",
     )
     parser.add_argument(
-        "--ttl-days",
-        type=int,
-        default=30,
-        help="Cache TTL in days (default: 30)",
-    )
-    parser.add_argument(
         "--skip-uncached",
         action="store_true",
         help="Skip companies not in cache (fast iteration mode)",
@@ -672,6 +208,11 @@ def main():
         type=int,
         default=None,
         help="Maximum number of new API calls to make (default: unlimited)",
+    )
+    parser.add_argument(
+        "--ten-k-only",
+        action="store_true",
+        help="Only process companies with 10-K data (10-K first approach)",
     )
 
     args = parser.parse_args()
@@ -723,7 +264,13 @@ def main():
     # Fetch companies
     _logger.info("Fetching company list from SEC EDGAR...")
     companies = fetch_company_tickers(session)
-    _logger.info(f"Found {len(companies)} companies")
+    _logger.info(f"Found {len(companies)} total SEC companies")
+
+    # 10-K only mode: Filter to companies with 10-K data (default for 10-K first pipeline)
+    if args.ten_k_only:
+        ten_k_ciks = set(cache.keys("10k_extracted", limit=20000) or [])
+        companies = {cik: info for cik, info in companies.items() if cik in ten_k_ciks}
+        _logger.info(f"Filtered to {len(companies)} companies with 10-K data (--ten-k-only)")
 
     # Test mode: just test a few major companies
     if args.test:
@@ -774,56 +321,60 @@ def main():
         results = list(cached_results.values())
         new_count = 0
 
-        with tqdm(
-            total=len(companies),
-            desc="Processing companies",
-            initial=cached_count,
-        ) as pbar:
-            pbar.set_postfix({"found": len(results), "cached": cached_count, "new": new_count})
+        if companies_to_fetch:
+            # Create worker function that takes (cik, info) tuple
+            def worker_func(item: tuple[str, dict]) -> tuple[dict | None, bool]:
+                """Worker function for parallel execution."""
+                cik, info = item
+                return process_company(session, cik, info, cache)
 
-            if companies_to_fetch:
-                max_workers = 30
-                with ThreadPoolExecutor(max_workers=max_workers) as executor:
-                    future_to_cik = {
-                        executor.submit(
-                            process_company, session, cik, info, cache, args.ttl_days
-                        ): cik
-                        for cik, info in companies_to_fetch.items()
-                    }
+            # Result handler to collect results and track new_count
+            def result_handler(item: tuple[str, dict], result: tuple[dict | None, bool]):
+                """Handle result from worker."""
+                nonlocal new_count
+                result_dict, was_cached = result
+                if result_dict:
+                    results.append(result_dict)
+                    if not was_cached:
+                        new_count += 1
 
-                    for future in as_completed(future_to_cik):
-                        cik = future_to_cik[future]
-                        try:
-                            result, was_cached = future.result(timeout=60)
-                            if result:
-                                results.append(result)
-                                if not was_cached:
-                                    new_count += 1
-                        except TimeoutError:
-                            _logger.warning(f"Timeout processing CIK {cik}")
-                        except Exception as e:
-                            _logger.warning(f"Error processing CIK {cik}: {e}")
-                        finally:
-                            pbar.update(1)
-                            pbar.set_postfix(
-                                {"found": len(results), "cached": cached_count, "new": new_count}
-                            )
-            else:
-                _logger.info("All companies were cached - no API calls needed")
+            # Error handler
+            def error_handler(item: tuple[str, dict], error: Exception):
+                """Handle errors from worker."""
+                cik, info = item
+                if isinstance(error, TimeoutError):
+                    _logger.warning(f"Timeout processing CIK {cik}")
+                else:
+                    _logger.warning(f"Error processing CIK {cik}: {error}")
+
+            # Convert companies_to_fetch dict to list of tuples for parallel execution
+            items_to_process = list(companies_to_fetch.items())
+
+            # Execute in parallel (results handled via callbacks)
+            _ = execute_parallel(
+                items_to_process,
+                worker_func,
+                max_workers=30,
+                desc="Processing companies",
+                unit="company",
+                result_handler=result_handler,
+                error_handler=error_handler,
+                timeout=60,
+            )
+        else:
+            _logger.info("All companies were cached - no API calls needed")
 
     # Summary
-    domains = set(r["domain"] for r in results if r.get("domain"))
-    print(f"\n✓ Complete: {len(results)} companies, {len(domains)} unique domains")
+    domains = {r["domain"] for r in results if r.get("domain")}
+    _logger.info("")
+    _logger.info(f"✓ Complete: {len(results)} companies, {len(domains)} unique domains")
     summary_parts = [f"From cache: {cached_count}"]
     if new_count > 0:
         summary_parts.append(f"New API calls: {new_count}")
     if skipped_count > 0:
         summary_parts.append(f"Skipped: {skipped_count}")
-    print(f"  {', '.join(summary_parts)}")
-    print(f"✓ Log file: {log_file}")
-
-    _logger.info(f"✓ Complete: {len(results)} companies, {len(domains)} domains")
-    _logger.info(f"  Cached: {cached_count}, New: {new_count}, Skipped: {skipped_count}")
+    _logger.info(f"  {', '.join(summary_parts)}")
+    _logger.info(f"✓ Log file: {log_file}")
     _logger.info("=" * 80)
 
 

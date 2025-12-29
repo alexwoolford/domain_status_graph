@@ -13,7 +13,6 @@ import argparse
 import logging
 import sys
 import time
-from typing import Dict, List, Optional
 
 from domain_status_graph.cli import (
     add_execute_argument,
@@ -33,10 +32,10 @@ logger = logging.getLogger(__name__)
 
 def write_industry_relationships(
     driver,
-    pairs: List[tuple],
-    database: Optional[str] = None,
+    pairs: list[tuple],
+    database: str | None = None,
     batch_size: int = BATCH_SIZE_LARGE,
-    logger_instance: Optional[logging.Logger] = None,
+    logger_instance: logging.Logger | None = None,
 ) -> int:
     """
     Write SIMILAR_INDUSTRY relationships to Neo4j.
@@ -133,10 +132,10 @@ def write_industry_relationships(
 
 def write_size_relationships(
     driver,
-    pairs: List[tuple],
-    database: Optional[str] = None,
+    pairs: list[tuple],
+    database: str | None = None,
     batch_size: int = BATCH_SIZE_LARGE,
-    logger_instance: Optional[logging.Logger] = None,
+    logger_instance: logging.Logger | None = None,
 ) -> int:
     """
     Write SIMILAR_SIZE relationships to Neo4j.
@@ -247,10 +246,10 @@ def write_size_relationships(
 
 def compute_all_similarity(
     driver,
-    database: Optional[str] = None,
+    database: str | None = None,
     execute: bool = False,
-    logger_instance: Optional[logging.Logger] = None,
-) -> Dict[str, int]:
+    logger_instance: logging.Logger | None = None,
+) -> dict[str, int]:
     """
     Compute all company similarity relationships.
 
