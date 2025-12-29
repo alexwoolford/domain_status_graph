@@ -55,15 +55,15 @@ jobs:
 
       - name: Lint and format check with Ruff
         run: |
-          ruff check domain_status_graph/ scripts/ || (echo "❌ Ruff linting failed. Run 'ruff check --fix domain_status_graph/ scripts/' to fix." && exit 1)
-          ruff format --check domain_status_graph/ scripts/ || (echo "❌ Ruff format check failed. Run 'ruff format domain_status_graph/ scripts/' to fix." && exit 1)
+          ruff check public_company_graph/ scripts/ || (echo "❌ Ruff linting failed. Run 'ruff check --fix public_company_graph/ scripts/' to fix." && exit 1)
+          ruff format --check public_company_graph/ scripts/ || (echo "❌ Ruff format check failed. Run 'ruff format public_company_graph/ scripts/' to fix." && exit 1)
 
       - name: Type check with mypy
         run: |
-          if [ -d "domain_status_graph" ]; then
-            mypy domain_status_graph/ --ignore-missing-imports || (echo "⚠️  mypy found type issues. Review the output above." && exit 0)  # Non-blocking for now
+          if [ -d "public_company_graph" ]; then
+            mypy public_company_graph/ --ignore-missing-imports || (echo "⚠️  mypy found type issues. Review the output above." && exit 0)  # Non-blocking for now
           else
-            echo "⚠️  No domain_status_graph package found. Skipping mypy."
+            echo "⚠️  No public_company_graph package found. Skipping mypy."
           fi
 
   # Run tests if they exist
@@ -99,7 +99,7 @@ jobs:
       - name: Run tests
         run: |
           if [ -d "tests" ] && [ "$(find tests -name 'test_*.py' | wc -l)" -gt 0 ]; then
-            pytest -v --cov=domain_status_graph --cov-report=xml
+            pytest -v --cov=public_company_graph --cov-report=xml
           else
             echo "⚠️  No tests found. Skipping test execution."
           fi

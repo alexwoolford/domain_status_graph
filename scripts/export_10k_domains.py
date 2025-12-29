@@ -21,9 +21,9 @@ from pathlib import Path
 # Add project root to path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from domain_status_graph.cache import get_cache
-from domain_status_graph.cli import setup_logging
-from domain_status_graph.domain.validation import normalize_domain
+from public_company_graph.cache import get_cache
+from public_company_graph.cli import setup_logging
+from public_company_graph.domain.validation import normalize_domain
 
 logger = None
 

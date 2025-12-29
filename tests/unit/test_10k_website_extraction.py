@@ -12,8 +12,8 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
-from domain_status_graph.domain.validation import is_valid_domain
-from domain_status_graph.parsing.website_extraction import (
+from public_company_graph.domain.validation import is_valid_domain
+from public_company_graph.parsing.website_extraction import (
     extract_website_from_cover_page,
     extract_website_from_ixbrl_element,
     normalize_website_url,
@@ -291,9 +291,9 @@ class TestProblematicCases:
         # Should extract bankofamerica.com (or similar valid domain)
         assert result is not None, "Should extract a website"
         assert is_valid_domain(result), f"Extracted domain should be valid: {result}"
-        assert (
-            "bankofamerica" in result.lower() or "bofa" in result.lower()
-        ), f"Should extract Bank of America domain, got: {result}"
+        assert "bankofamerica" in result.lower() or "bofa" in result.lower(), (
+            f"Should extract Bank of America domain, got: {result}"
+        )
 
         # Should NOT extract "a.member"
         assert result != "a.member", "Should not extract invalid domain 'a.member'"
@@ -314,7 +314,7 @@ class TestExtractionPriority:
         </html>
         """
         # Create a temporary file in the expected directory structure
-        from domain_status_graph.config import get_data_dir
+        from public_company_graph.config import get_data_dir
 
         FILINGS_DIR = get_data_dir() / "10k_filings"
         test_dir = FILINGS_DIR / "test_cik"

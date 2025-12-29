@@ -54,7 +54,7 @@ python scripts/create_company_embeddings.py --execute
 
 ### Step 3: Create SIMILAR_DESCRIPTION Relationships Between Companies
 
-**Script**: `scripts/compute_company_similarity.py` OR `domain_status_graph/gds/company_similarity.py`
+**Script**: `scripts/compute_company_similarity.py` OR `public_company_graph/gds/company_similarity.py`
 
 **What it does**:
 1. Loads all Company nodes with `description_embedding`
@@ -67,7 +67,7 @@ python scripts/create_company_embeddings.py --execute
 ```bash
 python scripts/compute_company_similarity.py --execute
 # OR use the GDS module:
-python -c "from domain_status_graph.gds.company_similarity import compute_company_description_similarity; from domain_status_graph.cli import get_driver_and_database, setup_logging; logger = setup_logging('company_sim'); driver, db = get_driver_and_database(logger); compute_company_description_similarity(driver, execute=True, database=db, logger=logger)"
+python -c "from public_company_graph.gds.company_similarity import compute_company_description_similarity; from public_company_graph.cli import get_driver_and_database, setup_logging; logger = setup_logging('company_sim'); driver, db = get_driver_and_database(logger); compute_company_description_similarity(driver, execute=True, database=db, logger=logger)"
 ```
 
 **Expected output**: ~12,000-15,000 `SIMILAR_DESCRIPTION` relationships (top 50 per company, above 0.7 threshold)
@@ -167,7 +167,7 @@ LIMIT 20
 
 **Default**: 0.7 (cosine similarity)
 
-**Location**: `domain_status_graph/constants.py` → `DEFAULT_SIMILARITY_THRESHOLD`
+**Location**: `public_company_graph/constants.py` → `DEFAULT_SIMILARITY_THRESHOLD`
 
 **Rationale**:
 - 0.7 = moderate similarity (filters noise)
@@ -178,7 +178,7 @@ LIMIT 20
 
 **Default**: 50
 
-**Location**: `domain_status_graph/constants.py` → `DEFAULT_TOP_K`
+**Location**: `public_company_graph/constants.py` → `DEFAULT_TOP_K`
 
 **Rationale**:
 - 50 = good balance (not too sparse, not too dense)
@@ -189,7 +189,7 @@ LIMIT 20
 
 **Default**: `text-embedding-3-small` (1536 dimensions)
 
-**Location**: `domain_status_graph/embeddings/__init__.py` → `EMBEDDING_MODEL`
+**Location**: `public_company_graph/embeddings/__init__.py` → `EMBEDDING_MODEL`
 
 **Rationale**:
 - Good balance of quality and cost
@@ -258,5 +258,5 @@ All scripts are **idempotent** (safe to run multiple times):
 
 - **Graph Schema**: `docs/graph_schema.md`
 - **GDS Features**: `docs/gds_features.md`
-- **Similarity Utilities**: `domain_status_graph/similarity/cosine.py`
-- **Company Queries**: `domain_status_graph/company/queries.py`
+- **Similarity Utilities**: `public_company_graph/similarity/cosine.py`
+- **Company Queries**: `public_company_graph/company/queries.py`

@@ -7,7 +7,7 @@ including security validation (Tar Slip prevention).
 
 import tarfile
 
-from domain_status_graph.utils.tar_extraction import (
+from public_company_graph.utils.tar_extraction import (
     extract_from_tar,
     get_filing_date_from_tar_name,
 )

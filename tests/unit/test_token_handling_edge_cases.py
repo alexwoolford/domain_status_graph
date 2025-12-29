@@ -8,7 +8,7 @@ Bugs here could:
 - Waste money (not truncating when needed)
 """
 
-from domain_status_graph.embeddings.openai_client import (
+from public_company_graph.embeddings.openai_client import (
     EMBEDDING_TRUNCATE_TOKENS,
     count_tokens,
     truncate_to_token_limit,

@@ -1,8 +1,8 @@
 """
-Unit tests for domain_status_graph.utils.hashing module.
+Unit tests for public_company_graph.utils.hashing module.
 """
 
-from domain_status_graph.utils.hashing import compute_text_hash
+from public_company_graph.utils.hashing import compute_text_hash
 
 
 def test_compute_text_hash():

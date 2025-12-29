@@ -1,6 +1,6 @@
 # Complete Setup Guide: End-to-End Process
 
-This guide provides a **complete, repeatable process** to recreate the Domain Status Graph from scratch. Follow these steps in order.
+This guide provides a **complete, repeatable process** to recreate the Public Company Graph from scratch. Follow these steps in order.
 
 ## Prerequisites Checklist
 
@@ -33,7 +33,7 @@ python3 --version  # Should be 3.13+
 
 ```bash
 git clone <repository-url>
-cd domain_status_graph
+cd public_company_graph
 ```
 
 **Verify**: You should see `scripts/`, `docs/`, and `data/` directories.
@@ -46,8 +46,8 @@ cd domain_status_graph
 
 ```bash
 # Create and activate conda environment
-conda create -n domain_status_graph python=3.13
-conda activate domain_status_graph
+conda create -n public_company_graph python=3.13
+conda activate public_company_graph
 
 # Install package in editable mode (includes all dependencies from pyproject.toml)
 pip install -e .
@@ -63,7 +63,7 @@ pip install -e .
 **Verify**:
 ```bash
 python3 -c "import neo4j; import graphdatascience; import dotenv; print('✓ All packages installed')"
-python3 -c "from domain_status_graph.cache import get_cache; cache = get_cache(); print('✓ Package installed correctly')"
+python3 -c "from public_company_graph.cache import get_cache; cache = get_cache(); print('✓ Package installed correctly')"
 ```
 
 ---
@@ -402,11 +402,11 @@ For a completely fresh start, run these commands in order:
 
 ```bash
 # 1. Navigate to project
-cd domain_status_graph
+cd public_company_graph
 
 # 2. Set up environment (if using conda)
-conda create -n domain_status_graph python=3.13
-conda activate domain_status_graph
+conda create -n public_company_graph python=3.13
+conda activate public_company_graph
 
 # 3. Install dependencies
 pip install -e .

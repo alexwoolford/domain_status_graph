@@ -9,7 +9,7 @@ Focus areas:
 
 import pytest
 
-from domain_status_graph.neo4j.utils import (
+from public_company_graph.neo4j.utils import (
     REL_TYPE_PATTERN,
     _validate_relationship_type,
 )
@@ -191,7 +191,7 @@ class TestRelTypePattern:
 
 class TestRealWorldRelationshipTypes:
     """
-    Test actual relationship types used in the domain_status_graph schema.
+    Test actual relationship types used in the public_company_graph schema.
 
     These are the relationship types defined in the architecture docs.
     """

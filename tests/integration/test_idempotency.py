@@ -129,9 +129,9 @@ class TestLoaderIdempotency:
 
     def test_domain_loader_idempotent(self, neo4j_driver, test_database, sample_sqlite_db):
         """Test that loading domains twice produces same count."""
-        from domain_status_graph.ingest.loaders import load_domains
-        from domain_status_graph.ingest.sqlite_readers import read_domains
-        from domain_status_graph.neo4j.constraints import create_domain_constraints
+        from public_company_graph.ingest.loaders import load_domains
+        from public_company_graph.ingest.sqlite_readers import read_domains
+        from public_company_graph.neo4j.constraints import create_domain_constraints
 
         # Ensure constraints exist
         create_domain_constraints(neo4j_driver, database=test_database)
@@ -168,9 +168,9 @@ class TestLoaderIdempotency:
 
     def test_technology_loader_idempotent(self, neo4j_driver, test_database, sample_sqlite_db):
         """Test that loading technologies twice produces same count."""
-        from domain_status_graph.ingest.loaders import load_domains, load_technologies
-        from domain_status_graph.ingest.sqlite_readers import read_domains, read_technologies
-        from domain_status_graph.neo4j.constraints import create_bootstrap_constraints
+        from public_company_graph.ingest.loaders import load_domains, load_technologies
+        from public_company_graph.ingest.sqlite_readers import read_domains, read_technologies
+        from public_company_graph.neo4j.constraints import create_bootstrap_constraints
 
         # Ensure constraints exist
         create_bootstrap_constraints(neo4j_driver, database=test_database)

@@ -28,7 +28,7 @@ Test fixtures should:
 1. **Select a good file** from `data/10k_filings/{CIK}/10k_{YEAR}.html`
 2. **Verify it parses correctly**:
    ```bash
-   python -c "from domain_status_graph.parsing.risk_factors import extract_risk_factors; \
+   python -c "from public_company_graph.parsing.risk_factors import extract_risk_factors; \
               from pathlib import Path; \
               result = extract_risk_factors(Path('data/10k_filings/{CIK}/10k_{YEAR}.html')); \
               print(f'Risk factors length: {len(result) if result else 0}')"

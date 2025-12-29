@@ -14,12 +14,12 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
-from domain_status_graph.cli import (
+from public_company_graph.cli import (
     get_driver_and_database,
     setup_logging,
     verify_neo4j_connection,
 )
-from domain_status_graph.company.queries import get_top_similar_companies_query
+from public_company_graph.company.queries import get_top_similar_companies_query
 
 # 30+ Famous competitor pairs for validation
 # Format: (ticker1, ticker2, description, expected_rank)

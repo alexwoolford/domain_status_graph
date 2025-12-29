@@ -1,10 +1,10 @@
 """
-Unit tests for domain_status_graph.retry module.
+Unit tests for public_company_graph.retry module.
 
 Tests actual retry behavior, not just that decorators exist.
 """
 
-from domain_status_graph.retry import retry_http, retry_neo4j, retry_openai
+from public_company_graph.retry import retry_http, retry_neo4j, retry_openai
 
 
 class TestRetryDecorators:

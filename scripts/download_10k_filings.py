@@ -28,32 +28,32 @@ from pathlib import Path
 
 import requests
 
-from domain_status_graph.cli import (
+from public_company_graph.cli import (
     add_execute_argument,
     get_driver_and_database,
     setup_logging,
     verify_neo4j_connection,
 )
-from domain_status_graph.config import get_data_dir, get_datamule_api_key
-from domain_status_graph.constants import (
+from public_company_graph.config import get_data_dir, get_datamule_api_key
+from public_company_graph.constants import (
     DEFAULT_WORKERS,
     DEFAULT_WORKERS_WITH_API,
     SEC_EDGAR_LONG_DURATION_LIMIT,
     SEC_EDGAR_RATE_LIMIT,
 )
-from domain_status_graph.sources.sec_companies import (
+from public_company_graph.sources.sec_companies import (
     get_all_companies_from_neo4j,
     get_all_companies_from_sec,
 )
-from domain_status_graph.sources.sec_edgar_check import check_company_has_10k
-from domain_status_graph.utils.datamule import suppress_datamule_output
-from domain_status_graph.utils.parallel import execute_parallel
-from domain_status_graph.utils.stats import ExecutionStats
-from domain_status_graph.utils.tar_extraction import (
+from public_company_graph.sources.sec_edgar_check import check_company_has_10k
+from public_company_graph.utils.datamule import suppress_datamule_output
+from public_company_graph.utils.parallel import execute_parallel
+from public_company_graph.utils.stats import ExecutionStats
+from public_company_graph.utils.tar_extraction import (
     extract_from_tar,
     get_filing_date_from_tar_name,
 )
-from domain_status_graph.utils.tar_selection import find_tar_with_latest_10k
+from public_company_graph.utils.tar_selection import find_tar_with_latest_10k
 
 # Try to import datamule
 # Note: We set TQDM_DISABLE in suppress_datamule_output() context manager
@@ -160,7 +160,7 @@ def download_10k_for_company(
                 f"  ⚠ {ticker}: Could not identify tar file with latest 10-K (all may be empty)"
             )
             # Fallback: try all non-empty tar files (skip empty ones)
-            from domain_status_graph.utils.tar_selection import is_tar_file_empty
+            from public_company_graph.utils.tar_selection import is_tar_file_empty
 
             last_error = None
             for tar_file in tar_files:
@@ -230,7 +230,7 @@ def download_10k_for_company(
         session = requests.Session()
         session.headers.update(
             {
-                "User-Agent": "domain_status_graph script (contact: alexwoolford@example.com)",
+                "User-Agent": "public_company_graph script (contact: alexwoolford@example.com)",
             }
         )
         has_10k = check_company_has_10k(
@@ -345,7 +345,7 @@ def download_10k_for_company(
                     f"  ⚠ {ticker}: Could not identify tar file with latest 10-K (all may be empty)"
                 )
                 # Fallback: try all non-empty tar files (skip empty ones)
-                from domain_status_graph.utils.tar_selection import is_tar_file_empty
+                from public_company_graph.utils.tar_selection import is_tar_file_empty
 
                 last_error = None
                 for tar_file in tar_files:

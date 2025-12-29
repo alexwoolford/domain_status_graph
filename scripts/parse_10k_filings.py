@@ -24,18 +24,18 @@ import logging
 import sys
 from pathlib import Path
 
-from domain_status_graph.cache import get_cache
-from domain_status_graph.cli import (
+from public_company_graph.cache import get_cache
+from public_company_graph.cli import (
     add_execute_argument,
     setup_logging,
 )
-from domain_status_graph.config import get_data_dir
-from domain_status_graph.constants import DEFAULT_WORKERS
+from public_company_graph.config import get_data_dir
+from public_company_graph.constants import DEFAULT_WORKERS
 
-# Note: Parsing now uses pluggable interface (domain_status_graph.parsing.base)
+# Note: Parsing now uses pluggable interface (public_company_graph.parsing.base)
 # Individual extractors are imported within parse_10k_file() for clarity
-from domain_status_graph.utils.file_discovery import find_10k_files
-from domain_status_graph.utils.stats import ExecutionStats
+from public_company_graph.utils.file_discovery import find_10k_files
+from public_company_graph.utils.stats import ExecutionStats
 
 # Logger will be set up in main()
 logger: logging.Logger | None = None
@@ -51,7 +51,7 @@ def parse_10k_file(file_path: Path, skip_datamule: bool = False) -> dict:
 
     Uses the pluggable parser interface for extensibility.
     To add new extractors, implement TenKParser and add to get_default_parsers()
-    in domain_status_graph/parsing/base.py.
+    in public_company_graph/parsing/base.py.
 
     Args:
         file_path: Path to 10-K HTML/XML file (must be within FILINGS_DIR)
@@ -60,7 +60,7 @@ def parse_10k_file(file_path: Path, skip_datamule: bool = False) -> dict:
     Returns:
         Dictionary with extracted data from all registered parsers
     """
-    from domain_status_graph.parsing.base import get_default_parsers, parse_10k_with_parsers
+    from public_company_graph.parsing.base import get_default_parsers, parse_10k_with_parsers
 
     # OPTIMIZATION: Read file once and reuse for all parsers
     # This avoids reading the same file multiple times (significant I/O savings)
@@ -79,7 +79,7 @@ def parse_10k_file(file_path: Path, skip_datamule: bool = False) -> dict:
     # Find corresponding tar file for filing date extraction (fallback)
     tar_file = None
     if cik:
-        from domain_status_graph.config import get_data_dir
+        from public_company_graph.config import get_data_dir
 
         portfolios_dir = get_data_dir() / "10k_portfolios"
         portfolio_dir = portfolios_dir / f"10k_{cik}"
@@ -202,7 +202,7 @@ def parse_all_10ks(
     logger.info(f"Using {workers} parallel workers")
 
     # Show what parsers are active (use the same list as parse_10k_file)
-    from domain_status_graph.parsing.base import get_default_parsers
+    from public_company_graph.parsing.base import get_default_parsers
 
     active_parsers = get_default_parsers()
     logger.info(f"Active parsers: {', '.join(p.field_name for p in active_parsers)}")
@@ -224,7 +224,7 @@ def parse_all_10ks(
 
     from tqdm import tqdm
 
-    from domain_status_graph.utils.tenk_workers import parse_10k_worker
+    from public_company_graph.utils.tenk_workers import parse_10k_worker
 
     # Cap workers at available CPU cores
     mp_workers = min(workers, 8)

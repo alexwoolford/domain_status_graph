@@ -25,9 +25,9 @@ from pathlib import Path
 # Add project root to path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from domain_status_graph.cli import setup_logging
-from domain_status_graph.utils.datamule import suppress_datamule_output
-from domain_status_graph.utils.tar_selection import (
+from public_company_graph.cli import setup_logging
+from public_company_graph.utils.datamule import suppress_datamule_output
+from public_company_graph.utils.tar_selection import (
     get_latest_10k_filing_date_from_tar,
 )
 

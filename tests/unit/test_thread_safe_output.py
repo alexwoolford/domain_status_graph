@@ -8,7 +8,7 @@ and doesn't leak to stdout/stderr, ensuring clean progress bar output.
 import sys
 import threading
 
-from domain_status_graph.utils.thread_safe_output import (
+from public_company_graph.utils.thread_safe_output import (
     ThreadSafeOutputCapture,
     install_thread_output_capture,
     uninstall_thread_output_capture,

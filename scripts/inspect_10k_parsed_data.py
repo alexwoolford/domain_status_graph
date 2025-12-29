@@ -10,7 +10,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from domain_status_graph.cache import get_cache
+from public_company_graph.cache import get_cache
 
 CACHE_NAMESPACE = "10k_extracted"
 

@@ -17,14 +17,14 @@ import argparse
 import logging
 import sys
 
-from domain_status_graph.cache import get_cache
-from domain_status_graph.cli import (
+from public_company_graph.cache import get_cache
+from public_company_graph.cli import (
     add_execute_argument,
     get_driver_and_database,
     setup_logging,
     verify_neo4j_connection,
 )
-from domain_status_graph.embeddings import (
+from public_company_graph.embeddings import (
     EMBEDDING_DIMENSION,
     EMBEDDING_MODEL,
     create_embeddings_for_nodes,

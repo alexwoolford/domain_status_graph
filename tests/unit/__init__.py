@@ -1,1 +1,1 @@
-"""Unit tests for domain_status_graph package."""
+"""Unit tests for public_company_graph package."""

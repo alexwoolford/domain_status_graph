@@ -23,12 +23,12 @@ import argparse
 import logging
 import sys
 
-from domain_status_graph.cli import (
+from public_company_graph.cli import (
     get_driver_and_database,
     setup_logging,
     verify_neo4j_connection,
 )
-from domain_status_graph.company.queries import (
+from public_company_graph.company.queries import (
     DEFAULT_SIMILARITY_WEIGHTS,
     get_top_similar_companies_query,
 )
@@ -365,7 +365,7 @@ def main():
         logger.info("")
         logger.info("=" * 80)
         logger.info("To apply these weights, update DEFAULT_SIMILARITY_WEIGHTS in:")
-        logger.info("  domain_status_graph/company/queries.py")
+        logger.info("  public_company_graph/company/queries.py")
         logger.info("")
         logger.info("Example update:")
         logger.info("  DEFAULT_SIMILARITY_WEIGHTS = {")

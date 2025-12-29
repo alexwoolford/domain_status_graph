@@ -23,20 +23,20 @@ from pathlib import Path
 # Add parent directory to path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from domain_status_graph.cache import get_cache
-from domain_status_graph.cli import (
+from public_company_graph.cache import get_cache
+from public_company_graph.cli import (
     get_driver_and_database,
     setup_logging,
     verify_neo4j_connection,
 )
-from domain_status_graph.embeddings import (
+from public_company_graph.embeddings import (
     create_embedding,
     create_embeddings_for_nodes,
     get_openai_client,
     suppress_http_logging,
 )
-from domain_status_graph.gds.company_similarity import compute_company_description_similarity
-from domain_status_graph.similarity.cosine import (
+from public_company_graph.gds.company_similarity import compute_company_description_similarity
+from public_company_graph.similarity.cosine import (
     compute_similarity_for_node_type,
     write_similarity_relationships,
 )

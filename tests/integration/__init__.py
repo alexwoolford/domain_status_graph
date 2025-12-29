@@ -1,1 +1,1 @@
-"""Integration tests for domain_status_graph."""
+"""Integration tests for public_company_graph."""

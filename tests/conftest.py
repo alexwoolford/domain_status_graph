@@ -1,5 +1,5 @@
 """
-Pytest configuration and shared fixtures for domain_status_graph tests.
+Pytest configuration and shared fixtures for public_company_graph tests.
 """
 
 import os

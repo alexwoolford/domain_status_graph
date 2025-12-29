@@ -14,7 +14,7 @@ Focus areas:
 
 from datetime import datetime
 
-from domain_status_graph.parsing.filing_metadata import (
+from public_company_graph.parsing.filing_metadata import (
     FilingMetadataParser,
     extract_filing_metadata,
 )

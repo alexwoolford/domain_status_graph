@@ -5,7 +5,7 @@ These tests use REAL HTML structures extracted from actual 10-K filings
 to ensure the parser handles real-world patterns correctly.
 """
 
-from domain_status_graph.parsing.risk_factors import (
+from public_company_graph.parsing.risk_factors import (
     extract_risk_factors,
     extract_risk_factors_with_datamule_fallback,
 )

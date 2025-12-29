@@ -6,7 +6,7 @@ from unittest.mock import MagicMock, patch
 
 import pandas as pd
 
-from domain_status_graph.gds.company_tech import (
+from public_company_graph.gds.company_tech import (
     _build_batch,
     _identify_node_columns,
     compute_company_technology_similarity,
@@ -165,7 +165,7 @@ class TestComputeCompanyTechnologySimilarity:
         mock_driver.session.assert_not_called()
         mock_gds.graph.project.cypher.assert_not_called()
 
-    @patch("domain_status_graph.gds.company_tech.safe_drop_graph")
+    @patch("public_company_graph.gds.company_tech.safe_drop_graph")
     def test_creates_bipartite_graph(self, mock_safe_drop):
         """Test that bipartite Company-Technology graph is created."""
         mock_gds = MagicMock()
@@ -219,7 +219,7 @@ class TestComputeCompanyTechnologySimilarity:
         assert "Company" in call_args[1]
         assert "Technology" in call_args[1]
 
-    @patch("domain_status_graph.gds.company_tech.safe_drop_graph")
+    @patch("public_company_graph.gds.company_tech.safe_drop_graph")
     def test_deletes_existing_relationships_first(self, mock_safe_drop):
         """Test that existing SIMILAR_TECHNOLOGY relationships are deleted."""
         mock_gds = MagicMock()
@@ -265,7 +265,7 @@ class TestComputeCompanyTechnologySimilarity:
         assert "DELETE" in first_query
         assert "SIMILAR_TECHNOLOGY" in first_query
 
-    @patch("domain_status_graph.gds.company_tech.safe_drop_graph")
+    @patch("public_company_graph.gds.company_tech.safe_drop_graph")
     def test_filters_to_company_company_pairs_only(self, mock_safe_drop):
         """Test that results are filtered to Company-Company pairs only."""
         mock_gds = MagicMock()
@@ -327,7 +327,7 @@ class TestComputeCompanyTechnologySimilarity:
         # Only Company-Company pairs should be written
         assert result == 1
 
-    @patch("domain_status_graph.gds.company_tech.safe_drop_graph")
+    @patch("public_company_graph.gds.company_tech.safe_drop_graph")
     def test_handles_exception_gracefully(self, mock_safe_drop):
         """Test that exceptions are caught and logged."""
         mock_gds = MagicMock()
@@ -368,7 +368,7 @@ class TestComputeCompanyTechnologySimilarity:
 
         assert result == 0
 
-    @patch("domain_status_graph.gds.company_tech.safe_drop_graph")
+    @patch("public_company_graph.gds.company_tech.safe_drop_graph")
     def test_respects_similarity_threshold(self, mock_safe_drop):
         """Test that similarity_threshold is passed to GDS."""
         mock_gds = MagicMock()
@@ -412,7 +412,7 @@ class TestComputeCompanyTechnologySimilarity:
         call_kwargs = mock_gds.nodeSimilarity.stream.call_args[1]
         assert call_kwargs["similarityCutoff"] == 0.7
 
-    @patch("domain_status_graph.gds.company_tech.safe_drop_graph")
+    @patch("public_company_graph.gds.company_tech.safe_drop_graph")
     def test_respects_top_k_parameter(self, mock_safe_drop):
         """Test that top_k is passed to GDS."""
         mock_gds = MagicMock()
@@ -456,7 +456,7 @@ class TestComputeCompanyTechnologySimilarity:
         call_kwargs = mock_gds.nodeSimilarity.stream.call_args[1]
         assert call_kwargs["topK"] == 25
 
-    @patch("domain_status_graph.gds.company_tech.safe_drop_graph")
+    @patch("public_company_graph.gds.company_tech.safe_drop_graph")
     def test_ensures_consistent_relationship_direction(self, mock_safe_drop):
         """Test that relationship direction is consistent (alphabetical CIK order)."""
         mock_gds = MagicMock()
@@ -519,7 +519,7 @@ class TestComputeCompanyTechnologySimilarity:
         assert batch[0]["cik1"] == "000111"  # Lower CIK first
         assert batch[0]["cik2"] == "000222"
 
-    @patch("domain_status_graph.gds.company_tech.safe_drop_graph")
+    @patch("public_company_graph.gds.company_tech.safe_drop_graph")
     def test_drops_graph_after_completion(self, mock_safe_drop):
         """Test that graph is dropped after processing."""
         mock_gds = MagicMock()

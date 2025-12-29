@@ -1,5 +1,5 @@
 """
-Unit tests for domain_status_graph.cli module.
+Unit tests for public_company_graph.cli module.
 """
 
 import argparse
@@ -8,7 +8,7 @@ import tempfile
 from pathlib import Path
 from unittest.mock import MagicMock
 
-from domain_status_graph.cli import (
+from public_company_graph.cli import (
     add_execute_argument,
     print_dry_run_header,
     print_execute_header,

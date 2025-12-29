@@ -16,7 +16,7 @@ import io
 import tarfile
 from datetime import datetime
 
-from domain_status_graph.utils.tar_selection import (
+from public_company_graph.utils.tar_selection import (
     extract_filing_date_from_html_path,
     find_tar_with_latest_10k,
     get_latest_10k_filing_date_from_tar,

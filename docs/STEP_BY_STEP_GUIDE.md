@@ -106,7 +106,7 @@ python scripts/parse_10k_filings.py --execute
 **Check success**:
 ```bash
 # Check cache stats
-python -m domain_status_graph.cli cache stats
+python -m public_company_graph.cli cache stats
 ```
 
 ---
@@ -132,7 +132,7 @@ python scripts/collect_domains.py
 **Check success**:
 ```bash
 # Check cache stats
-python -m domain_status_graph.cli cache stats
+python -m public_company_graph.cli cache stats
 ```
 
 ---

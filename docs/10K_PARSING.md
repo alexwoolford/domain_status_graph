@@ -36,7 +36,7 @@ All extracted domains are validated using:
 - Rejects known taxonomy domains (xbrl.org, sec.gov, etc.)
 - Rejects very long TLDs (>15 chars, likely extraction errors)
 
-**Module**: `domain_status_graph/domain/validation.py`
+**Module**: `public_company_graph/domain/validation.py`
 
 ## Business Description Extraction
 
@@ -128,7 +128,7 @@ python scripts/inspect_10k_parsed_data.py --stats
 ### Clearing Cache
 
 ```python
-from domain_status_graph.cache import get_cache
+from public_company_graph.cache import get_cache
 
 cache = get_cache()
 cache.clear("10k_extracted")  # Clear all 10-K data
@@ -150,4 +150,4 @@ cache.clear("10k_extracted")  # Clear all 10-K data
 
 - **Datamule Setup**: See `docs/DATAMULE_SETUP.md`
 - **Pipeline Architecture**: See `docs/PIPELINE_ARCHITECTURE.md`
-- **Domain Validation**: See `domain_status_graph/domain/validation.py`
+- **Domain Validation**: See `public_company_graph/domain/validation.py`

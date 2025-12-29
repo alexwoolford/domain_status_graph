@@ -69,18 +69,17 @@
 
   <development_setup>
     <env>
-      Always use the dedicated conda env: domain_status_graph (Python 3.13)
-      conda activate domain_status_graph
+      Always use the dedicated conda env: public_company_graph (Python 3.13)
+      conda activate public_company_graph
       pip install -e .[dev]
       pip install -e .
       cp .env.sample .env  # set NEO4J_URI, NEO4J_USER, NEO4J_PASSWORD
     </env>
     <quality_tools>
-      isort --profile black domain_status_graph/ scripts/
-      black domain_status_graph/ scripts/
-      flake8 domain_status_graph/ scripts/ --max-line-length=100
-      mypy domain_status_graph/ --ignore-missing-imports
-      pytest tests/ -v --cov=domain_status_graph
+      ruff check public_company_graph/ scripts/
+      ruff format public_company_graph/ scripts/
+      mypy public_company_graph/ --ignore-missing-imports
+      pytest tests/ -v --cov=public_company_graph
       pre-commit run --all-files  # must pass locally and in CI
     </quality_tools>
   </development_setup>
@@ -96,13 +95,13 @@
 
   <architecture_overview>
     <entry file="scripts/bootstrap_graph.py" desc="Entry point: dry-run plan, then execute ingest"/>
-    <entry file="domain_status_graph/neo4j/constraints.py" desc="Constraint creation for Domain, Technology, Company nodes"/>
-    <entry file="domain_status_graph/ingest/sqlite_readers.py" desc="SQLite data readers for domain and technology data"/>
-    <entry file="domain_status_graph/ingest/loaders.py" desc="Neo4j batch loaders for Domain and Technology nodes"/>
-    <entry file="domain_status_graph/embeddings/" desc="Embedding creation, caching, and OpenAI client"/>
-    <entry file="domain_status_graph/cli.py" desc="Common CLI utilities (logging, dry-run, connection handling)"/>
-    <entry file="domain_status_graph/config.py" desc="Configuration management (Neo4j, OpenAI, data paths)"/>
-    <entry file="domain_status_graph/neo4j/connection.py" desc="Neo4j driver and session management"/>
+    <entry file="public_company_graph/neo4j/constraints.py" desc="Constraint creation for Domain, Technology, Company nodes"/>
+    <entry file="public_company_graph/ingest/sqlite_readers.py" desc="SQLite data readers for domain and technology data"/>
+    <entry file="public_company_graph/ingest/loaders.py" desc="Neo4j batch loaders for Domain and Technology nodes"/>
+    <entry file="public_company_graph/embeddings/" desc="Embedding creation, caching, and OpenAI client"/>
+    <entry file="public_company_graph/cli.py" desc="Common CLI utilities (logging, dry-run, connection handling)"/>
+    <entry file="public_company_graph/config.py" desc="Configuration management (Neo4j, OpenAI, data paths)"/>
+    <entry file="public_company_graph/neo4j/connection.py" desc="Neo4j driver and session management"/>
     <entry file="docs/ARCHITECTURE.md" desc="Complete architecture documentation (package structure, design principles)"/>
     <entry file="docs/money_queries.md" desc="High-value Cypher query examples"/>
   </architecture_overview>

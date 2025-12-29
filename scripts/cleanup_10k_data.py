@@ -14,8 +14,8 @@ Usage:
 
 import argparse
 
-from domain_status_graph.cli import add_execute_argument, setup_logging
-from domain_status_graph.config import get_data_dir
+from public_company_graph.cli import add_execute_argument, setup_logging
+from public_company_graph.config import get_data_dir
 
 FILINGS_DIR = get_data_dir() / "10k_filings"
 PORTFOLIOS_DIR = get_data_dir() / "10k_portfolios"

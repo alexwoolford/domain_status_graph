@@ -1,8 +1,8 @@
-# Domain Status Graph Schema Documentation
+# Public Company Graph Schema Documentation
 
 ## Overview
 
-The Domain Status Graph is a focused knowledge graph that models domains and their technology stacks. The graph is designed to enable technology adoption prediction and affinity analysis using Graph Data Science (GDS).
+The Public Company Graph is a focused knowledge graph that models domains and their technology stacks. The graph is designed to enable technology adoption prediction and affinity analysis using Graph Data Science (GDS).
 
 **Purpose**: Enable technology adoption prediction and technology affinity bundling for competitive intelligence and sales targeting.
 

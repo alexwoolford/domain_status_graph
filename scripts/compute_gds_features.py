@@ -3,7 +3,7 @@
 Compute Graph Data Science (GDS) features using Python GDS Client.
 
 This script implements the GDS features using the modular functions in
-domain_status_graph.gds:
+public_company_graph.gds:
 - Technology Adoption Prediction (Personalized PageRank)
 - Technology Affinity and Bundling (Node Similarity)
 - Company Description Similarity (Cosine similarity on embeddings)
@@ -18,13 +18,13 @@ import argparse
 import logging
 import sys
 
-from domain_status_graph.cli import (
+from public_company_graph.cli import (
     add_execute_argument,
     get_driver_and_database,
     setup_logging,
     verify_neo4j_connection,
 )
-from domain_status_graph.gds import (
+from public_company_graph.gds import (
     cleanup_leftover_graphs,
     compute_company_description_similarity,
     compute_company_technology_similarity,

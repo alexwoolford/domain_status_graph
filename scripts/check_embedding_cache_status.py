@@ -11,10 +11,10 @@ Shows:
 
 import argparse
 
-from domain_status_graph.cache import get_cache
-from domain_status_graph.cli import get_driver_and_database, setup_logging
-from domain_status_graph.constants import MIN_DESCRIPTION_LENGTH_FOR_SIMILARITY
-from domain_status_graph.embeddings.openai_client import (
+from public_company_graph.cache import get_cache
+from public_company_graph.cli import get_driver_and_database, setup_logging
+from public_company_graph.constants import MIN_DESCRIPTION_LENGTH_FOR_SIMILARITY
+from public_company_graph.embeddings.openai_client import (
     EMBEDDING_TRUNCATE_TOKENS,
     count_tokens,
 )

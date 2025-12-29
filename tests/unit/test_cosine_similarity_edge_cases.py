@@ -12,8 +12,8 @@ Focus areas:
 import numpy as np
 import pytest
 
-from domain_status_graph.constants import EMBEDDING_DIMENSION
-from domain_status_graph.similarity.cosine import (
+from public_company_graph.constants import EMBEDDING_DIMENSION
+from public_company_graph.similarity.cosine import (
     compute_cosine_similarity_matrix,
     find_top_k_similar_pairs,
     validate_embedding,
@@ -246,7 +246,8 @@ class TestFindTopKSimilarPairsEdgeCases:
         """Mismatched keys and embeddings should raise."""
         with pytest.raises(ValueError):
             find_top_k_similar_pairs(
-                ["a", "b", "c"], [[0.5] * 10, [0.5] * 10]  # Only 2 embeddings for 3 keys
+                ["a", "b", "c"],
+                [[0.5] * 10, [0.5] * 10],  # Only 2 embeddings for 3 keys
             )
 
     def test_threshold_filters_pairs(self):

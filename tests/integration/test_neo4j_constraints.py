@@ -54,7 +54,7 @@ class TestConstraintCreation:
 
     def test_create_domain_constraints(self, neo4j_driver, test_database):
         """Test that domain constraints can be created."""
-        from domain_status_graph.neo4j.constraints import create_domain_constraints
+        from public_company_graph.neo4j.constraints import create_domain_constraints
 
         # Should not raise
         create_domain_constraints(neo4j_driver, database=test_database)
@@ -67,7 +67,7 @@ class TestConstraintCreation:
 
     def test_create_technology_constraints(self, neo4j_driver, test_database):
         """Test that technology constraints can be created."""
-        from domain_status_graph.neo4j.constraints import create_technology_constraints
+        from public_company_graph.neo4j.constraints import create_technology_constraints
 
         create_technology_constraints(neo4j_driver, database=test_database)
 
@@ -78,7 +78,7 @@ class TestConstraintCreation:
 
     def test_constraints_idempotent(self, neo4j_driver, test_database):
         """Test that running constraints twice doesn't error."""
-        from domain_status_graph.neo4j.constraints import create_bootstrap_constraints
+        from public_company_graph.neo4j.constraints import create_bootstrap_constraints
 
         # Run twice - should not raise
         create_bootstrap_constraints(neo4j_driver, database=test_database)
@@ -90,7 +90,7 @@ class TestConnectionVerification:
 
     def test_verify_connection_success(self, neo4j_driver):
         """Test that verify_connection returns True for valid connection."""
-        from domain_status_graph.neo4j.connection import verify_connection
+        from public_company_graph.neo4j.connection import verify_connection
 
         assert verify_connection(neo4j_driver) is True
 

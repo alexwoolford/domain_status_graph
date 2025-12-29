@@ -23,13 +23,13 @@ import argparse
 import logging
 import sys
 
-from domain_status_graph.cache import get_cache
-from domain_status_graph.cli import (
+from public_company_graph.cache import get_cache
+from public_company_graph.cli import (
     get_driver_and_database,
     setup_logging,
     verify_neo4j_connection,
 )
-from domain_status_graph.neo4j import clean_properties_batch, create_company_constraints
+from public_company_graph.neo4j import clean_properties_batch, create_company_constraints
 
 
 def load_companies(

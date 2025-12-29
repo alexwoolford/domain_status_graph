@@ -10,8 +10,8 @@ import sys
 from collections import Counter
 from datetime import datetime
 
-from domain_status_graph.config import get_data_dir
-from domain_status_graph.utils.tar_selection import get_latest_10k_filing_date_from_tar
+from public_company_graph.config import get_data_dir
+from public_company_graph.utils.tar_selection import get_latest_10k_filing_date_from_tar
 
 FILINGS_DIR = get_data_dir() / "10k_filings"
 PORTFOLIOS_DIR = get_data_dir() / "10k_portfolios"

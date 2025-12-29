@@ -9,9 +9,9 @@ from pathlib import Path
 
 import pytest
 
-from domain_status_graph.config import get_data_dir
-from domain_status_graph.parsing.base import RiskFactorsParser
-from domain_status_graph.parsing.risk_factors import (
+from public_company_graph.config import get_data_dir
+from public_company_graph.parsing.base import RiskFactorsParser
+from public_company_graph.parsing.risk_factors import (
     extract_risk_factors,
     extract_risk_factors_with_datamule_fallback,
 )
@@ -79,15 +79,15 @@ class TestRiskFactorsRealFiles:
             keyword in result_upper[:500]
             for keyword in ["RISK", "UNCERTAINTY", "ADVERSE", "MATERIAL"]
         )
-        assert (
-            has_heading or has_risk_content
-        ), "Should contain Item 1A/Risk Factors heading or risk-related content"
+        assert has_heading or has_risk_content, (
+            "Should contain Item 1A/Risk Factors heading or risk-related content"
+        )
 
         # Business Outcome: Stops at correct boundary
         assert "ITEM 1B" not in result_upper, "Should stop at Item 1B"
-        assert (
-            "ITEM 2" not in result_upper or result_upper.find("ITEM 2") > len(result) * 0.9
-        ), "Should not include Item 2 content"
+        assert "ITEM 2" not in result_upper or result_upper.find("ITEM 2") > len(result) * 0.9, (
+            "Should not include Item 2 content"
+        )
 
     def test_microsoft_has_risk_factors(self, filings_dir):
         """
@@ -131,9 +131,9 @@ class TestRiskFactorsRealFiles:
             keyword in result_upper[:500]
             for keyword in ["RISK", "UNCERTAINTY", "ADVERSE", "MATERIAL"]
         )
-        assert (
-            has_heading or has_risk_content
-        ), "Should contain Item 1A/Risk Factors heading or risk-related content"
+        assert has_heading or has_risk_content, (
+            "Should contain Item 1A/Risk Factors heading or risk-related content"
+        )
 
     def test_risk_factors_content_quality(self, filings_dir):
         """
@@ -168,9 +168,9 @@ class TestRiskFactorsRealFiles:
         # Quality Standard: Contains risk-related content
         result_lower = result.lower()
         risk_keywords = ["risk", "uncertainty", "adverse", "material", "factor"]
-        assert any(
-            keyword in result_lower for keyword in risk_keywords
-        ), "Risk factors should contain risk-related keywords"
+        assert any(keyword in result_lower for keyword in risk_keywords), (
+            "Risk factors should contain risk-related keywords"
+        )
 
         # Quality Standard: Not just noise
         # Should have multiple sentences/paragraphs
@@ -217,9 +217,9 @@ class TestRiskFactorsRealFiles:
             or "risk" in result_lower[:200]  # Early mention of risk
         )
 
-        assert (
-            has_intro or has_structure
-        ), "Risk factors should have introduction or structured content"
+        assert has_intro or has_structure, (
+            "Risk factors should have introduction or structured content"
+        )
 
     def test_risk_factors_parser_integration(self, filings_dir):
         """
@@ -323,9 +323,9 @@ class TestRiskFactorsRealFiles:
         # Business Outcome: Most companies have risk factors
         if total_count > 0:
             success_rate = extracted_count / total_count
-            assert (
-                success_rate >= 0.5
-            ), f"At least 50% should have risk factors, got {success_rate:.1%}"
+            assert success_rate >= 0.5, (
+                f"At least 50% should have risk factors, got {success_rate:.1%}"
+            )
 
     def test_risk_factors_boundary_detection(self, filings_dir):
         """

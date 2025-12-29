@@ -4,14 +4,14 @@ Unit tests for GDS technology adoption prediction functions.
 
 from unittest.mock import MagicMock, patch
 
-from domain_status_graph.gds.tech_adoption import compute_tech_adoption_prediction
+from public_company_graph.gds.tech_adoption import compute_tech_adoption_prediction
 
 
 class TestComputeTechAdoptionPrediction:
     """Tests for compute_tech_adoption_prediction function."""
 
-    @patch("domain_status_graph.gds.tech_adoption.delete_relationships_in_batches")
-    @patch("domain_status_graph.gds.tech_adoption.safe_drop_graph")
+    @patch("public_company_graph.gds.tech_adoption.delete_relationships_in_batches")
+    @patch("public_company_graph.gds.tech_adoption.safe_drop_graph")
     def test_creates_graph_and_runs_pagerank(self, mock_safe_drop, mock_delete_rels):
         """Test full flow: graph creation and PageRank computation."""
         mock_gds = MagicMock()
@@ -84,8 +84,8 @@ class TestComputeTechAdoptionPrediction:
         # Result is accumulated - due to mocking complexity, just verify no exception
         # The actual value depends on mock setup; integration tests verify correct counts
 
-    @patch("domain_status_graph.gds.tech_adoption.delete_relationships_in_batches")
-    @patch("domain_status_graph.gds.tech_adoption.safe_drop_graph")
+    @patch("public_company_graph.gds.tech_adoption.delete_relationships_in_batches")
+    @patch("public_company_graph.gds.tech_adoption.safe_drop_graph")
     def test_deletes_existing_relationships(self, mock_safe_drop, mock_delete_rels):
         """Test that existing LIKELY_TO_ADOPT relationships are deleted."""
         mock_gds = MagicMock()
@@ -117,8 +117,8 @@ class TestComputeTechAdoptionPrediction:
         call_kwargs = mock_delete_rels.call_args[1]
         assert call_kwargs["database"] == "testdb"
 
-    @patch("domain_status_graph.gds.tech_adoption.delete_relationships_in_batches")
-    @patch("domain_status_graph.gds.tech_adoption.safe_drop_graph")
+    @patch("public_company_graph.gds.tech_adoption.delete_relationships_in_batches")
+    @patch("public_company_graph.gds.tech_adoption.safe_drop_graph")
     def test_handles_exception_gracefully(self, mock_safe_drop, mock_delete_rels):
         """Test that exceptions are caught and logged."""
         mock_gds = MagicMock()
@@ -149,8 +149,8 @@ class TestComputeTechAdoptionPrediction:
 
         assert result == 0
 
-    @patch("domain_status_graph.gds.tech_adoption.delete_relationships_in_batches")
-    @patch("domain_status_graph.gds.tech_adoption.safe_drop_graph")
+    @patch("public_company_graph.gds.tech_adoption.delete_relationships_in_batches")
+    @patch("public_company_graph.gds.tech_adoption.safe_drop_graph")
     def test_respects_max_iterations_parameter(self, mock_safe_drop, mock_delete_rels):
         """Test that max_iterations is passed to PageRank."""
         mock_gds = MagicMock()
@@ -191,8 +191,8 @@ class TestComputeTechAdoptionPrediction:
         call_kwargs = mock_gds.pageRank.write.call_args[1]
         assert call_kwargs["maxIterations"] == 50
 
-    @patch("domain_status_graph.gds.tech_adoption.delete_relationships_in_batches")
-    @patch("domain_status_graph.gds.tech_adoption.safe_drop_graph")
+    @patch("public_company_graph.gds.tech_adoption.delete_relationships_in_batches")
+    @patch("public_company_graph.gds.tech_adoption.safe_drop_graph")
     def test_respects_damping_factor_parameter(self, mock_safe_drop, mock_delete_rels):
         """Test that damping_factor is passed to PageRank."""
         mock_gds = MagicMock()
@@ -231,8 +231,8 @@ class TestComputeTechAdoptionPrediction:
         call_kwargs = mock_gds.pageRank.write.call_args[1]
         assert call_kwargs["dampingFactor"] == 0.9
 
-    @patch("domain_status_graph.gds.tech_adoption.delete_relationships_in_batches")
-    @patch("domain_status_graph.gds.tech_adoption.safe_drop_graph")
+    @patch("public_company_graph.gds.tech_adoption.delete_relationships_in_batches")
+    @patch("public_company_graph.gds.tech_adoption.safe_drop_graph")
     def test_processes_technologies_in_batches(self, mock_safe_drop, mock_delete_rels):
         """Test that technologies are processed in batches."""
         mock_gds = MagicMock()
@@ -272,8 +272,8 @@ class TestComputeTechAdoptionPrediction:
         # PageRank should be called twice (once per batch)
         assert mock_gds.pageRank.write.call_count == 2
 
-    @patch("domain_status_graph.gds.tech_adoption.delete_relationships_in_batches")
-    @patch("domain_status_graph.gds.tech_adoption.safe_drop_graph")
+    @patch("public_company_graph.gds.tech_adoption.delete_relationships_in_batches")
+    @patch("public_company_graph.gds.tech_adoption.safe_drop_graph")
     def test_handles_individual_tech_errors(self, mock_safe_drop, mock_delete_rels):
         """Test that errors processing individual technologies don't stop the batch."""
         mock_gds = MagicMock()
@@ -342,8 +342,8 @@ class TestComputeTechAdoptionPrediction:
         # without raising and logs a warning for the failed tech
         mock_logger.warning.assert_called()
 
-    @patch("domain_status_graph.gds.tech_adoption.delete_relationships_in_batches")
-    @patch("domain_status_graph.gds.tech_adoption.safe_drop_graph")
+    @patch("public_company_graph.gds.tech_adoption.delete_relationships_in_batches")
+    @patch("public_company_graph.gds.tech_adoption.safe_drop_graph")
     def test_filters_ubiquitous_technologies(self, mock_safe_drop, mock_delete_rels):
         """Test that query filters out technologies used by >50% of domains."""
         mock_gds = MagicMock()
@@ -372,8 +372,8 @@ class TestComputeTechAdoptionPrediction:
         cypher_query = mock_session.run.call_args[0][0]
         assert "0.5" in cypher_query or "50" in cypher_query.replace(" ", "")
 
-    @patch("domain_status_graph.gds.tech_adoption.delete_relationships_in_batches")
-    @patch("domain_status_graph.gds.tech_adoption.safe_drop_graph")
+    @patch("public_company_graph.gds.tech_adoption.delete_relationships_in_batches")
+    @patch("public_company_graph.gds.tech_adoption.safe_drop_graph")
     def test_cleans_up_temp_property_after_batch(self, mock_safe_drop, mock_delete_rels):
         """Test that temporary PageRank property is cleaned up after each batch."""
         mock_gds = MagicMock()

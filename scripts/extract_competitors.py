@@ -32,16 +32,16 @@ import sys
 from collections import defaultdict
 from typing import Any
 
-from domain_status_graph.cache import get_cache
-from domain_status_graph.cli import (
+from public_company_graph.cache import get_cache
+from public_company_graph.cli import (
     add_execute_argument,
     get_driver_and_database,
     setup_logging,
     verify_neo4j_connection,
 )
-from domain_status_graph.constants import BATCH_SIZE_LARGE
-from domain_status_graph.neo4j import clean_properties_batch
-from domain_status_graph.parsing.competitor_extraction import (
+from public_company_graph.constants import BATCH_SIZE_LARGE
+from public_company_graph.neo4j import clean_properties_batch
+from public_company_graph.parsing.competitor_extraction import (
     CompetitorLookup,
     build_competitor_lookup,
     extract_and_resolve_competitors_simple,

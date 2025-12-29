@@ -4,7 +4,7 @@ Unit tests for website extraction from 10-K filings.
 Tests the website extraction functions with various HTML/XML formats.
 """
 
-from domain_status_graph.parsing.website_extraction import (
+from public_company_graph.parsing.website_extraction import (
     choose_best_website_domain,
     extract_domains_from_ixbrl_namespaces,
     extract_domains_from_visible_text,
@@ -94,8 +94,7 @@ class TestExtractDomainsFromIxbrlNamespaces:
     def test_multiple_namespaces(self):
         """Test extraction from multiple namespace declarations."""
         html = (
-            '<html xmlns:air="http://www.aarcorp.com/20240531" '
-            'xmlns:test="https://example.com/ns">'
+            '<html xmlns:air="http://www.aarcorp.com/20240531" xmlns:test="https://example.com/ns">'
         )
         result = extract_domains_from_ixbrl_namespaces(html)
         assert "aarcorp.com" in result
@@ -109,7 +108,7 @@ class TestExtractDomainsFromIxbrlNamespaces:
 
     def test_deduplication(self):
         """Test that duplicate domains are removed."""
-        html = '<html xmlns:a="http://www.example.com/1" ' 'xmlns:b="http://www.example.com/2">'
+        html = '<html xmlns:a="http://www.example.com/1" xmlns:b="http://www.example.com/2">'
         result = extract_domains_from_ixbrl_namespaces(html)
         # Should only appear once
         assert result.count("example.com") == 1
@@ -126,9 +125,7 @@ class TestExtractDomainsFromVisibleText:
 
     def test_multiple_domains(self):
         """Test extraction of multiple domains."""
-        html = (
-            "<html><body>" "Visit www.apple.com or www.microsoft.com for details" "</body></html>"
-        )
+        html = "<html><body>Visit www.apple.com or www.microsoft.com for details</body></html>"
         result = extract_domains_from_visible_text(html)
         assert "apple.com" in result
         assert "microsoft.com" in result
@@ -191,7 +188,7 @@ class TestChooseBestWebsiteDomain:
 
     def test_com_domain_bonus(self):
         """Test that .com domains get scoring bonus."""
-        html = "<html><body>" "www.example.org and www.example.com mentioned" "</body></html>"
+        html = "<html><body>www.example.org and www.example.com mentioned</body></html>"
         result = choose_best_website_domain(html)
         # .com should score higher
         assert result == "example.com"

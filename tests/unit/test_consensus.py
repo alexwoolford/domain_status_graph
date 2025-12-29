@@ -4,17 +4,17 @@ Unit tests for domain consensus logic.
 
 from unittest.mock import MagicMock, patch
 
-from domain_status_graph.consensus.domain_consensus import collect_domains
-from domain_status_graph.domain.models import DomainResult
+from public_company_graph.consensus.domain_consensus import collect_domains
+from public_company_graph.domain.models import DomainResult
 
 
 class TestCollectDomains:
     """Tests for collect_domains consensus function."""
 
-    @patch("domain_status_graph.consensus.domain_consensus.get_domain_from_yfinance")
-    @patch("domain_status_graph.consensus.domain_consensus.get_domain_from_finviz")
-    @patch("domain_status_graph.consensus.domain_consensus.get_domain_from_sec")
-    @patch("domain_status_graph.consensus.domain_consensus.get_domain_from_finnhub")
+    @patch("public_company_graph.consensus.domain_consensus.get_domain_from_yfinance")
+    @patch("public_company_graph.consensus.domain_consensus.get_domain_from_finviz")
+    @patch("public_company_graph.consensus.domain_consensus.get_domain_from_sec")
+    @patch("public_company_graph.consensus.domain_consensus.get_domain_from_finnhub")
     def test_all_sources_agree(self, mock_finnhub, mock_sec, mock_finviz, mock_yfinance):
         """Test when all sources agree on the same domain."""
         mock_session = MagicMock()
@@ -38,10 +38,10 @@ class TestCollectDomains:
         # Verify the domain is correct
         assert result.domain == domain
 
-    @patch("domain_status_graph.consensus.domain_consensus.get_domain_from_yfinance")
-    @patch("domain_status_graph.consensus.domain_consensus.get_domain_from_finviz")
-    @patch("domain_status_graph.consensus.domain_consensus.get_domain_from_sec")
-    @patch("domain_status_graph.consensus.domain_consensus.get_domain_from_finnhub")
+    @patch("public_company_graph.consensus.domain_consensus.get_domain_from_yfinance")
+    @patch("public_company_graph.consensus.domain_consensus.get_domain_from_finviz")
+    @patch("public_company_graph.consensus.domain_consensus.get_domain_from_sec")
+    @patch("public_company_graph.consensus.domain_consensus.get_domain_from_finnhub")
     def test_weighted_voting(self, mock_finnhub, mock_sec, mock_finviz, mock_yfinance):
         """Test weighted voting when sources disagree."""
         mock_session = MagicMock()
@@ -70,10 +70,10 @@ class TestCollectDomains:
         # finviz should not be in sources (different domain)
         assert "finviz" not in result.sources
 
-    @patch("domain_status_graph.consensus.domain_consensus.get_domain_from_yfinance")
-    @patch("domain_status_graph.consensus.domain_consensus.get_domain_from_finviz")
-    @patch("domain_status_graph.consensus.domain_consensus.get_domain_from_sec")
-    @patch("domain_status_graph.consensus.domain_consensus.get_domain_from_finnhub")
+    @patch("public_company_graph.consensus.domain_consensus.get_domain_from_yfinance")
+    @patch("public_company_graph.consensus.domain_consensus.get_domain_from_finviz")
+    @patch("public_company_graph.consensus.domain_consensus.get_domain_from_sec")
+    @patch("public_company_graph.consensus.domain_consensus.get_domain_from_finnhub")
     def test_early_stopping(self, mock_finnhub, mock_sec, mock_finviz, mock_yfinance):
         """Test early stopping when confidence threshold is met."""
         mock_session = MagicMock()
@@ -96,10 +96,10 @@ class TestCollectDomains:
         assert result.confidence > 0.7
         assert len(result.sources) >= 2  # At least 2 sources should agree
 
-    @patch("domain_status_graph.consensus.domain_consensus.get_domain_from_yfinance")
-    @patch("domain_status_graph.consensus.domain_consensus.get_domain_from_finviz")
-    @patch("domain_status_graph.consensus.domain_consensus.get_domain_from_sec")
-    @patch("domain_status_graph.consensus.domain_consensus.get_domain_from_finnhub")
+    @patch("public_company_graph.consensus.domain_consensus.get_domain_from_yfinance")
+    @patch("public_company_graph.consensus.domain_consensus.get_domain_from_finviz")
+    @patch("public_company_graph.consensus.domain_consensus.get_domain_from_sec")
+    @patch("public_company_graph.consensus.domain_consensus.get_domain_from_finnhub")
     def test_no_domains_found(self, mock_finnhub, mock_sec, mock_finviz, mock_yfinance):
         """Test when no sources find a domain."""
         mock_session = MagicMock()
@@ -117,10 +117,10 @@ class TestCollectDomains:
         assert len(result.sources) == 0
         assert result.votes == 0
 
-    @patch("domain_status_graph.consensus.domain_consensus.get_domain_from_yfinance")
-    @patch("domain_status_graph.consensus.domain_consensus.get_domain_from_finviz")
-    @patch("domain_status_graph.consensus.domain_consensus.get_domain_from_sec")
-    @patch("domain_status_graph.consensus.domain_consensus.get_domain_from_finnhub")
+    @patch("public_company_graph.consensus.domain_consensus.get_domain_from_yfinance")
+    @patch("public_company_graph.consensus.domain_consensus.get_domain_from_finviz")
+    @patch("public_company_graph.consensus.domain_consensus.get_domain_from_sec")
+    @patch("public_company_graph.consensus.domain_consensus.get_domain_from_finnhub")
     def test_description_selection(self, mock_finnhub, mock_sec, mock_finviz, mock_yfinance):
         """Test that best description is selected based on weighted scores."""
         mock_session = MagicMock()
@@ -153,10 +153,10 @@ class TestCollectDomains:
             assert result.description in ["Best description from yfinance", "Finviz description"]
             assert result.description_source in ["yfinance", "finviz"]
 
-    @patch("domain_status_graph.consensus.domain_consensus.get_domain_from_yfinance")
-    @patch("domain_status_graph.consensus.domain_consensus.get_domain_from_finviz")
-    @patch("domain_status_graph.consensus.domain_consensus.get_domain_from_sec")
-    @patch("domain_status_graph.consensus.domain_consensus.get_domain_from_finnhub")
+    @patch("public_company_graph.consensus.domain_consensus.get_domain_from_yfinance")
+    @patch("public_company_graph.consensus.domain_consensus.get_domain_from_finviz")
+    @patch("public_company_graph.consensus.domain_consensus.get_domain_from_sec")
+    @patch("public_company_graph.consensus.domain_consensus.get_domain_from_finnhub")
     def test_timeout_handling(self, mock_finnhub, mock_sec, mock_finviz, mock_yfinance):
         """Test handling of source timeouts."""
         mock_session = MagicMock()
@@ -175,10 +175,10 @@ class TestCollectDomains:
         assert "yfinance" in result.sources
         assert "finviz" not in result.sources  # Timed out
 
-    @patch("domain_status_graph.consensus.domain_consensus.get_domain_from_yfinance")
-    @patch("domain_status_graph.consensus.domain_consensus.get_domain_from_finviz")
-    @patch("domain_status_graph.consensus.domain_consensus.get_domain_from_sec")
-    @patch("domain_status_graph.consensus.domain_consensus.get_domain_from_finnhub")
+    @patch("public_company_graph.consensus.domain_consensus.get_domain_from_yfinance")
+    @patch("public_company_graph.consensus.domain_consensus.get_domain_from_finviz")
+    @patch("public_company_graph.consensus.domain_consensus.get_domain_from_sec")
+    @patch("public_company_graph.consensus.domain_consensus.get_domain_from_finnhub")
     def test_exception_handling(self, mock_finnhub, mock_sec, mock_finviz, mock_yfinance):
         """Test handling of source exceptions."""
         mock_session = MagicMock()
@@ -197,10 +197,10 @@ class TestCollectDomains:
         assert "yfinance" in result.sources
         assert "finviz" not in result.sources  # Exception
 
-    @patch("domain_status_graph.consensus.domain_consensus.get_domain_from_yfinance")
-    @patch("domain_status_graph.consensus.domain_consensus.get_domain_from_finviz")
-    @patch("domain_status_graph.consensus.domain_consensus.get_domain_from_sec")
-    @patch("domain_status_graph.consensus.domain_consensus.get_domain_from_finnhub")
+    @patch("public_company_graph.consensus.domain_consensus.get_domain_from_yfinance")
+    @patch("public_company_graph.consensus.domain_consensus.get_domain_from_finviz")
+    @patch("public_company_graph.consensus.domain_consensus.get_domain_from_sec")
+    @patch("public_company_graph.consensus.domain_consensus.get_domain_from_finnhub")
     def test_all_candidates_tracking(self, mock_finnhub, mock_sec, mock_finviz, mock_yfinance):
         """Test that all_candidates tracks all domains found."""
         mock_session = MagicMock()

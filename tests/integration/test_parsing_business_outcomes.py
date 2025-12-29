@@ -5,8 +5,8 @@ These tests verify what the parsing should achieve, not how it works.
 When tests fail, question the implementation - don't just fix the test.
 """
 
-from domain_status_graph.domain.validation import is_valid_domain
-from domain_status_graph.parsing.base import (
+from public_company_graph.domain.validation import is_valid_domain
+from public_company_graph.parsing.base import (
     BusinessDescriptionParser,
     RiskFactorsParser,
     WebsiteParser,
@@ -69,9 +69,9 @@ class TestParsingBusinessOutcomes:
 
         # Business Outcome: All fields present
         assert result.get("website") is not None, "Website should be extracted"
-        assert (
-            result.get("business_description") is not None
-        ), "Business description should be extracted"
+        assert result.get("business_description") is not None, (
+            "Business description should be extracted"
+        )
         assert result.get("risk_factors") is not None, "Risk factors should be extracted"
 
         # Business Outcome: Data is valid
@@ -80,9 +80,9 @@ class TestParsingBusinessOutcomes:
         assert "apple.com" in website.lower(), "Website should match company"
 
         # Business Outcome: Data is substantial
-        assert (
-            len(result["business_description"]) > 100
-        ), "Business description should be substantial"
+        assert len(result["business_description"]) > 100, (
+            "Business description should be substantial"
+        )
         assert len(result["risk_factors"]) > 100, "Risk factors should be substantial"
 
     def test_parsing_extracts_accurate_website(self, tmp_path):
@@ -244,9 +244,9 @@ class TestParsingBusinessOutcomes:
 
         # Quality Standard: Completeness
         assert result.get("website") is not None, "Website should be present"
-        assert (
-            result.get("business_description") is not None
-        ), "Business description should be present"
+        assert result.get("business_description") is not None, (
+            "Business description should be present"
+        )
 
         # Quality Standard: Validity
         if result.get("website"):

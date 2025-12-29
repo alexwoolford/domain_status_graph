@@ -6,7 +6,7 @@ from unittest.mock import MagicMock, patch
 
 import pandas as pd
 
-from domain_status_graph.gds.tech_affinity import (
+from public_company_graph.gds.tech_affinity import (
     _identify_columns,
     compute_tech_affinity_bundling,
 )
@@ -309,7 +309,7 @@ class TestComputeTechAffinityBundling:
         call_kwargs = mock_gds.nodeSimilarity.stream.call_args[1]
         assert call_kwargs["topK"] == 15
 
-    @patch("domain_status_graph.gds.tech_affinity.safe_drop_graph")
+    @patch("public_company_graph.gds.tech_affinity.safe_drop_graph")
     def test_drops_existing_graph_before_projection(self, mock_safe_drop):
         """Test that existing graph is dropped before creating new one."""
         mock_gds = MagicMock()

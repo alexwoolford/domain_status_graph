@@ -4,10 +4,10 @@
 
 ### Step 1: Create Your Parser Class
 
-Create a new file or add to existing: `domain_status_graph/parsing/your_parser.py`
+Create a new file or add to existing: `public_company_graph/parsing/your_parser.py`
 
 ```python
-from domain_status_graph.parsing.base import TenKParser
+from public_company_graph.parsing.base import TenKParser
 from pathlib import Path
 from typing import Optional
 
@@ -52,13 +52,13 @@ class YourNewParser(TenKParser):
 
 ### Step 2: Register Your Parser
 
-Edit `domain_status_graph/parsing/base.py`, find the `get_default_parsers()` function, and add your parser:
+Edit `public_company_graph/parsing/base.py`, find the `get_default_parsers()` function, and add your parser:
 
 ```python
 # In get_default_parsers() function:
 def get_default_parsers() -> list:
     """Get the default list of parsers for 10-K parsing."""
-    from domain_status_graph.parsing.filing_metadata import FilingMetadataParser
+    from public_company_graph.parsing.filing_metadata import FilingMetadataParser
 
     return [
         WebsiteParser(),
@@ -73,7 +73,7 @@ def get_default_parsers() -> list:
 ### Step 3: Test It
 
 ```python
-from domain_status_graph.parsing.base import YourNewParser
+from public_company_graph.parsing.base import YourNewParser
 from pathlib import Path
 
 parser = YourNewParser()
@@ -86,8 +86,8 @@ That's it! Your parser will now run automatically for all 4,706 companies.
 ## Example: Adding a Filing Date Parser
 
 ```python
-# domain_status_graph/parsing/filing_date.py
-from domain_status_graph.parsing.base import TenKParser
+# public_company_graph/parsing/filing_date.py
+from public_company_graph.parsing.base import TenKParser
 from pathlib import Path
 from typing import Optional
 import re
@@ -129,11 +129,11 @@ class FilingDateParser(TenKParser):
             return False
 ```
 
-Then in `domain_status_graph/parsing/base.py`:
+Then in `public_company_graph/parsing/base.py`:
 
 ```python
 # In get_default_parsers():
-from domain_status_graph.parsing.filing_date import FilingDateParser
+from public_company_graph.parsing.filing_date import FilingDateParser
 
 return [
     WebsiteParser(),
@@ -164,7 +164,7 @@ return [
 
 **To add a new parser:**
 1. Implement `TenKParser` interface in a new file
-2. Add to `get_default_parsers()` in `domain_status_graph/parsing/base.py`
+2. Add to `get_default_parsers()` in `public_company_graph/parsing/base.py`
 3. Done!
 
 The interface handles everything else (file reading, error handling, validation, etc.).

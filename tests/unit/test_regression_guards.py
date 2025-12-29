@@ -29,7 +29,7 @@ class TestTarDateExtractionRegression:
 
         This MUST return a valid date (year only), not None.
         """
-        from domain_status_graph.utils.tar_selection import extract_filing_date_from_html_path
+        from public_company_graph.utils.tar_selection import extract_filing_date_from_html_path
 
         # Real examples from datamule batch downloads
         test_cases = [
@@ -45,30 +45,30 @@ class TestTarDateExtractionRegression:
                 f"Date extraction returned None for {path}. "
                 f"This is a regression - accession number format should extract year."
             )
-            assert (
-                result.year == expected_year
-            ), f"Wrong year for {path}: got {result.year}, expected {expected_year}"
+            assert result.year == expected_year, (
+                f"Wrong year for {path}: got {result.year}, expected {expected_year}"
+            )
 
     def test_full_date_in_accession_takes_priority(self):
         """
         When accession number contains a full YYYYMMDD date, use that instead of year-only.
         Format: {10-digit-CIK}{8-digit-YYYYMMDD}/filename
         """
-        from domain_status_graph.utils.tar_selection import extract_filing_date_from_html_path
+        from public_company_graph.utils.tar_selection import extract_filing_date_from_html_path
 
         # This format has full date, not year-only
         result = extract_filing_date_from_html_path("000010908720231231/10k.htm")
         assert result is not None
-        assert result == datetime(
-            2023, 12, 31
-        ), f"Full date format should return exact date, got {result}"
+        assert result == datetime(2023, 12, 31), (
+            f"Full date format should return exact date, got {result}"
+        )
 
     def test_filename_date_takes_priority_over_accession(self):
         """
         When HTML filename contains a date (like adbe-20211203.htm),
         use that instead of the accession number - it's more precise.
         """
-        from domain_status_graph.utils.tar_selection import extract_filing_date_from_html_path
+        from public_company_graph.utils.tar_selection import extract_filing_date_from_html_path
 
         # Filename has precise date, accession has year only
         result = extract_filing_date_from_html_path("000079634322000032/adbe-20211203.htm")
@@ -98,7 +98,7 @@ class TestEmbeddingBatchSizeRegression:
 
         Using 30 gives us a safe margin.
         """
-        from domain_status_graph.embeddings.chunking import MAX_CHUNKS_PER_BATCH
+        from public_company_graph.embeddings.chunking import MAX_CHUNKS_PER_BATCH
 
         # Calculate maximum safe batch size
         MAX_TOKENS_PER_REQUEST = 300_000
@@ -116,21 +116,21 @@ class TestEmbeddingBatchSizeRegression:
         """
         CHUNK_SIZE_TOKENS should be reasonable for the batch calculation.
         """
-        from domain_status_graph.embeddings.chunking import (
+        from public_company_graph.embeddings.chunking import (
             CHUNK_SIZE_TOKENS,
             MAX_CHUNKS_PER_BATCH,
         )
 
         # Chunks should be 6K-8K tokens
-        assert (
-            5000 <= CHUNK_SIZE_TOKENS <= 8000
-        ), f"CHUNK_SIZE_TOKENS ({CHUNK_SIZE_TOKENS}) is outside expected range 5000-8000"
+        assert 5000 <= CHUNK_SIZE_TOKENS <= 8000, (
+            f"CHUNK_SIZE_TOKENS ({CHUNK_SIZE_TOKENS}) is outside expected range 5000-8000"
+        )
 
         # Total tokens per batch should be under 300K with margin
         estimated_batch_tokens = MAX_CHUNKS_PER_BATCH * CHUNK_SIZE_TOKENS
-        assert (
-            estimated_batch_tokens < 280_000
-        ), f"Estimated batch tokens ({estimated_batch_tokens:,}) is too close to 300K limit"
+        assert estimated_batch_tokens < 280_000, (
+            f"Estimated batch tokens ({estimated_batch_tokens:,}) is too close to 300K limit"
+        )
 
 
 class TestTarFileValidation:
@@ -146,7 +146,7 @@ class TestTarFileValidation:
 
     def test_can_identify_zero_byte_tar(self, tmp_path):
         """Zero-byte files should be detected as empty."""
-        from domain_status_graph.utils.tar_selection import is_tar_file_empty
+        from public_company_graph.utils.tar_selection import is_tar_file_empty
 
         zero_byte_tar = tmp_path / "zero.tar"
         zero_byte_tar.write_bytes(b"")
@@ -155,14 +155,14 @@ class TestTarFileValidation:
 
     def test_can_identify_truncated_tar(self, tmp_path):
         """Truncated/corrupt tar files should be detected as empty."""
-        from domain_status_graph.utils.tar_selection import is_tar_file_empty
+        from public_company_graph.utils.tar_selection import is_tar_file_empty
 
         truncated_tar = tmp_path / "truncated.tar"
         truncated_tar.write_bytes(b"not a tar")
 
-        assert is_tar_file_empty(
-            truncated_tar
-        ), "Truncated/corrupt tar file should be identified as empty"
+        assert is_tar_file_empty(truncated_tar), (
+            "Truncated/corrupt tar file should be identified as empty"
+        )
 
     def test_empty_tar_with_header_only(self, tmp_path):
         """
@@ -171,7 +171,7 @@ class TestTarFileValidation:
         """
         import tarfile
 
-        from domain_status_graph.utils.tar_selection import is_tar_file_empty
+        from public_company_graph.utils.tar_selection import is_tar_file_empty
 
         empty_tar = tmp_path / "empty.tar"
         with tarfile.open(empty_tar, "w"):
@@ -179,9 +179,9 @@ class TestTarFileValidation:
 
         # Should be around 10,240 bytes (tar block size)
         assert empty_tar.stat().st_size > 0
-        assert is_tar_file_empty(
-            empty_tar
-        ), "Empty tar archive (header only) should be identified as empty"
+        assert is_tar_file_empty(empty_tar), (
+            "Empty tar archive (header only) should be identified as empty"
+        )
 
 
 class TestDateExtractionCoverage:
@@ -194,7 +194,7 @@ class TestDateExtractionCoverage:
 
     def test_all_observed_patterns(self):
         """Test all filename patterns observed in production."""
-        from domain_status_graph.utils.tar_selection import extract_filing_date_from_html_path
+        from public_company_graph.utils.tar_selection import extract_filing_date_from_html_path
 
         # Pattern: ticker-YYYYMMDD.htm (most common)
         assert extract_filing_date_from_html_path("aapl-20240928.htm") is not None
@@ -215,7 +215,7 @@ class TestDateExtractionCoverage:
 
     def test_patterns_that_should_return_none(self):
         """These patterns legitimately have no extractable date."""
-        from domain_status_graph.utils.tar_selection import extract_filing_date_from_html_path
+        from public_company_graph.utils.tar_selection import extract_filing_date_from_html_path
 
         # No date information at all
         assert extract_filing_date_from_html_path("form10k.htm") is None
@@ -237,11 +237,11 @@ class TestChunkingTokenEstimates:
 
     def test_chunk_sizes_match_configuration(self):
         """Chunks should not significantly exceed CHUNK_SIZE_TOKENS."""
-        from domain_status_graph.embeddings.chunking import (
+        from public_company_graph.embeddings.chunking import (
             CHUNK_SIZE_TOKENS,
             chunk_text,
         )
-        from domain_status_graph.embeddings.openai_client import count_tokens
+        from public_company_graph.embeddings.openai_client import count_tokens
 
         # Create a very long text
         long_text = "This is a test sentence with some content. " * 5000
@@ -274,7 +274,7 @@ class TestBatchTokenValidation:
 
         The code should detect oversized batches and fall back to individual calls.
         """
-        from domain_status_graph.embeddings.openai_client import (
+        from public_company_graph.embeddings.openai_client import (
             EMBEDDING_TRUNCATE_TOKENS,
             count_tokens,
             truncate_to_token_limit,
@@ -286,9 +286,9 @@ class TestBatchTokenValidation:
         truncated = truncate_to_token_limit(test_text, EMBEDDING_TRUNCATE_TOKENS)
         token_count = count_tokens(truncated, "text-embedding-3-small")
 
-        assert (
-            token_count <= EMBEDDING_TRUNCATE_TOKENS
-        ), f"Truncation failed: {token_count} tokens > {EMBEDDING_TRUNCATE_TOKENS} limit"
+        assert token_count <= EMBEDDING_TRUNCATE_TOKENS, (
+            f"Truncation failed: {token_count} tokens > {EMBEDDING_TRUNCATE_TOKENS} limit"
+        )
 
         # With proper truncation, 30 texts should be under 300K
         max_batch_size = 30
@@ -306,7 +306,7 @@ class TestBatchTokenValidation:
 
         This test verifies truncation works for various edge cases.
         """
-        from domain_status_graph.embeddings.openai_client import (
+        from public_company_graph.embeddings.openai_client import (
             EMBEDDING_TRUNCATE_TOKENS,
             count_tokens,
             truncate_to_token_limit,
@@ -324,6 +324,6 @@ class TestBatchTokenValidation:
             truncated = truncate_to_token_limit(text, EMBEDDING_TRUNCATE_TOKENS)
             token_count = count_tokens(truncated, "text-embedding-3-small")
 
-            assert (
-                token_count <= EMBEDDING_TRUNCATE_TOKENS
-            ), f"Edge case {i} failed: {token_count} tokens after truncation"
+            assert token_count <= EMBEDDING_TRUNCATE_TOKENS, (
+                f"Edge case {i} failed: {token_count} tokens after truncation"
+            )

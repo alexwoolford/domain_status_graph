@@ -4,14 +4,14 @@ Unit tests for yfinance domain source.
 
 from unittest.mock import MagicMock, patch
 
-from domain_status_graph.sources.yfinance import get_domain_from_yfinance
+from public_company_graph.sources.yfinance import get_domain_from_yfinance
 
 
 class TestGetDomainFromYfinance:
     """Tests for get_domain_from_yfinance function."""
 
-    @patch("domain_status_graph.sources.yfinance.yf")
-    @patch("domain_status_graph.sources.yfinance._rate_limiter")
+    @patch("public_company_graph.sources.yfinance.yf")
+    @patch("public_company_graph.sources.yfinance._rate_limiter")
     def test_successful_extraction(self, mock_rate_limiter, mock_yf):
         """Test successful domain extraction from yfinance."""
         # Mock yfinance response
@@ -31,8 +31,8 @@ class TestGetDomainFromYfinance:
         assert "raw_website" in result.metadata
         mock_rate_limiter.assert_called_once()
 
-    @patch("domain_status_graph.sources.yfinance.yf")
-    @patch("domain_status_graph.sources.yfinance._rate_limiter")
+    @patch("public_company_graph.sources.yfinance.yf")
+    @patch("public_company_graph.sources.yfinance._rate_limiter")
     def test_no_website(self, mock_rate_limiter, mock_yf):
         """Test when yfinance returns no website."""
         mock_ticker = MagicMock()
@@ -45,8 +45,8 @@ class TestGetDomainFromYfinance:
         assert result.source == "yfinance"
         assert result.confidence == 0.0
 
-    @patch("domain_status_graph.sources.yfinance.yf")
-    @patch("domain_status_graph.sources.yfinance._rate_limiter")
+    @patch("public_company_graph.sources.yfinance.yf")
+    @patch("public_company_graph.sources.yfinance._rate_limiter")
     def test_infrastructure_domain_filtered(self, mock_rate_limiter, mock_yf):
         """Test that infrastructure domains are filtered out."""
         mock_ticker = MagicMock()
@@ -58,8 +58,8 @@ class TestGetDomainFromYfinance:
         assert result.domain is None
         assert result.confidence == 0.0
 
-    @patch("domain_status_graph.sources.yfinance.yf")
-    @patch("domain_status_graph.sources.yfinance._rate_limiter")
+    @patch("public_company_graph.sources.yfinance.yf")
+    @patch("public_company_graph.sources.yfinance._rate_limiter")
     def test_description_fallback(self, mock_rate_limiter, mock_yf):
         """Test that description falls back to 'description' if 'longBusinessSummary' not available."""
         mock_ticker = MagicMock()
@@ -74,8 +74,8 @@ class TestGetDomainFromYfinance:
         assert result.domain == "apple.com"
         assert result.description == "Fallback description"
 
-    @patch("domain_status_graph.sources.yfinance.yf")
-    @patch("domain_status_graph.sources.yfinance._rate_limiter")
+    @patch("public_company_graph.sources.yfinance.yf")
+    @patch("public_company_graph.sources.yfinance._rate_limiter")
     def test_long_description_preserved(self, mock_rate_limiter, mock_yf):
         """Test that long descriptions are preserved in full (no truncation).
 
@@ -99,8 +99,8 @@ class TestGetDomainFromYfinance:
         assert len(result.description) == 3000
         assert not result.description.endswith("...")
 
-    @patch("domain_status_graph.sources.yfinance.yf")
-    @patch("domain_status_graph.sources.yfinance._rate_limiter")
+    @patch("public_company_graph.sources.yfinance.yf")
+    @patch("public_company_graph.sources.yfinance._rate_limiter")
     def test_exception_handling(self, mock_rate_limiter, mock_yf):
         """Test that exceptions are handled gracefully."""
         mock_yf.Ticker.side_effect = Exception("API error")
@@ -110,7 +110,7 @@ class TestGetDomainFromYfinance:
         assert result.domain is None
         assert result.confidence == 0.0
 
-    @patch("domain_status_graph.sources.yfinance.YFINANCE_AVAILABLE", False)
+    @patch("public_company_graph.sources.yfinance.YFINANCE_AVAILABLE", False)
     def test_yfinance_not_available(self):
         """Test when yfinance is not installed."""
         result = get_domain_from_yfinance("AAPL", "Apple Inc.")

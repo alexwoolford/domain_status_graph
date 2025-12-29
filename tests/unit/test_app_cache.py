@@ -1,5 +1,5 @@
 """
-Unit tests for domain_status_graph.cache (AppCache) module.
+Unit tests for public_company_graph.cache (AppCache) module.
 
 Tests the unified cache implementation used throughout the application.
 """
@@ -7,7 +7,7 @@ Tests the unified cache implementation used throughout the application.
 import tempfile
 from pathlib import Path
 
-from domain_status_graph.cache import AppCache
+from public_company_graph.cache import AppCache
 
 
 class TestAppCacheBasics:

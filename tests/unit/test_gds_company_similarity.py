@@ -4,7 +4,7 @@ Unit tests for GDS company similarity functions.
 
 from unittest.mock import MagicMock, patch
 
-from domain_status_graph.gds.company_similarity import (
+from public_company_graph.gds.company_similarity import (
     compute_company_description_similarity,
 )
 
@@ -88,7 +88,7 @@ class TestComputeCompanyDescriptionSimilarity:
         assert result == 0
         mock_logger.warning.assert_called()
 
-    @patch("domain_status_graph.gds.company_similarity.find_top_k_similar_pairs")
+    @patch("public_company_graph.gds.company_similarity.find_top_k_similar_pairs")
     def test_computes_similarity_and_writes_relationships(self, mock_find_similar):
         """Test that similarity is computed and relationships are written."""
         mock_driver = MagicMock()
@@ -218,7 +218,7 @@ class TestComputeCompanyDescriptionSimilarity:
         ]
 
         with patch(
-            "domain_status_graph.gds.company_similarity.find_top_k_similar_pairs"
+            "public_company_graph.gds.company_similarity.find_top_k_similar_pairs"
         ) as mock_find:
             mock_find.return_value = {("0001234567", "0007654321"): 0.9}
 
@@ -234,7 +234,7 @@ class TestComputeCompanyDescriptionSimilarity:
             assert call_kwargs["similarity_threshold"] == 0.8
             assert call_kwargs["top_k"] == 5
 
-    @patch("domain_status_graph.gds.company_similarity.find_top_k_similar_pairs")
+    @patch("public_company_graph.gds.company_similarity.find_top_k_similar_pairs")
     def test_batch_writing_large_result_sets(self, mock_find_similar):
         """Test that large result sets are written in batches."""
         mock_driver = MagicMock()

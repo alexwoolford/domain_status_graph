@@ -11,7 +11,7 @@ embedding model token limits. Bugs here could:
 import numpy as np
 import pytest
 
-from domain_status_graph.embeddings.chunking import (
+from public_company_graph.embeddings.chunking import (
     aggregate_embeddings,
     chunk_text,
 )

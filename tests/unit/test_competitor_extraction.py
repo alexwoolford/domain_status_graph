@@ -4,7 +4,7 @@ Unit tests for competitor extraction from 10-K filings.
 
 import pytest
 
-from domain_status_graph.parsing.competitor_extraction import (
+from public_company_graph.parsing.competitor_extraction import (
     CompetitorLookup,
     CompetitorMention,
     _is_common_word,

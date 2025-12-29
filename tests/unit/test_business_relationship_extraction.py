@@ -7,7 +7,7 @@ matching the CompanyKG schema.
 
 import pytest
 
-from domain_status_graph.parsing.business_relationship_extraction import (
+from public_company_graph.parsing.business_relationship_extraction import (
     COMPETITOR_KEYWORDS,
     CUSTOMER_KEYWORDS,
     PARTNER_KEYWORDS,

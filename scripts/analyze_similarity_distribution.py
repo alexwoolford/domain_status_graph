@@ -17,7 +17,7 @@ import numpy as np
 # Add parent directory to path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from domain_status_graph.cli import get_driver_and_database, setup_logging
+from public_company_graph.cli import get_driver_and_database, setup_logging
 
 
 def compute_all_pairwise_similarities(driver, database, sample_size=None):

@@ -11,7 +11,7 @@ from pathlib import Path
 
 import pytest
 
-from domain_status_graph.parsing.base import (
+from public_company_graph.parsing.base import (
     BusinessDescriptionParser,
     CompetitorParser,
     TenKParser,

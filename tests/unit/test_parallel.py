@@ -1,14 +1,14 @@
 """
-Unit tests for domain_status_graph.utils.parallel module.
+Unit tests for public_company_graph.utils.parallel module.
 """
 
 import time
 
-from domain_status_graph.utils.parallel import (
+from public_company_graph.utils.parallel import (
     execute_parallel,
     execute_parallel_with_stats,
 )
-from domain_status_graph.utils.stats import ExecutionStats
+from public_company_graph.utils.stats import ExecutionStats
 
 
 class TestExecuteParallel:

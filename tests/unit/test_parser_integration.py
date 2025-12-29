@@ -13,7 +13,7 @@ from unittest.mock import patch
 
 import pytest
 
-from domain_status_graph.parsing.base import (
+from public_company_graph.parsing.base import (
     BusinessDescriptionParser,
     CompetitorParser,
     WebsiteParser,
@@ -280,7 +280,7 @@ class TestBusinessDescriptionParserIntegration:
         html_file.write_text("<html><body><p>Content</p></body></html>")
 
         # Create portfolio directory with tar file
-        from domain_status_graph.config import get_data_dir
+        from public_company_graph.config import get_data_dir
 
         portfolios_dir = get_data_dir() / "10k_portfolios"
         portfolio_dir = portfolios_dir / "10k_0000320193"

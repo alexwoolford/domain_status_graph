@@ -17,7 +17,7 @@ import argparse
 import logging
 import sys
 
-from domain_status_graph.cli import (
+from public_company_graph.cli import (
     get_driver_and_database,
     setup_logging,
     verify_neo4j_connection,

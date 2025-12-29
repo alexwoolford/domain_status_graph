@@ -2,7 +2,7 @@
 
 ## Overview
 
-This document describes the Graph Data Science (GDS) features implemented in the Domain Status Graph. The graph focuses on **two high-value GDS features** that provide real business value.
+This document describes the Graph Data Science (GDS) features implemented in the Public Company Graph. The graph focuses on **two high-value GDS features** that provide real business value.
 
 **Purpose**: Enable technology adoption prediction and technology affinity bundling for competitive intelligence and sales targeting.
 

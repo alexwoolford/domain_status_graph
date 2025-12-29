@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Health check script for domain_status_graph.
+Health check script for public_company_graph.
 
 Verifies:
 1. Neo4j connection
@@ -14,7 +14,7 @@ Usage:
 
 import sys
 
-from domain_status_graph.cli import get_driver_and_database, setup_logging
+from public_company_graph.cli import get_driver_and_database, setup_logging
 
 
 def main():
@@ -92,7 +92,7 @@ def main():
     print("4. GDS Availability")
     print("-" * 40)
     try:
-        from domain_status_graph.gds import get_gds_client
+        from public_company_graph.gds import get_gds_client
 
         gds = get_gds_client(driver, database=database)
         version = gds.version()

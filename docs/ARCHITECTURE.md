@@ -1,11 +1,11 @@
 # Architecture Documentation
 
-This document describes the architecture and package structure of the `domain_status_graph` project.
+This document describes the architecture and package structure of the `public_company_graph` project.
 
 ## Package Structure
 
 ```
-domain_status_graph/
+public_company_graph/
 ├── __init__.py                    # Package initialization, version
 ├── config.py                      # Configuration management (Neo4j, OpenAI, paths)
 ├── cli.py                         # Common CLI utilities (logging, dry-run, connection)

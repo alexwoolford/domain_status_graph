@@ -3,9 +3,9 @@ requires = ["setuptools>=61.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "domain-status-graph"
+name = "public-company-graph"
 version = "0.1.0"
-description = "A knowledge graph of domains and their technology stacks with Graph Data Science features"
+description = "A knowledge graph of U.S. public companies from SEC filings with Graph Data Science analytics"
 readme = "README.md"
 requires-python = ">=3.11"
 license = {text = "MIT"}
@@ -74,28 +74,28 @@ dev = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/alexwoolford/domain_status_graph"
-Repository = "https://github.com/alexwoolford/domain_status_graph"
-Issues = "https://github.com/alexwoolford/domain_status_graph/issues"
+Homepage = "https://github.com/alexwoolford/public-company-graph"
+Repository = "https://github.com/alexwoolford/public-company-graph"
+Issues = "https://github.com/alexwoolford/public-company-graph/issues"
 
 [project.scripts]
-bootstrap-graph = "domain_status_graph.cli:run_bootstrap"
-compute-gds-features = "domain_status_graph.cli:run_gds_features"
-health-check = "domain_status_graph.cli:run_health_check"
-run-all-pipelines = "domain_status_graph.cli:run_all_pipelines"
-cache = "domain_status_graph.cli:run_cache"
-enrich-company-properties = "domain_status_graph.cli:run_enrich_company_properties"
-compute-company-similarity = "domain_status_graph.cli:run_compute_company_similarity"
-validate-ranking-quality = "domain_status_graph.cli:run_validate_ranking_quality"
-validate-famous-pairs = "domain_status_graph.cli:run_validate_famous_pairs"
-compute-company-similarity-via-domains = "domain_status_graph.cli:run_compute_company_similarity_via_domains"
-optimize-similarity-weights = "domain_status_graph.cli:run_optimize_similarity_weights"
+bootstrap-graph = "public_company_graph.cli:run_bootstrap"
+compute-gds-features = "public_company_graph.cli:run_gds_features"
+health-check = "public_company_graph.cli:run_health_check"
+run-all-pipelines = "public_company_graph.cli:run_all_pipelines"
+cache = "public_company_graph.cli:run_cache"
+enrich-company-properties = "public_company_graph.cli:run_enrich_company_properties"
+compute-company-similarity = "public_company_graph.cli:run_compute_company_similarity"
+validate-ranking-quality = "public_company_graph.cli:run_validate_ranking_quality"
+validate-famous-pairs = "public_company_graph.cli:run_validate_famous_pairs"
+compute-company-similarity-via-domains = "public_company_graph.cli:run_compute_company_similarity_via_domains"
+optimize-similarity-weights = "public_company_graph.cli:run_optimize_similarity_weights"
 
 [tool.setuptools]
-packages = ["domain_status_graph"]
+packages = ["public_company_graph"]
 
 [tool.setuptools.package-data]
-"domain_status_graph" = ["py.typed"]
+"public_company_graph" = ["py.typed"]
 
 [tool.black]
 line-length = 100
@@ -139,7 +139,7 @@ ignore = [
 "scripts/*" = ["E402"]  # Scripts often have late imports after setup
 
 [tool.ruff.lint.isort]
-known-first-party = ["domain_status_graph"]
+known-first-party = ["public_company_graph"]
 
 [tool.mypy]
 python_version = "3.11"
@@ -160,7 +160,7 @@ testpaths = ["tests"]
 python_files = ["test_*.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
-addopts = "-v --cov=domain_status_graph --cov-report=term-missing --cov-report=xml"
+addopts = "-v --cov=public_company_graph --cov-report=term-missing --cov-report=xml"
 markers = [
     "unit: Unit tests (fast, no external dependencies)",
     "integration: Integration tests (may require Neo4j, database, etc.)",

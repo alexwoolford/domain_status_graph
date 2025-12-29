@@ -20,7 +20,7 @@ import sys
 import time
 from pathlib import Path
 
-from domain_status_graph.cli import setup_logging
+from public_company_graph.cli import setup_logging
 
 # Script paths
 SCRIPT_DIR = Path(__file__).parent
@@ -201,7 +201,7 @@ def main():
     logger.info("")
 
     # Check if 10-Ks already downloaded
-    from domain_status_graph.cache import get_cache
+    from public_company_graph.cache import get_cache
 
     cache = get_cache()
     cached_10ks = cache.count("10k_extracted")
@@ -239,7 +239,7 @@ def main():
     logger.info("STEP 3: Load Company Data (from 10-K filings)")
     logger.info("=" * 70)
 
-    from domain_status_graph.cache import get_cache
+    from public_company_graph.cache import get_cache
 
     cache = get_cache()
     ten_k_count = cache.count("10k_extracted")

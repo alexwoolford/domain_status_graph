@@ -9,7 +9,7 @@ import logging
 import os
 from unittest.mock import MagicMock, patch
 
-from domain_status_graph.utils.datamule import _is_tqdm_progress_bar, suppress_datamule_output
+from public_company_graph.utils.datamule import _is_tqdm_progress_bar, suppress_datamule_output
 
 
 class TestIsTqdmProgressBar:
@@ -109,7 +109,7 @@ class TestSuppressDatamuleOutput:
         logger.setLevel(logging.DEBUG)
 
         # Patch the logger in the datamule module
-        with patch("domain_status_graph.utils.datamule.logger", logger):
+        with patch("public_company_graph.utils.datamule.logger", logger):
             with suppress_datamule_output():
                 print("This is meaningful output")
                 print("100%|████|")  # Progress bar - should be filtered
@@ -129,7 +129,7 @@ class TestSuppressDatamuleOutput:
         logger = logging.getLogger("test_datamule_no_file")
         logger.handlers = []
 
-        with patch("domain_status_graph.utils.datamule.logger", logger):
+        with patch("public_company_graph.utils.datamule.logger", logger):
             # Should not raise any errors
             with suppress_datamule_output():
                 print("Test output")
@@ -168,7 +168,7 @@ class TestSuppressDatamuleOutput:
         logger = logging.getLogger("test_datamule")
         logger.handlers = [mock_handler]
 
-        with patch("domain_status_graph.utils.datamule.logger", logger):
+        with patch("public_company_graph.utils.datamule.logger", logger):
             with suppress_datamule_output():
                 print("Short")  # Less than 10 chars - should be filtered
                 print("This is a longer line")  # More than 10 chars - should be logged

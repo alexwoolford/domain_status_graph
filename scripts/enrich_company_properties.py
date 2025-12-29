@@ -39,25 +39,25 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import requests
 
-from domain_status_graph.cache import get_cache
-from domain_status_graph.cli import (
+from public_company_graph.cache import get_cache
+from public_company_graph.cli import (
     add_execute_argument,
     get_driver_and_database,
     setup_logging,
     verify_neo4j_connection,
 )
-from domain_status_graph.company.enrichment import (
+from public_company_graph.company.enrichment import (
     fetch_sec_company_info,
     fetch_wikidata_info,
     fetch_yahoo_finance_info,
     merge_company_data,
 )
-from domain_status_graph.constants import BATCH_SIZE_SMALL, CACHE_TTL_COMPANY_PROPERTIES
-from domain_status_graph.neo4j import clean_properties_batch, create_company_constraints
+from public_company_graph.constants import BATCH_SIZE_SMALL, CACHE_TTL_COMPANY_PROPERTIES
+from public_company_graph.neo4j import clean_properties_batch, create_company_constraints
 
 # Rate limiting for Yahoo Finance (be conservative)
 # 10 requests per second max
-from domain_status_graph.utils.rate_limiting import get_rate_limiter
+from public_company_graph.utils.rate_limiting import get_rate_limiter
 
 _yahoo_rate_limiter = get_rate_limiter("yahoo_finance", requests_per_second=10.0)
 

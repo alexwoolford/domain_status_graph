@@ -9,7 +9,7 @@ import time
 
 import pytest
 
-from domain_status_graph.utils.rate_limiting import RateLimiter, get_rate_limiter
+from public_company_graph.utils.rate_limiting import RateLimiter, get_rate_limiter
 
 
 class TestRateLimiter:

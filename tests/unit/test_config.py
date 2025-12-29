@@ -1,5 +1,5 @@
 """
-Unit tests for domain_status_graph.config module.
+Unit tests for public_company_graph.config module.
 
 Note: Since config uses pydantic_settings with lru_cache, these tests
 verify functions return reasonable values rather than testing defaults
@@ -8,7 +8,7 @@ verify functions return reasonable values rather than testing defaults
 
 from pathlib import Path
 
-from domain_status_graph.config import (
+from public_company_graph.config import (
     Settings,
     get_data_dir,
     get_domain_status_db,
@@ -57,7 +57,7 @@ def test_get_data_dir():
     # Verify it's in the project root (not parent of project root)
     # The data dir should be a subdirectory of the project root
     project_root = data_dir.parent
-    assert (project_root / "domain_status_graph").exists(), "data dir should be in project root"
+    assert (project_root / "public_company_graph").exists(), "data dir should be in project root"
 
 
 def test_get_domain_status_db():

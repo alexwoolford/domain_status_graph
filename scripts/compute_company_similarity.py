@@ -14,18 +14,18 @@ import logging
 import sys
 import time
 
-from domain_status_graph.cli import (
+from public_company_graph.cli import (
     add_execute_argument,
     get_driver_and_database,
     setup_logging,
     verify_neo4j_connection,
 )
-from domain_status_graph.company.similarity import (
+from public_company_graph.company.similarity import (
     compute_industry_similarity,
     compute_size_similarity,
 )
-from domain_status_graph.constants import BATCH_SIZE_LARGE
-from domain_status_graph.neo4j.constraints import create_company_constraints
+from public_company_graph.constants import BATCH_SIZE_LARGE
+from public_company_graph.neo4j.constraints import create_company_constraints
 
 logger = logging.getLogger(__name__)
 

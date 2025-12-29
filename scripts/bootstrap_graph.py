@@ -20,15 +20,15 @@ import logging
 import sys
 from pathlib import Path
 
-from domain_status_graph.cli import (
+from public_company_graph.cli import (
     add_execute_argument,
     get_driver_and_database,
     print_execute_header,
     setup_logging,
     verify_neo4j_connection,
 )
-from domain_status_graph.config import get_domain_status_db
-from domain_status_graph.ingest import (
+from public_company_graph.config import get_domain_status_db
+from public_company_graph.ingest import (
     get_domain_count,
     get_domain_metadata_counts,
     get_technology_count,
@@ -38,7 +38,7 @@ from domain_status_graph.ingest import (
     read_domains,
     read_technologies,
 )
-from domain_status_graph.neo4j import create_bootstrap_constraints
+from public_company_graph.neo4j import create_bootstrap_constraints
 
 
 def dry_run_plan(db_path: Path, logger: logging.Logger = None):
@@ -102,7 +102,7 @@ def main():
         return
 
     # Execute mode
-    print_execute_header("Domain Status Graph ETL Pipeline", logger)
+    print_execute_header("Public Company Graph ETL Pipeline", logger)
     logger.info("")
     logger.info("Loading Domain and Technology nodes + USES relationships.")
     logger.info("Domain nodes include metadata: title, keywords, description.")

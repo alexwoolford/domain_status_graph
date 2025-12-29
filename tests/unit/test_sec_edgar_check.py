@@ -1,18 +1,18 @@
 """
-Unit tests for domain_status_graph.sources.sec_edgar_check module.
+Unit tests for public_company_graph.sources.sec_edgar_check module.
 """
 
 from unittest.mock import MagicMock, patch
 
 import requests
 
-from domain_status_graph.sources.sec_edgar_check import check_company_has_10k
+from public_company_graph.sources.sec_edgar_check import check_company_has_10k
 
 
 class TestCheckCompanyHas10k:
     """Test check_company_has_10k function."""
 
-    @patch("domain_status_graph.sources.sec_edgar_check.requests.Session")
+    @patch("public_company_graph.sources.sec_edgar_check.requests.Session")
     def test_company_with_10k(self, mock_session_class):
         """Test that company with 10-K returns True."""
         mock_session = MagicMock()
@@ -36,7 +36,7 @@ class TestCheckCompanyHas10k:
         assert result is True
         mock_session.get.assert_called_once()
 
-    @patch("domain_status_graph.sources.sec_edgar_check.requests.Session")
+    @patch("public_company_graph.sources.sec_edgar_check.requests.Session")
     def test_company_without_10k(self, mock_session_class):
         """Test that company without 10-K returns False."""
         mock_session = MagicMock()
@@ -59,7 +59,7 @@ class TestCheckCompanyHas10k:
 
         assert result is False
 
-    @patch("domain_status_graph.sources.sec_edgar_check.requests.Session")
+    @patch("public_company_graph.sources.sec_edgar_check.requests.Session")
     def test_10k_outside_date_range(self, mock_session_class):
         """Test that 10-K outside date range returns False."""
         mock_session = MagicMock()
@@ -82,7 +82,7 @@ class TestCheckCompanyHas10k:
 
         assert result is False
 
-    @patch("domain_status_graph.sources.sec_edgar_check.requests.Session")
+    @patch("public_company_graph.sources.sec_edgar_check.requests.Session")
     def test_api_error_returns_true(self, mock_session_class):
         """Test that API errors return True (fail-safe - allow datamule to try)."""
         mock_session = MagicMock()
@@ -96,7 +96,7 @@ class TestCheckCompanyHas10k:
         # Should return True as fail-safe (allow datamule to try)
         assert result is True
 
-    @patch("domain_status_graph.sources.sec_edgar_check.requests.Session")
+    @patch("public_company_graph.sources.sec_edgar_check.requests.Session")
     def test_malformed_response_returns_true(self, mock_session_class):
         """Test that malformed response returns True (fail-safe)."""
         mock_session = MagicMock()

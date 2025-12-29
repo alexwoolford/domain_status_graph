@@ -11,9 +11,9 @@ import tempfile
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-from domain_status_graph.cache import AppCache
-from domain_status_graph.embeddings.create import create_embeddings_for_nodes
-from domain_status_graph.embeddings.openai_client import (
+from public_company_graph.cache import AppCache
+from public_company_graph.embeddings.create import create_embeddings_for_nodes
+from public_company_graph.embeddings.openai_client import (
     EMBEDDING_TRUNCATE_TOKENS,
     count_tokens,
 )
@@ -111,7 +111,7 @@ class TestLongTextChunkingBehavior:
             driver = MockDriver(nodes)
             client = create_mock_client()
 
-            with patch("domain_status_graph.embeddings.create.BATCH_SIZE_SMALL", 100):
+            with patch("public_company_graph.embeddings.create.BATCH_SIZE_SMALL", 100):
                 create_embeddings_for_nodes(
                     driver=driver,
                     cache=cache,
@@ -124,9 +124,9 @@ class TestLongTextChunkingBehavior:
 
             # Should be efficient - 5 texts in ~1 batch call
             total_calls = len(client._call_log["calls"])
-            assert (
-                total_calls == 1
-            ), f"Short texts should batch: got {total_calls} calls for 5 texts"
+            assert total_calls == 1, (
+                f"Short texts should batch: got {total_calls} calls for 5 texts"
+            )
             cache.close()
 
     def test_long_text_uses_batched_chunking(self):
@@ -150,7 +150,7 @@ class TestLongTextChunkingBehavior:
             driver = MockDriver(nodes)
             client = create_mock_client()
 
-            with patch("domain_status_graph.embeddings.create.BATCH_SIZE_SMALL", 100):
+            with patch("public_company_graph.embeddings.create.BATCH_SIZE_SMALL", 100):
                 create_embeddings_for_nodes(
                     driver=driver,
                     cache=cache,
@@ -196,7 +196,7 @@ class TestLongTextChunkingBehavior:
             driver = MockDriver(nodes)
             client = create_mock_client()
 
-            with patch("domain_status_graph.embeddings.create.BATCH_SIZE_SMALL", 100):
+            with patch("public_company_graph.embeddings.create.BATCH_SIZE_SMALL", 100):
                 processed, created, cached_count, failed = create_embeddings_for_nodes(
                     driver=driver,
                     cache=cache,
@@ -246,7 +246,7 @@ class TestCacheHitRateCalculation:
             driver = MockDriver(nodes)
             client = create_mock_client()
 
-            with patch("domain_status_graph.embeddings.create.BATCH_SIZE_SMALL", 100):
+            with patch("public_company_graph.embeddings.create.BATCH_SIZE_SMALL", 100):
                 processed, created, cached_count, failed = create_embeddings_for_nodes(
                     driver=driver,
                     cache=cache,

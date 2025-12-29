@@ -1,8 +1,8 @@
 """
-Unit tests for domain_status_graph.utils.file_discovery module.
+Unit tests for public_company_graph.utils.file_discovery module.
 """
 
-from domain_status_graph.utils.file_discovery import find_10k_files
+from public_company_graph.utils.file_discovery import find_10k_files
 
 
 class TestFind10kFiles:

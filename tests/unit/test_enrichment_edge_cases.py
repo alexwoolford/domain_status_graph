@@ -9,7 +9,7 @@ These pure functions process data from multiple sources. Bugs here could:
 
 import time
 
-from domain_status_graph.company.enrichment import (
+from public_company_graph.company.enrichment import (
     merge_company_data,
     normalize_industry_codes,
 )

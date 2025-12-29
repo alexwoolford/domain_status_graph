@@ -1,4 +1,4 @@
-# Domain Status Graph Documentation
+# Public Company Graph Documentation
 
 This directory contains documentation for the domain status graph project.
 

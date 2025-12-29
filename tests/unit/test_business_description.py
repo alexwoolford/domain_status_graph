@@ -6,7 +6,7 @@ Tests the business description extraction functions with various HTML formats.
 
 from unittest.mock import patch
 
-from domain_status_graph.parsing.business_description import (
+from public_company_graph.parsing.business_description import (
     extract_between_anchors,
     extract_business_description,
     extract_business_description_with_datamule_fallback,
@@ -255,7 +255,7 @@ class TestExtractBusinessDescriptionWithDatamuleFallback:
 
         # Mock get_data_dir to return tmp_path
         with patch(
-            "domain_status_graph.parsing.business_description.get_data_dir", return_value=tmp_path
+            "public_company_graph.parsing.business_description.get_data_dir", return_value=tmp_path
         ):
             result = extract_business_description_with_datamule_fallback(
                 html_file, cik="0000123456", filings_dir=tmp_path

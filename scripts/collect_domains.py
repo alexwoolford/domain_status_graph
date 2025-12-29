@@ -27,7 +27,7 @@ from threading import Lock
 
 import requests
 
-from domain_status_graph.utils.parallel import execute_parallel
+from public_company_graph.utils.parallel import execute_parallel
 
 # Optional dependencies are now handled in the extracted modules
 
@@ -39,14 +39,14 @@ _domain_cache: dict[str, bool] = {}
 _cache_lock = Lock()
 
 # Import constants and extracted modules
-from domain_status_graph.consensus.domain_consensus import (
+from public_company_graph.consensus.domain_consensus import (
     collect_domains as _collect_domains,
 )
-from domain_status_graph.constants import (
+from public_company_graph.constants import (
     CACHE_TTL_COMPANY_DOMAINS,
     CACHE_TTL_NEGATIVE_RESULT,
 )
-from domain_status_graph.domain.models import CompanyResult
+from public_company_graph.domain.models import CompanyResult
 
 
 def collect_domains(
@@ -59,7 +59,7 @@ def collect_domains(
     """
     Collect domains from all sources in parallel with early stopping.
 
-    This function is now in domain_status_graph/consensus/domain_consensus.py.
+    This function is now in public_company_graph/consensus/domain_consensus.py.
     This is kept here for backward compatibility but delegates to the extracted module.
     """
     return _collect_domains(session, cik, ticker, company_name, early_stop_confidence)
@@ -69,7 +69,7 @@ def fetch_company_tickers(session: requests.Session) -> dict[str, dict[str, str]
     """Fetch all company tickers from SEC EDGAR."""
     url = "https://www.sec.gov/files/company_tickers.json"
     headers = {
-        "User-Agent": "domain_status_graph script (contact: your-email@example.com)",
+        "User-Agent": "public_company_graph script (contact: your-email@example.com)",
         "Accept": "application/json",
     }
 
@@ -241,7 +241,7 @@ def main():
     logging.getLogger("urllib3").setLevel(logging.WARNING)
 
     # Initialize cache
-    from domain_status_graph.cache import get_cache
+    from public_company_graph.cache import get_cache
 
     cache = get_cache()
     cached_count = cache.count("company_domains")

@@ -4,15 +4,15 @@ Unit tests for Finnhub domain source.
 
 from unittest.mock import MagicMock, patch
 
-from domain_status_graph.sources.finnhub import get_domain_from_finnhub
+from public_company_graph.sources.finnhub import get_domain_from_finnhub
 
 
 class TestGetDomainFromFinnhub:
     """Tests for get_domain_from_finnhub function."""
 
-    @patch("domain_status_graph.sources.finnhub.get_finnhub_api_key", return_value="test_key")
-    @patch("domain_status_graph.sources.finnhub._rate_limiter")
-    @patch("domain_status_graph.sources.finnhub.requests.get")
+    @patch("public_company_graph.sources.finnhub.get_finnhub_api_key", return_value="test_key")
+    @patch("public_company_graph.sources.finnhub._rate_limiter")
+    @patch("public_company_graph.sources.finnhub.requests.get")
     def test_successful_extraction(self, mock_get, mock_rate_limiter, mock_api_key):
         """Test successful domain extraction from Finnhub."""
         mock_response = MagicMock()
@@ -32,9 +32,9 @@ class TestGetDomainFromFinnhub:
         mock_rate_limiter.assert_called_once()
         mock_get.assert_called_once()
 
-    @patch("domain_status_graph.sources.finnhub.get_finnhub_api_key", return_value=None)
-    @patch("domain_status_graph.sources.finnhub._rate_limiter")
-    @patch("domain_status_graph.sources.finnhub.requests.get")
+    @patch("public_company_graph.sources.finnhub.get_finnhub_api_key", return_value=None)
+    @patch("public_company_graph.sources.finnhub._rate_limiter")
+    @patch("public_company_graph.sources.finnhub.requests.get")
     def test_no_api_key(self, mock_get, mock_rate_limiter, mock_api_key):
         """Test when API key is not set."""
         result = get_domain_from_finnhub("AAPL")
@@ -43,9 +43,9 @@ class TestGetDomainFromFinnhub:
         assert result.confidence == 0.0
         mock_get.assert_not_called()
 
-    @patch("domain_status_graph.sources.finnhub.get_finnhub_api_key", return_value="test_key")
-    @patch("domain_status_graph.sources.finnhub._rate_limiter")
-    @patch("domain_status_graph.sources.finnhub.requests.get")
+    @patch("public_company_graph.sources.finnhub.get_finnhub_api_key", return_value="test_key")
+    @patch("public_company_graph.sources.finnhub._rate_limiter")
+    @patch("public_company_graph.sources.finnhub.requests.get")
     def test_no_weburl(self, mock_get, mock_rate_limiter, mock_api_key):
         """Test when Finnhub returns no weburl."""
         mock_response = MagicMock()
@@ -58,9 +58,9 @@ class TestGetDomainFromFinnhub:
         assert result.domain is None
         assert result.confidence == 0.0
 
-    @patch("domain_status_graph.sources.finnhub.get_finnhub_api_key", return_value="test_key")
-    @patch("domain_status_graph.sources.finnhub._rate_limiter")
-    @patch("domain_status_graph.sources.finnhub.requests.get")
+    @patch("public_company_graph.sources.finnhub.get_finnhub_api_key", return_value="test_key")
+    @patch("public_company_graph.sources.finnhub._rate_limiter")
+    @patch("public_company_graph.sources.finnhub.requests.get")
     def test_description_fallback_to_industry(self, mock_get, mock_rate_limiter, mock_api_key):
         """Test that description falls back to finnhubIndustry."""
         mock_response = MagicMock()
@@ -76,9 +76,9 @@ class TestGetDomainFromFinnhub:
         assert result.domain == "apple.com"
         assert result.description == "Technology"
 
-    @patch("domain_status_graph.sources.finnhub.get_finnhub_api_key", return_value="test_key")
-    @patch("domain_status_graph.sources.finnhub._rate_limiter")
-    @patch("domain_status_graph.sources.finnhub.requests.get")
+    @patch("public_company_graph.sources.finnhub.get_finnhub_api_key", return_value="test_key")
+    @patch("public_company_graph.sources.finnhub._rate_limiter")
+    @patch("public_company_graph.sources.finnhub.requests.get")
     def test_long_description_preserved(self, mock_get, mock_rate_limiter, mock_api_key):
         """Test that long descriptions are preserved in full (no truncation).
 
@@ -103,9 +103,9 @@ class TestGetDomainFromFinnhub:
         assert len(result.description) == 3000
         assert not result.description.endswith("...")
 
-    @patch("domain_status_graph.sources.finnhub.get_finnhub_api_key", return_value="test_key")
-    @patch("domain_status_graph.sources.finnhub._rate_limiter")
-    @patch("domain_status_graph.sources.finnhub.requests.get")
+    @patch("public_company_graph.sources.finnhub.get_finnhub_api_key", return_value="test_key")
+    @patch("public_company_graph.sources.finnhub._rate_limiter")
+    @patch("public_company_graph.sources.finnhub.requests.get")
     def test_infrastructure_domain_filtered(self, mock_get, mock_rate_limiter, mock_api_key):
         """Test that infrastructure domains are filtered out."""
         mock_response = MagicMock()
@@ -118,9 +118,9 @@ class TestGetDomainFromFinnhub:
         assert result.domain is None
         assert result.confidence == 0.0
 
-    @patch("domain_status_graph.sources.finnhub.get_finnhub_api_key", return_value="test_key")
-    @patch("domain_status_graph.sources.finnhub._rate_limiter")
-    @patch("domain_status_graph.sources.finnhub.requests.get")
+    @patch("public_company_graph.sources.finnhub.get_finnhub_api_key", return_value="test_key")
+    @patch("public_company_graph.sources.finnhub._rate_limiter")
+    @patch("public_company_graph.sources.finnhub.requests.get")
     def test_http_error(self, mock_get, mock_rate_limiter, mock_api_key):
         """Test handling of HTTP errors."""
         mock_response = MagicMock()
@@ -132,9 +132,9 @@ class TestGetDomainFromFinnhub:
         assert result.domain is None
         assert result.confidence == 0.0
 
-    @patch("domain_status_graph.sources.finnhub.get_finnhub_api_key", return_value="test_key")
-    @patch("domain_status_graph.sources.finnhub._rate_limiter")
-    @patch("domain_status_graph.sources.finnhub.requests.get")
+    @patch("public_company_graph.sources.finnhub.get_finnhub_api_key", return_value="test_key")
+    @patch("public_company_graph.sources.finnhub._rate_limiter")
+    @patch("public_company_graph.sources.finnhub.requests.get")
     def test_exception_handling(self, mock_get, mock_rate_limiter, mock_api_key):
         """Test that exceptions are handled gracefully."""
         mock_get.side_effect = Exception("Network error")

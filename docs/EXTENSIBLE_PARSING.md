@@ -8,7 +8,7 @@ The 10-K parsing system uses a **pluggable interface pattern** (similar to Java 
 
 ### `TenKParser` (Base Class)
 
-Located in `domain_status_graph/parsing/base.py`:
+Located in `public_company_graph/parsing/base.py`:
 
 ```python
 class TenKParser(ABC):
@@ -42,7 +42,7 @@ class TenKParser(ABC):
 Create a new parser class that extends `TenKParser`:
 
 ```python
-from domain_status_graph.parsing.base import TenKParser
+from public_company_graph.parsing.base import TenKParser
 from pathlib import Path
 from typing import Optional
 
@@ -88,7 +88,7 @@ class MyNewParser(TenKParser):
 
 ### Step 2: Register the Parser
 
-Add your parser to `get_default_parsers()` in `domain_status_graph/parsing/base.py`:
+Add your parser to `get_default_parsers()` in `public_company_graph/parsing/base.py`:
 
 ```python
 def get_default_parsers() -> list:
@@ -108,7 +108,7 @@ That's it! Your parser will now run automatically for all 10-K files.
 ## Example: Adding a Filing Date Parser
 
 ```python
-from domain_status_graph.parsing.base import TenKParser
+from public_company_graph.parsing.base import TenKParser
 from pathlib import Path
 from typing import Optional
 from datetime import datetime
@@ -184,7 +184,7 @@ parsers = [
 You can test parsers independently:
 
 ```python
-from domain_status_graph.parsing.base import WebsiteParser
+from public_company_graph.parsing.base import WebsiteParser
 from pathlib import Path
 
 parser = WebsiteParser()

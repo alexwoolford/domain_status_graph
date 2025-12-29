@@ -48,7 +48,7 @@ python scripts/parse_10k_filings.py --execute --force
 If you want to start completely fresh, clear the cache namespace:
 
 ```python
-from domain_status_graph.cache import get_cache
+from public_company_graph.cache import get_cache
 
 cache = get_cache()
 count = cache.clear_namespace("10k_extracted")
@@ -58,7 +58,7 @@ cache.close()
 
 Or use the CLI command:
 ```bash
-python -m domain_status_graph.cli cache clear --namespace 10k_extracted
+python -m public_company_graph.cli cache clear --namespace 10k_extracted
 ```
 
 ### Option 3: Check Cache Statistics
@@ -66,7 +66,7 @@ python -m domain_status_graph.cli cache clear --namespace 10k_extracted
 Before parsing, check what's already cached:
 
 ```bash
-python -m domain_status_graph.cli cache stats
+python -m public_company_graph.cli cache stats
 ```
 
 This shows:
@@ -107,7 +107,7 @@ When iterating on parser logic:
 ### Step 1: Clear Cache (Optional)
 ```bash
 # Clear old cache to ensure fresh parsing
-python -c "from domain_status_graph.cache import get_cache; c = get_cache(); c.clear_namespace('10k_extracted'); c.close(); print('Cache cleared')"
+python -c "from public_company_graph.cache import get_cache; c = get_cache(); c.clear_namespace('10k_extracted'); c.close(); print('Cache cleared')"
 ```
 
 ### Step 2: Parse with Force
@@ -127,7 +127,7 @@ python scripts/parse_10k_filings.py --execute --force
 ### Check Cache Contents
 
 ```python
-from domain_status_graph.cache import get_cache
+from public_company_graph.cache import get_cache
 
 cache = get_cache()
 
@@ -189,7 +189,7 @@ python scripts/parse_10k_filings.py --execute --force
 
 **Solution**: Clear cache namespace first:
 ```bash
-python -c "from domain_status_graph.cache import get_cache; c = get_cache(); c.clear_namespace('10k_extracted'); c.close()"
+python -c "from public_company_graph.cache import get_cache; c = get_cache(); c.clear_namespace('10k_extracted'); c.close()"
 python scripts/parse_10k_filings.py --execute
 ```
 
@@ -203,7 +203,7 @@ python scripts/parse_10k_filings.py --execute
 
 **Solution**: Use cache inspection:
 ```python
-from domain_status_graph.cache import get_cache
+from public_company_graph.cache import get_cache
 cache = get_cache()
 stats = cache.stats()
 print(stats)  # Shows counts per namespace
@@ -214,4 +214,4 @@ cache.close()
 
 - **Cache Files Explanation**: `docs/CACHE_FILES_EXPLANATION.md`
 - **10-K Parsing**: `docs/10K_PARSING.md`
-- **Cache Module**: `domain_status_graph/cache.py`
+- **Cache Module**: `public_company_graph/cache.py`

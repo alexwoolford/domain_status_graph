@@ -1,10 +1,10 @@
 """
-Unit tests for domain_status_graph.utils.stats module.
+Unit tests for public_company_graph.utils.stats module.
 """
 
 import threading
 
-from domain_status_graph.utils.stats import ExecutionStats
+from public_company_graph.utils.stats import ExecutionStats
 
 
 class TestExecutionStats:

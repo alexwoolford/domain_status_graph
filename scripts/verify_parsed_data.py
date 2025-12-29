@@ -18,8 +18,8 @@ sys.path.insert(0, str(project_root))
 
 import numpy as np
 
-from domain_status_graph.cache import get_cache
-from domain_status_graph.cli import get_driver_and_database, setup_logging
+from public_company_graph.cache import get_cache
+from public_company_graph.cli import get_driver_and_database, setup_logging
 
 logger = setup_logging("verify_parsed_data")
 driver, database = get_driver_and_database(logger)

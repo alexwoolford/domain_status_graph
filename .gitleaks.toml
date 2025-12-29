@@ -1,7 +1,7 @@
-# Gitleaks configuration for Domain Status Graph
+# Gitleaks configuration for Public Company Graph
 # This file customizes secret scanning behavior
 
-title = "Domain Status Graph Secret Scanning"
+title = "Public Company Graph Secret Scanning"
 
 # Allowlist patterns (files/directories to exclude from scanning)
 # These are safe to ignore as they don't contain secrets

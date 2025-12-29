@@ -8,7 +8,7 @@ These tests focus on real-world edge cases that could slip through basic validat
 - Boundary cases from real SEC filings
 """
 
-from domain_status_graph.domain.validation import (
+from public_company_graph.domain.validation import (
     is_infrastructure_domain,
     is_valid_domain,
     normalize_domain,

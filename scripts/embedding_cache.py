@@ -13,7 +13,7 @@ Usage:
 
 import argparse
 
-from domain_status_graph.cache import get_cache
+from public_company_graph.cache import get_cache
 
 # Namespace for embeddings in the unified cache
 EMBEDDINGS_NAMESPACE = "embeddings"

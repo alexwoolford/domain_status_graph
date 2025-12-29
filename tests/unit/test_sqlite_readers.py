@@ -1,5 +1,5 @@
 """
-Unit tests for domain_status_graph.ingest.sqlite_readers module.
+Unit tests for public_company_graph.ingest.sqlite_readers module.
 """
 
 import sqlite3
@@ -9,7 +9,7 @@ from pathlib import Path
 
 import pytest
 
-from domain_status_graph.ingest.sqlite_readers import (
+from public_company_graph.ingest.sqlite_readers import (
     get_domain_count,
     get_domain_metadata_counts,
     get_technology_count,
