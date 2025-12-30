@@ -25,13 +25,18 @@ The Public Company Graph is a knowledge graph modeling **public companies**, the
 
 | Property | Coverage | Notes |
 |----------|----------|-------|
-| `description` | ~96% (5,191/5,398) | Some filings use non-standard formats |
-| `description_embedding` | ~96% (5,191/5,398) | Same as description |
-| `sector` / `industry` | ~18% (959/5,398) | Yahoo Finance data not available for all |
-| `market_cap` | ~18% (960/5,398) | Yahoo Finance data not available for all |
-| `revenue` | ~15% (815/5,398) | Yahoo Finance data not available for all |
+| `ticker` | 100% (5,398/5,398) | From SEC EDGAR |
+| `name` | 100% (5,398/5,398) | From SEC EDGAR |
+| `description` | 99.85% (5,390/5,398) | From 10-K Item 1 |
+| `description_embedding` | 99.85% (5,390/5,398) | OpenAI text-embedding-3-small |
+| `sector` / `industry` | ~18% (959/5,398) | Yahoo Finance (only actively traded stocks) |
+| `market_cap` | ~18% (960/5,398) | Yahoo Finance (only actively traded stocks) |
+| `revenue` | ~15% (815/5,398) | Yahoo Finance (only actively traded stocks) |
 
-**Notable Missing Descriptions**: Apple (AAPL), AbbVie (ABBV), Comcast (CMCSA), Intel (INTC), Morgan Stanley (MS), GE - these use non-standard 10-K formats that couldn't be parsed.
+**Missing Descriptions (8 companies)**: These are edge cases:
+- BNS (Bank of Nova Scotia) - Canadian company, files 20-F not 10-K
+- GJR, GJS, GJT (STRATS Trusts) - Securities trusts, not operating companies
+- KIDZ, YHGJ, ESP, MNGG - Non-standard 10-K formats
 
 **Technology Data**: Only **web technologies** are captured (JavaScript, CMS, CDN, etc.)—not backend infrastructure like Kubernetes or Docker. This is because technology detection is based on HTTP fingerprinting of company domains.
 

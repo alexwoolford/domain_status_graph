@@ -322,24 +322,31 @@ RETURN comp.ticker, comp.name, r.raw_mention
 
 ---
 
-## Queries That DON'T Work (Documented Limitations)
+## Data Coverage Notes
 
-These queries are often requested but won't return meaningful results:
+Understanding these limitations helps write effective queries:
 
-### ❌ Apple supply chain
-Apple doesn't disclose specific supplier/customer company names in its 10-K in a way that our entity resolution can match.
+### Technology Data (Web-Only)
+Technology detection is based on **HTTP fingerprinting** of company domains. This captures:
+- ✅ JavaScript frameworks (React, Angular, Vue)
+- ✅ CMS platforms (WordPress, Drupal)
+- ✅ Analytics (Google Analytics, Adobe)
+- ✅ CDN providers (Cloudflare, Akamai)
+- ❌ **NOT** backend infrastructure (Kubernetes, Docker, databases)
 
-### ❌ Kubernetes/Docker adoption
-Technology data is **web-only** (from HTTP fingerprinting). Backend infrastructure isn't visible.
+### Financial Data (~18% Coverage)
+`sector`, `industry`, `market_cap`, `revenue` come from Yahoo Finance, which only covers actively traded stocks. ~82% of SEC filers are:
+- Small/micro-cap companies not tracked by Yahoo
+- Inactive or shell companies
+- Trusts, SPVs, and special entities
 
-### ❌ Market cap/revenue filtering
-Only ~18% of companies have financial data populated. Use description similarity instead.
+**Workaround**: Use `SIMILAR_INDUSTRY` relationships instead of filtering by sector property.
 
-### ❌ Sector-based filtering
-~82% of companies have NULL sector/industry. Use `SIMILAR_INDUSTRY` relationships instead of filtering by sector property.
+### Supply Chain Relationships
+`HAS_SUPPLIER`, `HAS_CUSTOMER`, `HAS_PARTNER` are extracted from 10-K text where companies explicitly name business partners. Large companies like Apple often use generic language ("key suppliers") rather than naming specific companies.
 
-### ❌ Technology adoption prediction for big tech
-`LIKELY_TO_ADOPT` predictions only exist for smaller domains. Large companies already use many technologies, so predictions aren't computed.
+### Technology Predictions
+`LIKELY_TO_ADOPT` predictions only exist for domains with limited technology stacks. Large tech companies already use many technologies, so predictions aren't computed for them.
 
 ---
 

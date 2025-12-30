@@ -288,6 +288,17 @@ def _extract_via_anchor_navigation(
 
         toc_link = soup.find("a", href=simple_i1_matcher)
 
+    # Strategy 5: Find TOC links by link TEXT containing "Item 1" (for Workiva iXBRL)
+    # These filings use GUID-based hrefs like #i1cb1ba018cb1455aa66bd3f9ab0c5b1a_1499
+    if not toc_link:
+        for link in soup.find_all("a", href=True):
+            link_text = link.get_text(strip=True)
+            # Match "Item 1." or "Item 1 " but NOT "Item 1A" or "Item 10"
+            if re.match(r"^Item\s*1\.?\s*$", link_text, re.I):
+                toc_link = link
+                logger.debug(f"Found Item 1 link by text: href={link.get('href')}")
+                break
+
     if not toc_link or not toc_link.has_attr("href"):
         return None
 
@@ -320,6 +331,19 @@ def _extract_via_anchor_navigation(
         )
 
     end_el = start_el.find_next(id=end_section_matcher)
+
+    # For Workiva iXBRL files with GUID-based IDs, find end by TOC link text
+    if not end_el:
+        # Look for TOC link to Item 1A (or Item 2 if no Item 1A)
+        for end_link in soup.find_all("a", href=True):
+            link_text = end_link.get_text(strip=True)
+            if re.match(r"^Item\s*1A\.?\s*$", link_text, re.I):
+                end_href = end_link.get("href", "").lstrip("#")
+                if end_href:
+                    end_el = soup.find(id=end_href)
+                    if end_el:
+                        logger.debug(f"Found Item 1A end by text: id={end_href}")
+                        break
 
     if end_el:
         # Use anchor-based extraction
