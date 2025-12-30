@@ -19,6 +19,24 @@ The Public Company Graph is a knowledge graph modeling **public companies**, the
 
 ---
 
+## Data Quality Notes
+
+> **Important**: Not all properties are populated for all companies. See coverage below:
+
+| Property | Coverage | Notes |
+|----------|----------|-------|
+| `description` | ~96% (5,191/5,398) | Some filings use non-standard formats |
+| `description_embedding` | ~96% (5,191/5,398) | Same as description |
+| `sector` / `industry` | ~18% (959/5,398) | Yahoo Finance data not available for all |
+| `market_cap` | ~18% (960/5,398) | Yahoo Finance data not available for all |
+| `revenue` | ~15% (815/5,398) | Yahoo Finance data not available for all |
+
+**Notable Missing Descriptions**: Apple (AAPL), AbbVie (ABBV), Comcast (CMCSA), Intel (INTC), Morgan Stanley (MS), GE - these use non-standard 10-K formats that couldn't be parsed.
+
+**Technology Data**: Only **web technologies** are captured (JavaScript, CMS, CDN, etc.)—not backend infrastructure like Kubernetes or Docker. This is because technology detection is based on HTTP fingerprinting of company domains.
+
+---
+
 ## Graph Statistics
 
 | Metric | Count |
