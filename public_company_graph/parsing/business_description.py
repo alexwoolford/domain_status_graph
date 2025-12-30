@@ -2,7 +2,21 @@
 Business description extraction from 10-K filings.
 
 This module provides functions to extract Item 1: Business descriptions from 10-K HTML files
-using multiple strategies with datamule fallback.
+using multiple extraction strategies with configurable fallbacks.
+
+Extraction Strategy Priority (highest to lowest):
+1. Datamule library (highest quality when available)
+2. TOC anchor-based navigation (follows href links to section IDs)
+3. Direct ID pattern matching (elements with id containing "item1" + "business")
+4. Text node search (finds "Item 1...Business" text, skips TOC tables)
+5. Raw regex extraction (extracts text between section markers)
+
+Patterns Handled:
+- Split tags: "Item 1." and "Business" in separate HTML elements
+- BUSINESS header: Section header without "Item 1" prefix
+- TOC-first: Item 1 appears in TOC table, actual content is later
+- Anchor-based: TOC links point to section IDs with content
+- Standard format: "Item 1. Business" followed by content until "Item 1A"
 """
 
 import logging
@@ -21,6 +35,40 @@ logger = logging.getLogger(__name__)
 # Import shared text extraction utility
 from public_company_graph.parsing.text_extraction import extract_between_anchors
 
+# Minimum content length to consider extraction successful
+MIN_BUSINESS_DESCRIPTION_LENGTH = 500
+
+# Maximum content length (truncate larger extractions)
+MAX_BUSINESS_DESCRIPTION_LENGTH = 50000
+
+# Stop patterns that indicate end of Item 1 section
+STOP_PATTERNS = [
+    r"Item\s*1A[\.:\s]",  # Item 1A with various separators
+    r"ITEM\s*1A[\.:\s]",
+    r"Item\s*1B[\.:\s]",  # Item 1B (Unresolved Staff Comments)
+    r"ITEM\s*1B[\.:\s]",
+    r"Item\s*2[\.:\s]",  # Item 2 (Properties)
+    r"ITEM\s*2[\.:\s]",
+    r"Risk\s*Factors",  # Risk Factors header
+    r"RISK\s*FACTORS",
+]
+
+
+def _is_stop_pattern(text: str) -> bool:
+    """Check if text matches any stop pattern indicating end of Item 1 section."""
+    return any(re.search(pattern, text, re.IGNORECASE) for pattern in STOP_PATTERNS)
+
+
+def _clean_extracted_text(text: str) -> str:
+    """Clean and normalize extracted text."""
+    if not text:
+        return ""
+    # Normalize whitespace
+    text = re.sub(r"\s+", " ", text)
+    # Remove excessive punctuation
+    text = re.sub(r"\.{3,}", "...", text)
+    return text.strip()
+
 
 def extract_section_text(start_element, soup: BeautifulSoup) -> str:
     """
@@ -36,25 +84,17 @@ def extract_section_text(start_element, soup: BeautifulSoup) -> str:
     text_parts = []
     current = start_element
 
-    # Look for next major section (Item 1A, Item 2, etc.)
-    stop_patterns = [
-        r"Item\s+1A",
-        r"Item\s+2",
-        r"ITEM\s+1A",
-        r"ITEM\s+2",
-    ]
-
     while current:
-        # Check if we hit a stop pattern
-        if current.name in ["h1", "h2", "h3"]:
+        # Check if we hit a stop pattern in any heading or bold text
+        if current.name in ["h1", "h2", "h3", "h4", "b", "strong", "p"]:
             text = current.get_text()
-            if any(re.search(pattern, text, re.IGNORECASE) for pattern in stop_patterns):
+            if _is_stop_pattern(text):
                 break
 
-        # Collect text
+        # Collect text from content elements
         if current.name in ["p", "div", "span"]:
             text = current.get_text(strip=True)
-            if text:
+            if text and not _is_stop_pattern(text):
                 text_parts.append(text)
 
         # Move to next sibling
@@ -65,6 +105,287 @@ def extract_section_text(start_element, soup: BeautifulSoup) -> str:
     return " ".join(text_parts)
 
 
+def _extract_via_raw_regex(content: str, file_path: Path) -> str | None:
+    """
+    Extract business description using raw regex patterns on HTML content.
+
+    This is a fallback strategy that works when structural parsing fails.
+    It finds text between section markers (BUSINESS...ITEM 1A/RISK FACTORS).
+
+    Args:
+        content: Raw HTML content
+        file_path: Path for logging purposes
+
+    Returns:
+        Extracted text or None
+    """
+    # Strategy 1: Find BUSINESS section until next major section
+    # This handles files where "Item 1" and "Business" may be split or absent
+    patterns = [
+        # Pattern A: Item 1...Business...content...Item 1A (most specific)
+        (
+            r"(?:Item|ITEM)\s*1\.?\s*(?:<[^>]*>)*\s*(?:<[^>]*>)*\s*"
+            r"(?:Business|BUSINESS)(.*?)(?:Item\s*1A|ITEM\s*1A|Risk\s*Factors|RISK\s*FACTORS)",
+            "item1_business",
+        ),
+        # Pattern B: Combined Items 1 and 2 (Business and Properties)
+        (
+            r"(?:Items?\s*1\.?\s*(?:and|&)\s*2\.?\s*)"
+            r"(?:<[^>]*>)*\s*(?:Business\s*and\s*Properties|BUSINESS\s*AND\s*PROPERTIES)"
+            r"(.*?)(?:Item\s*1A|ITEM\s*1A|Item\s*3|ITEM\s*3|Risk\s*Factors)",
+            "combined_items_1_2",
+        ),
+        # Pattern C: Just BUSINESS header until stop pattern (less specific)
+        (
+            r"(?:>|\s)BUSINESS(?:</[^>]+>)?\s*(.*?)(?:ITEM\s*1A|Item\s*1A|RISK\s*FACTORS|Risk\s*Factors)",
+            "business_header",
+        ),
+        # Pattern D: BUSINESS with bold tags
+        (
+            r"<b[^>]*>BUSINESS</b>(.*?)(?:<b[^>]*>(?:ITEM\s*1A|RISK\s*FACTORS)</b>)",
+            "business_bold",
+        ),
+    ]
+
+    for pattern, pattern_name in patterns:
+        # Find ALL matches and take the longest one that meets minimum length
+        # This handles cases where TOC entries match before actual content
+        matches = list(re.finditer(pattern, content, re.I | re.DOTALL))
+
+        best_text = None
+        best_length = 0
+
+        for match in matches:
+            raw_html = match.group(1)
+            # Parse HTML to extract clean text
+            section_soup = BeautifulSoup(raw_html, "html.parser")
+            text = section_soup.get_text(separator=" ", strip=True)
+            text = _clean_extracted_text(text)
+
+            # Keep the longest extraction that meets minimum length
+            if len(text) >= MIN_BUSINESS_DESCRIPTION_LENGTH and len(text) > best_length:
+                best_text = text
+                best_length = len(text)
+
+        if best_text:
+            logger.debug(
+                f"Raw regex extraction succeeded ({pattern_name}): "
+                f"{len(best_text):,} chars from {file_path.name}"
+            )
+            if len(best_text) > MAX_BUSINESS_DESCRIPTION_LENGTH:
+                logger.warning(
+                    f"Business description truncated from {len(best_text):,} to "
+                    f"{MAX_BUSINESS_DESCRIPTION_LENGTH:,} chars in {file_path.name}"
+                )
+            return best_text[:MAX_BUSINESS_DESCRIPTION_LENGTH]
+
+    return None
+
+
+def _extract_via_text_node_search(soup: BeautifulSoup, file_path: Path) -> str | None:
+    """
+    Extract business description by finding Item 1 Business text nodes.
+
+    Skips TOC matches (text inside tables) and finds actual content sections.
+
+    Args:
+        soup: Parsed BeautifulSoup object
+        file_path: Path for logging purposes
+
+    Returns:
+        Extracted text or None
+    """
+    # Find all "Item 1" text mentions with various formats
+    search_patterns = [
+        r"Item\s*1[\.:]?\s*Business",
+        r"ITEM\s*1[\.:]?\s*BUSINESS",
+        r"Item\s+1[\.:]?\s*$",  # Just "Item 1." (Business may be in sibling)
+    ]
+
+    for pattern in search_patterns:
+        text_nodes = soup.find_all(string=re.compile(pattern, re.I))
+
+        for text_node in text_nodes:
+            parent = text_node.parent
+            if parent is None:
+                continue
+
+            # Skip if in table (likely TOC)
+            table = parent.find_parent("table")
+            if table:
+                continue
+
+            # Found non-TOC Item 1 - extract content from here
+            start_el = parent
+
+            # Walk up to find meaningful container
+            for _ in range(5):
+                if start_el and start_el.name in ["div", "p", "section", "body"]:
+                    break
+                start_el = start_el.parent if start_el else None
+
+            if start_el:
+                # Extract text using stop pattern detection
+                text = extract_section_text(start_el, soup)
+                text = _clean_extracted_text(text)
+
+                if len(text) >= MIN_BUSINESS_DESCRIPTION_LENGTH:
+                    logger.debug(
+                        f"Text node search succeeded: {len(text):,} chars from {file_path.name}"
+                    )
+                    if len(text) > MAX_BUSINESS_DESCRIPTION_LENGTH:
+                        logger.warning(
+                            f"Business description truncated from {len(text):,} to "
+                            f"{MAX_BUSINESS_DESCRIPTION_LENGTH:,} chars in {file_path.name}"
+                        )
+                    return text[:MAX_BUSINESS_DESCRIPTION_LENGTH]
+
+    return None
+
+
+def _extract_via_anchor_navigation(
+    soup: BeautifulSoup, content: str, file_path: Path
+) -> str | None:
+    """
+    Extract business description by following TOC anchor links to section IDs.
+
+    Args:
+        soup: Parsed BeautifulSoup object
+        content: Raw HTML content (for fallback)
+        file_path: Path for logging purposes
+
+    Returns:
+        Extracted text or None
+    """
+
+    # Strategy 1: Find TOC hrefs containing item1 and business
+    def href_matcher(x: Any) -> bool:
+        return bool(x and re.search(r"#.*item.*1.*business", str(x), re.I))
+
+    toc_link = soup.find("a", href=href_matcher)
+
+    # Strategy 2: Find combined "Items 1. and 2. Business and Properties" links
+    if not toc_link:
+
+        def combined_href_matcher(x: Any) -> bool:
+            return bool(x and re.search(r"#.*item.*1.*2.*business", str(x), re.I))
+
+        toc_link = soup.find("a", href=combined_href_matcher)
+
+    # Strategy 3: Find any TOC link to item1 section
+    if not toc_link:
+
+        def item1_href_matcher(x: Any) -> bool:
+            return bool(x and re.search(r"#.*item.*1\b", str(x), re.I))
+
+        # Find links that point to item1 and contain "business" in text
+        for link in soup.find_all("a", href=item1_href_matcher):
+            link_text = link.get_text(strip=True).lower()
+            if "business" in link_text or "item 1" in link_text:
+                toc_link = link
+                break
+
+    if not toc_link or not toc_link.has_attr("href"):
+        return None
+
+    start_id = str(toc_link["href"]).lstrip("#")
+    start_el = soup.find(id=start_id) if start_id else None
+
+    if not start_el:
+        # Try finding element with ID containing the anchor reference
+        def id_contains_matcher(x: Any) -> bool:
+            return bool(x and start_id and start_id in str(x))
+
+        start_el = soup.find(id=id_contains_matcher)
+
+    if not start_el:
+        return None
+
+    # Find end element (Item 1A or Item 2)
+    def item1a_matcher(x: Any) -> bool:
+        return bool(x and re.search(r"item.*1a", str(x), re.I))
+
+    def item2_matcher(x: Any) -> bool:
+        return bool(x and re.search(r"item.*2\b", str(x), re.I))
+
+    end_el = start_el.find_next(id=item1a_matcher)
+    if not end_el:
+        end_el = start_el.find_next(id=item2_matcher)
+
+    if end_el:
+        # Use anchor-based extraction
+        text = extract_between_anchors(start_el, end_el)
+    else:
+        # No end anchor found - use stop pattern approach
+        text = extract_section_text(start_el, soup)
+
+    text = _clean_extracted_text(text)
+
+    if len(text) >= MIN_BUSINESS_DESCRIPTION_LENGTH:
+        logger.debug(f"Anchor navigation succeeded: {len(text):,} chars from {file_path.name}")
+        if len(text) > MAX_BUSINESS_DESCRIPTION_LENGTH:
+            logger.warning(
+                f"Business description truncated from {len(text):,} to "
+                f"{MAX_BUSINESS_DESCRIPTION_LENGTH:,} chars in {file_path.name}"
+            )
+        return text[:MAX_BUSINESS_DESCRIPTION_LENGTH]
+
+    return None
+
+
+def _extract_via_direct_id(soup: BeautifulSoup, file_path: Path) -> str | None:
+    """
+    Extract business description from elements with ID containing item1 + business.
+
+    Args:
+        soup: Parsed BeautifulSoup object
+        file_path: Path for logging purposes
+
+    Returns:
+        Extracted text or None
+    """
+
+    # Find element with ID containing item1 and business
+    def id_matcher(x: Any) -> bool:
+        return bool(x and re.search(r"item.*1.*business", str(x), re.I))
+
+    start_el = soup.find(id=id_matcher)
+
+    if not start_el:
+        # Try broader item1 ID pattern
+        def item1_id_matcher(x: Any) -> bool:
+            return bool(x and re.search(r"item.*1\b", str(x), re.I))
+
+        start_el = soup.find(id=item1_id_matcher)
+
+    if not start_el:
+        return None
+
+    # Find end element
+    def item1a_matcher(x: Any) -> bool:
+        return bool(x and re.search(r"item.*1a", str(x), re.I))
+
+    end_el = start_el.find_next(id=item1a_matcher)
+
+    if end_el:
+        text = extract_between_anchors(start_el, end_el)
+    else:
+        text = extract_section_text(start_el, soup)
+
+    text = _clean_extracted_text(text)
+
+    if len(text) >= MIN_BUSINESS_DESCRIPTION_LENGTH:
+        logger.debug(f"Direct ID extraction succeeded: {len(text):,} chars from {file_path.name}")
+        if len(text) > MAX_BUSINESS_DESCRIPTION_LENGTH:
+            logger.warning(
+                f"Business description truncated from {len(text):,} to "
+                f"{MAX_BUSINESS_DESCRIPTION_LENGTH:,} chars in {file_path.name}"
+            )
+        return text[:MAX_BUSINESS_DESCRIPTION_LENGTH]
+
+    return None
+
+
 def extract_business_description(
     file_path: Path,
     file_content: str | None = None,
@@ -72,12 +393,13 @@ def extract_business_description(
     soup: BeautifulSoup | None = None,
 ) -> str | None:
     """
-    Extract business description from 10-K Item 1 using TOC anchor-based approach.
+    Extract business description from 10-K Item 1 using multiple strategies.
 
-    This method:
-    1. Finds TOC link with href="#...item1...business..."
-    2. Jumps to element with that id
-    3. Extracts text until Item 1A or Item 2 anchor
+    Tries extraction strategies in order of specificity:
+    1. TOC anchor-based navigation (follows href links to section IDs)
+    2. Direct ID pattern matching (elements with id containing "item1" + "business")
+    3. Text node search (finds "Item 1...Business" text, skips TOC tables)
+    4. Raw regex extraction (extracts text between section markers)
 
     Args:
         file_path: Path to 10-K HTML file (must be within filings_dir if provided)
@@ -112,137 +434,35 @@ def extract_business_description(
             except Exception:
                 soup = BeautifulSoup(content, "html.parser")
 
-        # 1) Prefer TOC hrefs that contain both item1 and business
-        def href_matcher(x: Any) -> bool:
-            return bool(x and re.search(r"#.*item1.*business", str(x), re.I))
+        # Try extraction strategies in order of reliability
+        result = None
 
-        toc_link = soup.find("a", href=href_matcher)
-        start_id = (
-            str(toc_link["href"]).lstrip("#") if toc_link and toc_link.has_attr("href") else None
-        )
+        # Strategy 1: TOC anchor navigation (most reliable for structured filings)
+        result = _extract_via_anchor_navigation(soup, content, file_path)
+        if result:
+            return result
 
-        start_el = soup.find(id=start_id) if start_id else None
-        if not start_el:
-            # 2) Fallback: direct id pattern (use callable for regex matching)
-            def id_matcher(x: Any) -> bool:
-                return bool(x and re.search(r"item1.*business", str(x), re.I))
+        # Strategy 2: Direct ID pattern matching
+        result = _extract_via_direct_id(soup, file_path)
+        if result:
+            return result
 
-            start_el = soup.find(id=id_matcher)
-        if not start_el:
-            # 3) Fallback: Find text node with "ITEM 1 BUSINESS" and walk from there
-            # IMPORTANT: Skip TOC matches (they're in tables)
-            item1_text_nodes = soup.find_all(string=re.compile(r"ITEM\s+1[\.:]?\s*BUSINESS", re.I))
-            if item1_text_nodes:
-                # Filter out TOC matches (in tables)
-                for text_node in item1_text_nodes:
-                    parent = text_node.parent
-                    if parent is None:
-                        continue
-                    # Check if it's in a table (likely TOC)
-                    table = parent.find_parent("table")
-                    if table:
-                        continue  # Skip TOC matches
+        # Strategy 3: Text node search (skip TOC, find actual section)
+        result = _extract_via_text_node_search(soup, file_path)
+        if result:
+            return result
 
-                    # This is likely the actual section
-                    start_el = parent
-                    # Walk up to find a meaningful container (div, p, td, body)
-                    for _ in range(5):
-                        if start_el and start_el.name in ["div", "p", "td", "body"]:
-                            break
-                        start_el = start_el.parent if start_el else None
+        # Strategy 4: Raw regex extraction (fallback for unusual structures)
+        result = _extract_via_raw_regex(content, file_path)
+        if result:
+            return result
 
-                    if start_el:
-                        break  # Found a good candidate
-        if not start_el:
-            # 4) Last resort: raw text search (for files with unusual structure)
-            item1_match = re.search(r"ITEM\s+1[\.:]?\s*BUSINESS", content, re.I)
-            if item1_match:
-                # Extract from raw text position
-                # Skip past the heading itself to get actual content
-                start_pos = item1_match.end()
-                remaining = content[start_pos:]
-
-                # Look for Item 1A, but also check for Item 2 if Item 1A is too close
-                item1a_match = re.search(r"ITEM\s+1A", remaining, re.I)
-                item2_match = re.search(r"ITEM\s+2[\.:]?", remaining, re.I)
-
-                # Choose the closer stop point, but ensure we have enough content
-                stop_pos = len(remaining)
-                if item1a_match and item2_match:
-                    # Use the one that gives us more content (further away)
-                    stop_pos = max(item1a_match.start(), item2_match.start())
-                elif item1a_match:
-                    # If Item 1A is very close (< 1000 chars), continue to Item 2
-                    if item1a_match.start() < 1000:
-                        if item2_match:
-                            stop_pos = item2_match.start()
-                        else:
-                            # No Item 2, use Item 1A anyway
-                            stop_pos = item1a_match.start()
-                    else:
-                        stop_pos = item1a_match.start()
-                elif item2_match:
-                    stop_pos = item2_match.start()
-
-                if stop_pos < len(remaining):
-                    item1_section = remaining[:stop_pos]
-                    # Parse the section to get clean text
-                    section_soup = BeautifulSoup(item1_section, "html.parser")
-                    item1_text = section_soup.get_text(separator=" ", strip=True)
-                    if item1_text and len(item1_text) > 500:
-                        if len(item1_text) > 50000:
-                            logger.warning(
-                                f"Business description truncated from {len(item1_text):,} to 50,000 chars "
-                                f"in {file_path.name}"
-                            )
-                        return item1_text[:50000]
-            return None
-
-        # End at Item 1A (preferred), else Item 2
-        # Use callable for regex matching with find_next
-        def item1a_matcher(x: Any) -> bool:
-            return bool(x and re.search(r"item1a", str(x), re.I))
-
-        end_el = start_el.find_next(id=item1a_matcher)
-        if not end_el:
-
-            def item2_matcher(x: Any) -> bool:
-                return bool(x and re.search(r"item2", str(x), re.I))
-
-            end_el = start_el.find_next(id=item2_matcher)
-        if not end_el:
-            # Fallback: use old stop pattern approach
-            fallback_text = extract_section_text(start_el, soup)
-            if len(fallback_text) > 50000:
-                logger.warning(
-                    f"Business description truncated from {len(fallback_text):,} to 50,000 chars "
-                    f"in {file_path.name}"
-                )
-            return fallback_text[:50000]
-
-        item1_text = extract_between_anchors(start_el, end_el)
-        if item1_text:
-            # Clean up text
-            item1_text = re.sub(r"\s+", " ", item1_text)  # Normalize whitespace
-            item1_text = item1_text.strip()
-            # Require minimum length to filter out noise/empty sections
-            # Lower threshold (20 chars) allows meaningful test cases while filtering empty results
-            if len(item1_text) > 20:
-                if len(item1_text) > 50000:
-                    logger.warning(
-                        f"Business description truncated from {len(item1_text):,} to 50,000 chars "
-                        f"in {file_path.name}"
-                    )
-                return item1_text[:50000]  # Limit to 50KB
-            else:
-                logger.debug(
-                    f"Extracted text too short ({len(item1_text)} chars): {item1_text[:100]}"
-                )
+        logger.debug(f"All extraction strategies failed for {file_path.name}")
+        return None
 
     except Exception as e:
         logger.debug(f"Error extracting business description from {file_path.name}: {e}")
-
-    return None
+        return None
 
 
 def extract_business_description_with_datamule_fallback(
@@ -254,21 +474,22 @@ def extract_business_description_with_datamule_fallback(
     soup: BeautifulSoup | None = None,
 ) -> str | None:
     """
-    Extract Item 1 Business description using datamule.
+    Extract Item 1 Business description using datamule with custom parser fallback.
 
-    Strategy: Use datamule's get_section() which works for ~94% of filings.
-    For the ~6% where it fails, we log the CIK and return None (accept the gap).
+    Strategy:
+    1. Try datamule's get_section() which works for ~94% of filings
+    2. Fall back to custom multi-strategy parser for the ~6% where datamule fails
 
-    This keeps the code simple and relies on datamule's quality parsing rather than
-    maintaining a parallel custom parser with arbitrary limits.
+    This provides high-quality extraction from datamule while ensuring we capture
+    descriptions from filings with unusual HTML structures.
 
     Args:
         file_path: Path to 10-K HTML file
         cik: Company CIK (required for datamule)
-        file_content: Optional pre-read file content (unused, kept for API compatibility)
-        skip_datamule: If True, return None immediately (no extraction)
-        filings_dir: Optional base directory (unused, kept for API compatibility)
-        soup: Optional BeautifulSoup object (unused, kept for API compatibility)
+        file_content: Optional pre-read file content (passed to custom parser)
+        skip_datamule: If True, skip extraction entirely
+        filings_dir: Optional base directory for custom parser path validation
+        soup: Optional BeautifulSoup object (passed to custom parser for performance)
 
     Returns:
         Business description text or None if extraction fails
@@ -285,7 +506,10 @@ def extract_business_description_with_datamule_fallback(
             logger.warning(f"⚠️  Could not determine CIK for business description: {file_path}")
             return None
 
-    # Use datamule for extraction (best quality, ~94% success rate)
+    datamule_failed = False
+    datamule_error_msg = ""
+
+    # Strategy 1: Use datamule for extraction (best quality, ~94% success rate)
     try:
         from public_company_graph.utils.datamule import get_cached_parsed_doc
 
@@ -296,39 +520,58 @@ def extract_business_description_with_datamule_fallback(
         # Get cached parsed document (or create, parse, and cache it)
         doc = get_cached_parsed_doc(cik, portfolio_path)
 
-        if doc is None:
-            logger.warning(
-                f"⚠️  No datamule document available for CIK {cik} - skipping business description"
-            )
-            return None
+        if doc is not None:
+            # Extract Item 1 section using datamule
+            with suppress_datamule_output():
+                if hasattr(doc, "get_section"):
+                    item1 = doc.get_section(title="item1", format="text")
+                    if item1:
+                        item1_text = item1[0] if isinstance(item1, list) else str(item1)
+                        if len(item1_text) >= MIN_BUSINESS_DESCRIPTION_LENGTH:
+                            # Datamule succeeded - return the result
+                            return item1_text
 
-        # Extract Item 1 section using datamule
-        with suppress_datamule_output():
-            if hasattr(doc, "get_section"):
-                item1 = doc.get_section(title="item1", format="text")
-                if item1:
-                    item1_text = item1[0] if isinstance(item1, list) else str(item1)
-                    if len(item1_text) > 1000:
-                        # Return full description - no arbitrary limits
-                        return item1_text
-
-        # Datamule couldn't extract Item 1 section - log for investigation
-        # Include accession number and filing date for reproducibility
-        accession = getattr(doc, "accession", "unknown")
-        filing_date = getattr(doc, "filing_date", "unknown")
-        logger.warning(
-            f"⚠️  Datamule could not extract Item 1 for CIK {cik} "
-            f"(accession={accession}, date={filing_date})"
-        )
-        logger.debug(
-            f"Item 1 extraction failed - CIK: {cik}, accession: {accession}, "
-            f"filing_date: {filing_date}, path: {getattr(doc, 'path', 'unknown')}"
-        )
-        return None
+            # Datamule couldn't extract Item 1 section
+            accession = getattr(doc, "accession", "unknown")
+            filing_date = getattr(doc, "filing_date", "unknown")
+            datamule_error_msg = f"accession={accession}, date={filing_date}"
+            datamule_failed = True
+        else:
+            datamule_error_msg = "no datamule document available"
+            datamule_failed = True
 
     except ImportError:
-        logger.error("❌ datamule library not available - cannot extract business descriptions")
-        return None
+        datamule_error_msg = "datamule library not available"
+        datamule_failed = True
     except Exception as e:
-        logger.warning(f"⚠️  Datamule error for CIK {cik}: {e}")
-        return None
+        datamule_error_msg = str(e)
+        datamule_failed = True
+
+    # Strategy 2: Fall back to custom multi-strategy parser
+    if datamule_failed:
+        logger.debug(
+            f"Datamule extraction failed for CIK {cik} ({datamule_error_msg}), "
+            f"trying custom parser..."
+        )
+
+        # Use custom parser as fallback
+        result = extract_business_description(
+            file_path=file_path,
+            file_content=file_content,
+            filings_dir=filings_dir,
+            soup=soup,
+        )
+
+        if result:
+            logger.info(
+                f"✅ Custom parser succeeded for CIK {cik} where datamule failed: "
+                f"{len(result):,} chars extracted"
+            )
+            return result
+
+        # Both datamule and custom parser failed
+        logger.warning(
+            f"⚠️  All extraction methods failed for CIK {cik} (datamule: {datamule_error_msg})"
+        )
+
+    return None

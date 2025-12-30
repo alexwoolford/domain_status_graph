@@ -70,8 +70,8 @@ def write_industry_relationships(
         if deleted > 0:
             log.info(f"Deleted {deleted} existing relationships")
 
-    # Write new relationships
-    log.info(f"Writing {len(pairs)} SIMILAR_INDUSTRY relationships...")
+    # Write new relationships (bidirectional - both directions for symmetric similarity)
+    log.info(f"Writing {len(pairs)} SIMILAR_INDUSTRY relationships (bidirectional)...")
     batch = []
     relationships_written = 0
 
@@ -94,12 +94,17 @@ def write_industry_relationships(
                     MATCH (c1:Company {cik: rel.cik1})
                     MATCH (c2:Company {cik: rel.cik2})
                     WHERE c1 <> c2
-                    MERGE (c1)-[r:SIMILAR_INDUSTRY]->(c2)
-                    SET r.method = rel.method,
-                        r.classification = rel.classification,
-                        r.score = rel.score,
-                        r.computed_at = datetime()
-                    RETURN count(r) AS created
+                    MERGE (c1)-[r1:SIMILAR_INDUSTRY]->(c2)
+                    SET r1.method = rel.method,
+                        r1.classification = rel.classification,
+                        r1.score = rel.score,
+                        r1.computed_at = datetime()
+                    MERGE (c2)-[r2:SIMILAR_INDUSTRY]->(c1)
+                    SET r2.method = rel.method,
+                        r2.classification = rel.classification,
+                        r2.score = rel.score,
+                        r2.computed_at = datetime()
+                    RETURN count(r1) + count(r2) AS created
                     """,
                     batch=batch,
                 )
@@ -115,12 +120,17 @@ def write_industry_relationships(
                 MATCH (c1:Company {cik: rel.cik1})
                 MATCH (c2:Company {cik: rel.cik2})
                 WHERE c1 <> c2
-                MERGE (c1)-[r:SIMILAR_INDUSTRY]->(c2)
-                SET r.method = rel.method,
-                    r.classification = rel.classification,
-                    r.score = rel.score,
-                    r.computed_at = datetime()
-                RETURN count(r) AS created
+                MERGE (c1)-[r1:SIMILAR_INDUSTRY]->(c2)
+                SET r1.method = rel.method,
+                    r1.classification = rel.classification,
+                    r1.score = rel.score,
+                    r1.computed_at = datetime()
+                MERGE (c2)-[r2:SIMILAR_INDUSTRY]->(c1)
+                SET r2.method = rel.method,
+                    r2.classification = rel.classification,
+                    r2.score = rel.score,
+                    r2.computed_at = datetime()
+                RETURN count(r1) + count(r2) AS created
                 """,
                 batch=batch,
             )
@@ -170,9 +180,9 @@ def write_size_relationships(
         if deleted > 0:
             log.info(f"Deleted {deleted} existing relationships")
 
-    # Write new relationships using optimized UNWIND batching
+    # Write new relationships using optimized UNWIND batching (bidirectional)
     # This approach is reliable, performant, and works on all systems
-    log.info(f"Writing {len(pairs):,} SIMILAR_SIZE relationships...")
+    log.info(f"Writing {len(pairs):,} SIMILAR_SIZE relationships (bidirectional)...")
 
     # Prepare batch data
     batch_data = [
@@ -191,7 +201,7 @@ def write_size_relationships(
     total_batches = (len(batch_data) + batch_size - 1) // batch_size
     start_time = None
 
-    # Use optimized UNWIND batching with progress reporting
+    # Use optimized UNWIND batching with progress reporting (bidirectional)
     # This is reliable and performant (typically 1-2M relationships/minute)
     with driver.session(database=database) as session:
         start_time = time.time()
@@ -203,13 +213,19 @@ def write_size_relationships(
                 MATCH (c1:Company {cik: rel.cik1})
                 MATCH (c2:Company {cik: rel.cik2})
                 WHERE c1 <> c2
-                MERGE (c1)-[r:SIMILAR_SIZE]->(c2)
-                SET r.method = rel.method,
-                    r.metric = rel.metric,
-                    r.bucket = rel.bucket,
-                    r.score = rel.score,
-                    r.computed_at = datetime()
-                RETURN count(r) AS created
+                MERGE (c1)-[r1:SIMILAR_SIZE]->(c2)
+                SET r1.method = rel.method,
+                    r1.metric = rel.metric,
+                    r1.bucket = rel.bucket,
+                    r1.score = rel.score,
+                    r1.computed_at = datetime()
+                MERGE (c2)-[r2:SIMILAR_SIZE]->(c1)
+                SET r2.method = rel.method,
+                    r2.metric = rel.metric,
+                    r2.bucket = rel.bucket,
+                    r2.score = rel.score,
+                    r2.computed_at = datetime()
+                RETURN count(r1) + count(r2) AS created
                 """,
                 batch=chunk,
             )

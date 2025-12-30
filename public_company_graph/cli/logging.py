@@ -30,6 +30,17 @@ def setup_logging(
     Returns:
         Configured logger instance
     """
+    # Console formatter: no timestamps (clean output)
+    console_formatter = logging.Formatter("%(message)s")
+
+    # CRITICAL: Clear any existing root logger handlers
+    # Third-party libraries (e.g., datamule) may call logging.basicConfig() during import
+    # which adds a handler with timestamps to the root logger. We need to remove these
+    # so that console output is clean (timestamps only in log files).
+    root_logger = logging.getLogger()
+    root_logger.handlers = []  # Clear root handlers set by third-party libs
+    root_logger.setLevel(logging.WARNING)  # Root only logs warnings+
+
     if execute:
         log_dir.mkdir(parents=True, exist_ok=True)
         timestamp = time.strftime("%Y%m%d_%H%M%S")
@@ -47,21 +58,20 @@ def setup_logging(
                 super().emit(record)
                 self.flush()
 
-        # File handler: DEBUG and above (detailed logs)
+        # File handler: DEBUG and above (detailed logs with timestamps)
         # Use flushing handler to ensure logs are written immediately
         file_handler = FlushingFileHandler(log_file, mode="a", encoding="utf-8")
         file_handler.setLevel(logging.DEBUG)
         file_formatter = logging.Formatter("%(asctime)s - %(levelname)s - %(message)s")
         file_handler.setFormatter(file_formatter)
 
-        # Console handler: INFO and above (summary only)
+        # Console handler: INFO and above (clean output, no timestamps)
         # Use TqdmLoggingHandler to avoid interference with tqdm progress bars
         if tqdm_compatible:
             console_handler = TqdmLoggingHandler(level=logging.INFO)
         else:
             console_handler = logging.StreamHandler(sys.stderr)
             console_handler.setLevel(logging.INFO)
-        console_formatter = logging.Formatter("%(message)s")
         console_handler.setFormatter(console_formatter)
 
         # Add handlers
@@ -105,10 +115,12 @@ def setup_logging(
         logger.info(f"Log file: {log_file}")
         return logger
     else:
+        # Dry-run mode: simple console logging
         logging.basicConfig(
             level=logging.INFO,
             format="%(message)s",
             stream=sys.stdout,
+            force=True,  # Override any existing basicConfig
         )
         return logging.getLogger(__name__)
 

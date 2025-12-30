@@ -353,8 +353,8 @@ def compute_company_risk_similarity(
 
             logger.info(f"   Found {len(pairs)} unique similar pairs")
 
-            # Write relationships
-            logger.info("   Writing SIMILAR_RISK relationships...")
+            # Write relationships (bidirectional - both directions for symmetric similarity)
+            logger.info("   Writing SIMILAR_RISK relationships (bidirectional)...")
             batch = []
 
             for (cik1, cik2), score in pairs.items():
@@ -367,14 +367,18 @@ def compute_company_risk_similarity(
                         MATCH (c1:Company {cik: rel.cik1})
                         MATCH (c2:Company {cik: rel.cik2})
                         WHERE c1 <> c2
-                        MERGE (c1)-[r:SIMILAR_RISK]->(c2)
-                        SET r.score = rel.score,
-                            r.metric = 'COSINE',
-                            r.computed_at = datetime()
+                        MERGE (c1)-[r1:SIMILAR_RISK]->(c2)
+                        SET r1.score = rel.score,
+                            r1.metric = 'COSINE',
+                            r1.computed_at = datetime()
+                        MERGE (c2)-[r2:SIMILAR_RISK]->(c1)
+                        SET r2.score = rel.score,
+                            r2.metric = 'COSINE',
+                            r2.computed_at = datetime()
                         """,
                         batch=batch,
                     )
-                    relationships_written += len(batch)
+                    relationships_written += len(batch) * 2  # Both directions
                     batch = []
 
             if batch:
@@ -384,14 +388,18 @@ def compute_company_risk_similarity(
                     MATCH (c1:Company {cik: rel.cik1})
                     MATCH (c2:Company {cik: rel.cik2})
                     WHERE c1 <> c2
-                    MERGE (c1)-[r:SIMILAR_RISK]->(c2)
-                    SET r.score = rel.score,
-                        r.metric = 'COSINE',
-                        r.computed_at = datetime()
+                    MERGE (c1)-[r1:SIMILAR_RISK]->(c2)
+                    SET r1.score = rel.score,
+                        r1.metric = 'COSINE',
+                        r1.computed_at = datetime()
+                    MERGE (c2)-[r2:SIMILAR_RISK]->(c1)
+                    SET r2.score = rel.score,
+                        r2.metric = 'COSINE',
+                        r2.computed_at = datetime()
                     """,
                     batch=batch,
                 )
-                relationships_written += len(batch)
+                relationships_written += len(batch) * 2  # Both directions
 
             logger.info(f"   ✓ Created {relationships_written} SIMILAR_RISK relationships")
             logger.info("   ✓ Complete")

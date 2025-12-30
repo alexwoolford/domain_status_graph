@@ -102,20 +102,41 @@ class TestExtractSectionText:
         assert "Business description" in result
 
 
+def _generate_realistic_content(short_desc: str) -> str:
+    """Generate realistic business description content meeting minimum length."""
+    base = f"""
+        {short_desc}
+        The Company operates through multiple business segments and geographic regions.
+        Our products and services are designed to meet the evolving needs of our customers.
+        We maintain a strong focus on innovation, quality, and customer satisfaction.
+        Our strategy emphasizes sustainable growth and long-term value creation.
+        We continue to invest in research and development to maintain competitive advantages.
+        The Company has established partnerships with leading organizations worldwide.
+        Our financial performance reflects disciplined execution of our strategic initiatives.
+        We are committed to corporate responsibility and environmental sustainability.
+    """
+    while len(base) < 600:
+        base += " Additional business context and strategic information continues here."
+    return base
+
+
 class TestExtractBusinessDescription:
     """Tests for extract_business_description function."""
 
     def test_toc_link_extraction(self, tmp_path):
         """Test extraction using TOC link."""
+        content = _generate_realistic_content(
+            "Our company operates in the technology sector. "
+            "We provide software solutions to enterprises."
+        )
         html_file = tmp_path / "test.html"
         html_file.write_text(
-            """
+            f"""
             <html>
                 <body>
                     <a href="#item1-business">Item 1: Business</a>
                     <div id="item1-business">
-                        <p>Our company operates in the technology sector.</p>
-                        <p>We provide software solutions to enterprises.</p>
+                        <p>{content}</p>
                     </div>
                     <div id="item1a">Item 1A</div>
                 </body>
@@ -130,13 +151,14 @@ class TestExtractBusinessDescription:
 
     def test_direct_id_extraction(self, tmp_path):
         """Test extraction using direct id pattern."""
+        content = _generate_realistic_content("Business description content is here.")
         html_file = tmp_path / "test.html"
         html_file.write_text(
-            """
+            f"""
             <html>
                 <body>
                     <div id="item1-business">
-                        <p>Business description content.</p>
+                        <p>{content}</p>
                     </div>
                     <div id="item1a">Item 1A</div>
                 </body>
@@ -150,14 +172,15 @@ class TestExtractBusinessDescription:
 
     def test_text_node_extraction(self, tmp_path):
         """Test extraction using text node search."""
+        content = _generate_realistic_content("Business description from text node.")
         html_file = tmp_path / "test.html"
         html_file.write_text(
-            """
+            f"""
             <html>
                 <body>
                     <div>
                         <h2>ITEM 1: BUSINESS</h2>
-                        <p>Business description from text node.</p>
+                        <p>{content}</p>
                     </div>
                     <div id="item1a">Item 1A</div>
                 </body>
@@ -181,13 +204,14 @@ class TestExtractBusinessDescription:
 
     def test_with_file_content(self, tmp_path):
         """Test extraction with pre-read file content."""
+        content = _generate_realistic_content("Business description goes here.")
         html_file = tmp_path / "test.html"
         html_file.write_text(
-            """
+            f"""
             <html>
                 <body>
                     <div id="item1-business">
-                        <p>Business description.</p>
+                        <p>{content}</p>
                     </div>
                     <div id="item1a">Item 1A</div>
                 </body>
@@ -196,10 +220,12 @@ class TestExtractBusinessDescription:
         )
 
         # Read content once
-        content = html_file.read_text()
+        file_content = html_file.read_text()
 
         # Extract using pre-read content (shouldn't re-read file)
-        result = extract_business_description(html_file, file_content=content, filings_dir=tmp_path)
+        result = extract_business_description(
+            html_file, file_content=file_content, filings_dir=tmp_path
+        )
         assert result is not None
         assert "Business description" in result
 
@@ -215,9 +241,9 @@ class TestExtractBusinessDescription:
 class TestExtractBusinessDescriptionWithDatamuleFallback:
     """Tests for extract_business_description_with_datamule_fallback function.
 
-    Note: This function now relies on datamule and returns None when datamule
-    fails (no custom fallback). This keeps the code simple and accepts that
-    ~6% of filings won't have business descriptions extracted.
+    This function uses datamule for primary extraction (~94% success rate) and
+    falls back to a custom multi-strategy parser for the remaining ~6% of filings
+    where datamule fails or is unavailable.
     """
 
     def test_skip_datamule_flag(self, tmp_path):

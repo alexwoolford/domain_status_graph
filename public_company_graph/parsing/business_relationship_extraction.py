@@ -183,93 +183,9 @@ RELATIONSHIP_KEYWORDS = {
 # =============================================================================
 
 # Blocklist: Common words/abbreviations that match ticker symbols
+# These are words that appear frequently in 10-K text but happen to match real ticker symbols
 TICKER_BLOCKLIST = {
-    # 2-letter words
-    "AN",
-    "BY",
-    "ON",
-    "OR",
-    "SO",
-    "BE",
-    "DO",
-    "GO",
-    "IN",
-    "AT",
-    "IS",
-    "UP",
-    "WE",
-    "AB",
-    "SA",
-    "AS",
-    "EU",
-    "UK",
-    # 3-4 letter common words
-    "FOR",
-    "ALL",
-    "ANY",
-    "ARE",
-    "CAN",
-    "HAS",
-    "NOW",
-    "ONE",
-    "OUT",
-    "SEE",
-    "TWO",
-    "BIG",
-    "NEW",
-    "OLD",
-    "OUR",
-    "THE",
-    "AND",
-    "ACT",
-    "YOU",
-    "CAR",
-    "NET",
-    "BDC",
-    "HHS",
-    "ACA",
-    "ESG",
-    "DMA",
-    # Longer common words
-    "WHEN",
-    "MOST",
-    "ALSO",
-    "ONLY",
-    "VERY",
-    "WELL",
-    "EVEN",
-    "JUST",
-    "SOME",
-    "SUCH",
-    "MANY",
-    "BOTH",
-    "EACH",
-    "MORE",
-    "MUST",
-    "WILL",
-    "BEEN",
-    "REAL",
-    "DRUG",
-    "FORM",
-    # Technical acronyms
-    "IT",
-    "PC",
-    "AI",
-    "IP",
-    "HR",
-    "PR",
-    "AG",
-    "EC",
-    "ASIC",
-    "DSP",
-    "GPU",
-    "CPU",
-    "SOC",
-    # Geographic
-    "US",
-    "USA",
-    "EEA",
-    # Single letters
+    # Single letters (all blocked)
     "A",
     "B",
     "C",
@@ -296,43 +212,282 @@ TICKER_BLOCKLIST = {
     "X",
     "Y",
     "Z",
+    # 2-letter common words/abbreviations
+    "AD",  # AD (advertisement) - matches ARRAY DIGITAL ticker
+    "AN",
+    "AS",
+    "AT",
+    "AB",
+    "BE",
+    "BY",
+    "CE",  # CE (Conformité Européenne mark) - matches Celanese ticker
+    "DO",
+    "EC",
+    "EU",
+    "GO",
+    "HE",  # HE (pronoun) - matches Hawaiian Electric ticker
+    "HR",
+    "IN",
+    "IP",
+    "IS",
+    "IT",
+    "ON",
+    "OR",
+    "PC",
+    "PR",
+    "SA",
+    "SO",
+    "UK",
+    "UP",
+    "US",
+    "WE",
+    # 3-letter common words that match tickers
+    "ACT",
+    "ACA",
+    "ADD",
+    "AGE",
+    "AID",
+    "AIR",
+    "ALL",
+    "AND",
+    "ANY",
+    "ARE",
+    "BDC",
+    "BIG",
+    "CAR",
+    "CAN",
+    "CMS",  # CMS (Content Management System) - matches CMS Energy ticker
+    "CPU",
+    "DEI",  # DEI (Diversity Equity Inclusion) - matches Douglas Emmett ticker
+    "DMA",
+    "DNA",  # DNA (biology term) - matches Ginkgo Bioworks ticker
+    "DSP",
+    "EEA",
+    "EPC",  # EPC (Engineering Procurement Construction) - matches Edgewell ticker
+    "ESG",
+    "FOR",
+    "GDP",
+    "GLP",  # GLP (Good Laboratory Practice) - matches Global Partners ticker
+    "GPU",
+    "HAS",
+    "HHS",
+    "III",  # III (Roman numeral) - matches Information Services Group ticker
+    "IOT",  # IoT (Internet of Things) - matches Samsara ticker
+    "KEY",  # KEY (common word) - matches KeyCorp ticker
+    "NET",
+    "NEW",
+    "NOW",
+    "OLD",
+    "ONE",
+    "OUR",
+    "OUT",
+    "PER",
+    "QSR",  # QSR (Quick Service Restaurant) - matches Restaurant Brands ticker
+    "SEC",
+    "SEE",
+    "SOC",
+    "THE",
+    "TPG",  # TPG (common abbreviation) - matches TPG Inc ticker
+    "TWO",
+    "USA",
+    "VIA",
+    "YOU",
+    # 4-letter common words that match tickers
+    "ALSO",
+    "ASIC",
+    "BACK",
+    "BEEN",
+    "BOTH",
+    "CARE",
+    "CASH",
+    "DRUG",
+    "EACH",
+    "EVEN",
+    "FAST",
+    "FLEX",  # FLEX (common word) - matches Flex Ltd ticker
+    "FORM",
+    "GOOD",
+    "HALF",
+    "JUST",
+    "MANY",
+    "MORE",
+    "MOST",
+    "MUST",
+    "NEED",
+    "NOTE",  # NOTE (common word) - matches FiscalNote ticker
+    "ONCE",
+    "ONLY",
+    "OPEN",  # OPEN (common word) - matches Opendoor ticker
+    "PLUS",
+    "REAL",
+    "RISK",
+    "SAFE",
+    "SELF",
+    "SOME",
+    "SUCH",
+    "TERM",
+    "VERY",
+    "WELL",
+    "WHEN",
+    "WILL",
+    "WITH",
+    # 5+ letter common words that match tickers
+    "ABOUT",
+    "AUDIO",
+    "BEING",
+    "CLEAR",
+    "FOCUS",
+    "GLOBE",
+    "IDEAL",
+    "LIFE",
+    "LIGHT",
+    "MEDIA",
+    "PRIME",
+    "RANGE",
+    "SMILE",
+    "STILL",
+    "THINK",
+    "THREE",
+    "TOTAL",
+    "UNITY",
+    "VALUE",
+    "VITAL",
 }
 
 # Company names that are also common English words
+# These are blocked to reduce false positives from generic terms in 10-K filings
 NAME_BLOCKLIST = {
-    "reliance",
-    "alliance",
-    "target",
-    "focus",
-    "insight",
+    # Generic business terms
     "advantage",
+    "alliance",
+    "associates",
+    "capital",
+    "catalyst",
+    "enterprises",
+    "financial",
+    "focus",
+    "group",
+    "holdings",
+    "industries",
+    "insight",
+    "investment",
+    "investments",
+    "management",
+    "partners",
+    "platform",
+    "platforms",
     "premier",
     "progress",
-    "catalyst",
+    "reliance",
+    "resources",
+    "securities",
     "service",
     "services",
+    "solution",
+    "solutions",
     "system",
     "systems",
     "technology",
     "technologies",
-    "solution",
-    "solutions",
-    "platform",
-    "platforms",
-    "group",
-    "holdings",
-    "partners",
-    "associates",
     "ventures",
-    "industries",
-    "enterprises",
-    "management",
-    "investment",
-    "investments",
-    "financial",
-    "securities",
-    "resources",
-    "capital",
+    # Common words that match company names (high false positive rate)
+    "ad",  # advertisement
+    "audio",
+    "care",
+    "cash",
+    "core",
+    "data",
+    "digital",
+    "direct",
+    "energy",
+    "global",
+    "growth",
+    "health",
+    "key",  # common word - matches KeyCorp
+    "life",
+    "light",
+    "local",
+    "media",
+    "mobile",
+    "national",
+    "network",
+    "note",  # common word - matches FiscalNote
+    "open",  # common word - matches Opendoor
+    "plus",
+    "power",
+    "prime",
+    "pro",
+    "pure",
+    "real",
+    "smart",
+    "source",
+    "star",
+    "total",
+    "trust",
+    "unity",
+    "value",
+    "vital",
+    "web",
+    # Industry/regulatory terms that match company names
+    "cms",  # Content Management System
+    "dei",  # Diversity, Equity & Inclusion
+    "dna",  # biology term
+    "epc",  # Engineering, Procurement, Construction
+    "esg",  # Environmental, Social, Governance
+    "glp",  # Good Laboratory Practice
+    "iot",  # Internet of Things
+    "qsr",  # Quick Service Restaurant
+}
+
+# High-value company names that SHOULD be extracted even if they look like common words
+# These override NAME_BLOCKLIST and short-candidate filtering when the company is in the lookup
+# Only include truly distinctive company names that are unambiguous in business context
+HIGH_VALUE_COMPANY_NAMES = {
+    # Major tech companies (distinctive names)
+    "adobe",
+    "alphabet",
+    "amazon",
+    "apple",
+    "cisco",
+    "dell",
+    "google",
+    "intel",
+    "microsoft",
+    "nvidia",
+    "oracle",
+    "qualcomm",
+    "salesforce",
+    "samsung",
+    # Major financial/retail (distinctive names)
+    "berkshire",
+    "blackrock",
+    "citi",
+    "citibank",
+    "citigroup",
+    "costco",
+    "disney",
+    "goldman",
+    "jpmorgan",
+    "mastercard",
+    "netflix",
+    "paypal",
+    "pfizer",
+    "starbucks",
+    "tesla",
+    "visa",
+    "walmart",
+    # Multi-word distinctive names
+    "berkshire hathaway",
+    "dollar general",
+    "dollar tree",
+    "goldman sachs",
+    "home depot",
+    "johnson & johnson",
+    "jpmorgan chase",
+    "lockheed martin",
+    "morgan stanley",
+    "procter & gamble",
+    "wells fargo",
 }
 
 
@@ -545,31 +700,84 @@ def extract_and_resolve_relationships(
     return results
 
 
+def _is_high_value_company(name: str) -> bool:
+    """
+    Check if a company name (or its normalized form) is in the high-value list.
+
+    This checks both the exact name and common variations.
+    """
+    name_lower = name.lower().strip()
+    normalized = _normalize_company_name(name_lower)
+
+    # Check exact match
+    if name_lower in HIGH_VALUE_COMPANY_NAMES:
+        return True
+
+    # Check normalized match
+    if normalized in HIGH_VALUE_COMPANY_NAMES:
+        return True
+
+    # Check if any high-value name is contained in the company name
+    # e.g., "NVIDIA Corporation" contains "nvidia"
+    for hv_name in HIGH_VALUE_COMPANY_NAMES:
+        if hv_name in name_lower:
+            return True
+
+    return False
+
+
 def _resolve_candidate(
     candidate: str,
     lookup: CompanyLookup,
     self_cik: str | None,
 ) -> dict[str, Any] | None:
-    """Try to resolve a candidate string to a known company."""
+    """
+    Try to resolve a candidate string to a known company.
+
+    Uses multiple layers of filtering to reduce false positives:
+    1. Blocklist filtering for common words that match tickers/names
+    2. High-value company allowlist override (checked on resolved company name)
+    3. Minimum length requirements for ticker-style matches
+    4. Confidence scoring based on match quality
+    """
     candidate_lower = candidate.lower().strip()
     candidate_upper = candidate.upper().strip()
 
-    # Skip blocklisted terms
+    # Skip blocklisted tickers (common words that match ticker symbols)
     if candidate_upper in TICKER_BLOCKLIST:
         return None
-    if candidate_lower in NAME_BLOCKLIST:
+
+    # Check if the CANDIDATE itself is a high-value company name
+    candidate_is_high_value = candidate_lower in HIGH_VALUE_COMPANY_NAMES
+
+    # Skip blocklisted names UNLESS it's a high-value company
+    if candidate_lower in NAME_BLOCKLIST and not candidate_is_high_value:
         return None
 
-    # Try exact ticker match (highest confidence)
+    # For very short candidates (2-4 chars), apply stricter matching
+    # These are likely ticker-style matches which have high false positive rates
+    is_short_candidate = len(candidate) <= 4
+
+    # Try exact ticker match
     if candidate_upper in lookup.ticker_to_company:
         cik, ticker, name = lookup.ticker_to_company[candidate_upper]
         if cik != self_cik:
+            # Check if the RESOLVED company is high-value (even if candidate isn't)
+            resolved_is_high_value = _is_high_value_company(name)
+            # For short ticker matches, only allow if the resolved company is high-value
+            if is_short_candidate and not candidate_is_high_value and not resolved_is_high_value:
+                # Skip short ticker matches for non-high-value companies
+                return None
             return {"cik": cik, "ticker": ticker, "name": name, "confidence": 1.0}
 
     # Try exact name match
     if candidate_lower in lookup.name_to_company:
         cik, ticker, name = lookup.name_to_company[candidate_lower]
         if cik != self_cik:
+            resolved_is_high_value = _is_high_value_company(name)
+            # For short name matches, only allow if high-value
+            if is_short_candidate and not candidate_is_high_value and not resolved_is_high_value:
+                return None
             return {"cik": cik, "ticker": ticker, "name": name, "confidence": 1.0}
 
     # Try normalized name match
@@ -577,6 +785,10 @@ def _resolve_candidate(
     if normalized and normalized in lookup.name_to_company:
         cik, ticker, name = lookup.name_to_company[normalized]
         if cik != self_cik:
+            resolved_is_high_value = _is_high_value_company(name)
+            # For normalized matches, require longer candidates unless high-value
+            if len(normalized) <= 4 and not candidate_is_high_value and not resolved_is_high_value:
+                return None
             return {"cik": cik, "ticker": ticker, "name": name, "confidence": 0.95}
 
     return None

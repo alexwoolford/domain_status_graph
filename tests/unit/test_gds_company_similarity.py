@@ -139,7 +139,8 @@ class TestComputeCompanyDescriptionSimilarity:
             logger=MagicMock(),
         )
 
-        assert result == 3
+        # Bidirectional relationships: 3 pairs * 2 directions = 6 relationships
+        assert result == 6
         mock_find_similar.assert_called_once()
 
     def test_handles_exception_gracefully(self):
@@ -282,5 +283,5 @@ class TestComputeCompanyDescriptionSimilarity:
             execute=True,
         )
 
-        # Should have written all pairs
-        assert result == len(pairs)
+        # Should have written all pairs bidirectionally (pairs * 2)
+        assert result == len(pairs) * 2

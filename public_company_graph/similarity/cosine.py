@@ -263,25 +263,30 @@ def write_similarity_relationships(
         if deleted > 0:
             log.info(f"Deleted {deleted} existing relationships")
 
-    # Write new relationships
-    log.info(f"Writing {len(pairs)} {relationship_type} relationships...")
+    # Write new relationships (bidirectional - both directions for symmetric similarity)
+    log.info(f"Writing {len(pairs)} {relationship_type} relationships (bidirectional)...")
     batch = [{"key1": k1, "key2": k2, "score": score} for (k1, k2), score in pairs.items()]
 
     relationships_written = 0
     with driver.session(database=database) as session:
         for i in range(0, len(batch), batch_size):
             chunk = batch[i : i + batch_size]
+            # Create relationships in both directions for symmetric similarity
             result = session.run(
                 f"""
                 UNWIND $batch AS rel
                 MATCH (n1:{node_label} {{{key_property}: rel.key1}})
                 MATCH (n2:{node_label} {{{key_property}: rel.key2}})
                 WHERE n1 <> n2
-                MERGE (n1)-[r:{relationship_type}]->(n2)
-                SET r.score = rel.score,
-                    r.metric = 'COSINE',
-                    r.computed_at = datetime()
-                RETURN count(r) AS created
+                MERGE (n1)-[r1:{relationship_type}]->(n2)
+                SET r1.score = rel.score,
+                    r1.metric = 'COSINE',
+                    r1.computed_at = datetime()
+                MERGE (n2)-[r2:{relationship_type}]->(n1)
+                SET r2.score = rel.score,
+                    r2.metric = 'COSINE',
+                    r2.computed_at = datetime()
+                RETURN count(r1) + count(r2) AS created
                 """,
                 batch=chunk,
             )

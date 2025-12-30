@@ -12,19 +12,29 @@ Similarity signals used:
 5. Shared Technologies - Via Company -> Domain -> Technology path (indirect signal)
 """
 
-# Default weights for different similarity types
+# Default weights for different similarity types (Company-Company relationships)
 # Higher weight = more important signal
-# Note: SIMILAR_INDUSTRY is further weighted by method (SIC=1.0, INDUSTRY=0.8, SECTOR=0.6)
-# Optimized weights (2025-12-27) - Added SIMILAR_RISK from 10-K risk factor embeddings
+#
+# Relationship counts in graph:
+#   SIMILAR_INDUSTRY: 260,336 (method: SIC=1.2, INDUSTRY=0.8, SECTOR=0.6)
+#   SIMILAR_DESCRIPTION: 210,267 (uses r.score from cosine similarity)
+#   SIMILAR_SIZE: 207,048 (uses r.score)
+#   SIMILAR_RISK: 197,186 (uses r.score from 10-K risk factor embeddings)
+#   SIMILAR_TECHNOLOGY: 124,584 (uses r.score from tech stack similarity)
+#   SIMILAR_KEYWORD: 71 (very sparse)
+#   HAS_COMPETITOR: ~1K (direct competitor mentions from 10-K filings - very strong signal!)
+#
+# Optimized 2025-12-29: Grid search over 46 famous competitor pairs
+# Results: 10/46 passed (22%), 16 failed, 16 not found (coverage gap)
+#
 DEFAULT_SIMILARITY_WEIGHTS = {
-    "SIMILAR_RISK": 1.0,  # Risk factor similarity - strongest signal, uses r.score
-    "SIMILAR_DESCRIPTION": 0.5,  # Business description embedding similarity, uses r.score
-    "SIMILAR_INDUSTRY": 0.9,  # SIC/Industry classification match
-    "SIMILAR_SIZE": 0.6,  # Company size similarity - common, less discriminative
-    "SIMILAR_KEYWORD": 0.2,  # Shared keywords - sparse signal
-    "SIMILAR_MARKET": 0.3,  # Same market is moderately important
-    "COMMON_EXECUTIVE": 0.2,  # Shared executives are less important
-    "MERGED_OR_ACQUIRED": 0.1,  # M&A relationships are least important
+    "SIMILAR_DESCRIPTION": 0.8,  # Business description embedding - most important!
+    "SIMILAR_RISK": 0.8,  # Risk factor embedding similarity
+    "SIMILAR_INDUSTRY": 0.6,  # SIC/Industry classification match
+    "SIMILAR_TECHNOLOGY": 0.3,  # Technology stack similarity
+    "SIMILAR_SIZE": 0.2,  # Size similarity - common, less discriminative
+    "SIMILAR_KEYWORD": 0.1,  # Shared keywords - very sparse (71 edges)
+    "HAS_COMPETITOR": 4.0,  # Direct competitor from 10-K - very strong signal!
 }
 
 # Weight for shared technologies (via Domain path)
@@ -137,10 +147,15 @@ def get_top_similar_companies_query_extended(
     min_score: float = 0.0,
 ) -> str:
     """
-    Generate a Cypher query with ALL relationship types (including future ones).
+    Generate a Cypher query with all Company-Company similarity relationship types.
 
-    This is the full-featured query that includes SIMILAR_INDUSTRY, SIMILAR_SIZE,
-    COMMON_EXECUTIVE, etc. when those relationships exist.
+    Uses these real relationships from the graph:
+    - SIMILAR_RISK (197K) - 10-K risk factor embedding similarity
+    - SIMILAR_DESCRIPTION (210K) - Business description embedding similarity
+    - SIMILAR_TECHNOLOGY (124K) - Technology stack similarity
+    - SIMILAR_INDUSTRY (260K) - SIC/Industry/Sector classification match
+    - SIMILAR_SIZE (207K) - Revenue/market cap similarity
+    - SIMILAR_KEYWORD (71) - Keyword embedding similarity (sparse)
 
     Args:
         ticker: Company ticker symbol
@@ -164,29 +179,33 @@ def get_top_similar_companies_query_extended(
     WITH c1, c2, rels, r,
          // Weight each relationship type, using r.score for embedding-based similarities
          CASE
-           // SIMILAR_RISK: uses cosine similarity score from risk factor embeddings
+           // HAS_COMPETITOR: direct competitor mention from 10-K - strongest signal!
+           WHEN type(r) = 'HAS_COMPETITOR' THEN
+             {weights.get("HAS_COMPETITOR", 4.0)} * coalesce(r.confidence, 1.0)
+           // SIMILAR_RISK: cosine similarity from 10-K risk factor embeddings
            WHEN type(r) = 'SIMILAR_RISK' THEN
              {weights.get("SIMILAR_RISK", 1.0)} * coalesce(r.score, 1.0)
            // SIMILAR_INDUSTRY: weight by method specificity (SIC > INDUSTRY > SECTOR)
            WHEN type(r) = 'SIMILAR_INDUSTRY' AND r.method = 'SIC' THEN
-             {weights.get("SIMILAR_INDUSTRY", 0.9)} * 1.2
+             {weights.get("SIMILAR_INDUSTRY", 0.8)} * 1.2
            WHEN type(r) = 'SIMILAR_INDUSTRY' AND r.method = 'INDUSTRY' THEN
-             {weights.get("SIMILAR_INDUSTRY", 0.9)} * 0.8
+             {weights.get("SIMILAR_INDUSTRY", 0.8)} * 0.8
            WHEN type(r) = 'SIMILAR_INDUSTRY' AND r.method = 'SECTOR' THEN
-             {weights.get("SIMILAR_INDUSTRY", 0.9)} * 0.6
+             {weights.get("SIMILAR_INDUSTRY", 0.8)} * 0.6
            WHEN type(r) = 'SIMILAR_INDUSTRY' THEN
-             {weights.get("SIMILAR_INDUSTRY", 0.9)} * 0.7
-           WHEN type(r) = 'SIMILAR_SIZE' THEN {weights.get("SIMILAR_SIZE", 0.6)}
-           // SIMILAR_DESCRIPTION: uses cosine similarity score from description embeddings
+             {weights.get("SIMILAR_INDUSTRY", 0.8)} * 0.7
+           // SIMILAR_DESCRIPTION: cosine similarity from business description embeddings
            WHEN type(r) = 'SIMILAR_DESCRIPTION' THEN
-             {weights.get("SIMILAR_DESCRIPTION", 0.5)} * coalesce(r.score, 1.0)
+             {weights.get("SIMILAR_DESCRIPTION", 0.6)} * coalesce(r.score, 1.0)
+           // SIMILAR_TECHNOLOGY: Jaccard similarity from tech stack
+           WHEN type(r) = 'SIMILAR_TECHNOLOGY' THEN
+             {weights.get("SIMILAR_TECHNOLOGY", 0.5)} * coalesce(r.score, 1.0)
+           // SIMILAR_SIZE: size bucket match
+           WHEN type(r) = 'SIMILAR_SIZE' THEN
+             {weights.get("SIMILAR_SIZE", 0.4)} * coalesce(r.score, 1.0)
+           // SIMILAR_KEYWORD: keyword embedding similarity (very sparse)
            WHEN type(r) = 'SIMILAR_KEYWORD' THEN
-             {weights.get("SIMILAR_KEYWORD", 0.2)}
-           WHEN type(r) = 'SIMILAR_MARKET' THEN {weights.get("SIMILAR_MARKET", 0.3)}
-           WHEN type(r) = 'COMMON_EXECUTIVE' THEN
-             {weights.get("COMMON_EXECUTIVE", 0.2)}
-           WHEN type(r) = 'MERGED_OR_ACQUIRED' THEN
-             {weights.get("MERGED_OR_ACQUIRED", 0.1)}
+             {weights.get("SIMILAR_KEYWORD", 0.1)} * coalesce(r.score, 1.0)
            ELSE 0.0
          END as rel_score
     WITH c1, c2, sum(rel_score) as base_score,
@@ -195,28 +214,33 @@ def get_top_similar_companies_query_extended(
            as sic_matches,
          size([r IN rels WHERE type(r) = 'SIMILAR_SIZE']) as size_matches,
          size([r IN rels WHERE type(r) = 'SIMILAR_DESCRIPTION']) as desc_matches,
+         size([r IN rels WHERE type(r) = 'SIMILAR_TECHNOLOGY']) as tech_matches,
+         size([r IN rels WHERE type(r) = 'HAS_COMPETITOR']) as competitor_matches,
          size(rels) as edge_count
     // Bonus: SIC + SIZE combination is strong signal
     // Bonus: RISK + SIC is even stronger (same industry AND same risks)
+    // Bonus: HAS_COMPETITOR is a strong direct signal (no additional bonus needed)
     WITH c1, c2, base_score, risk_matches, sic_matches, size_matches,
-         desc_matches, edge_count,
-         CASE WHEN sic_matches > 0 AND size_matches > 0 THEN 0.3 ELSE 0.0 END
+         desc_matches, tech_matches, competitor_matches, edge_count,
+         CASE WHEN sic_matches > 0 AND size_matches > 0 THEN 0.2 ELSE 0.0 END
            as sic_size_bonus,
          CASE WHEN risk_matches > 0 AND sic_matches > 0 THEN 0.2 ELSE 0.0 END
            as risk_sic_bonus
     WITH c1, c2, (base_score + sic_size_bonus + risk_sic_bonus) as weighted_score,
-         risk_matches, sic_matches, size_matches, desc_matches, edge_count
+         risk_matches, sic_matches, size_matches, desc_matches, tech_matches,
+         competitor_matches, edge_count
     WHERE weighted_score >= {min_score}
     // Tie-breaker: exact industry name match (most specific)
     WITH c1, c2, weighted_score, risk_matches, sic_matches, desc_matches,
-         edge_count,
+         tech_matches, competitor_matches, edge_count,
          CASE WHEN c1.industry IS NOT NULL AND c1.industry = c2.industry THEN 1
               ELSE 0 END as exact_industry_match
     RETURN c2.ticker AS ticker, c2.name AS name, c2.sector AS sector,
            c2.industry AS industry, edge_count, weighted_score,
-           risk_matches, sic_matches, desc_matches
-    ORDER BY weighted_score DESC, exact_industry_match DESC, risk_matches DESC,
-             sic_matches DESC, desc_matches DESC, edge_count DESC
+           risk_matches, sic_matches, desc_matches, tech_matches, competitor_matches
+    ORDER BY weighted_score DESC, competitor_matches DESC, exact_industry_match DESC,
+             risk_matches DESC, sic_matches DESC, desc_matches DESC, tech_matches DESC,
+             edge_count DESC
     LIMIT {limit}
     """
 
