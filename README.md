@@ -1,146 +1,373 @@
 # Public Company Graph
 
-A knowledge graph of U.S. public companies built from SEC 10-K filings, combining structured data extraction with graph analytics. Designed to showcase Neo4j Graph Data Science (GDS) capabilities for business intelligence and investment analysis.
+A reproducible knowledge graph of U.S. public companies built from SEC 10-K filings, combining structured data extraction with graph analytics. Inspired by academic research on company knowledge graphs and designed to showcase Neo4j Graph Data Science (GDS) capabilities for business intelligence.
+
+## Motivation & Background
+
+### Why This Project Exists
+
+Traditional company databases treat businesses as isolated records. But companies exist in rich relationship networks: they compete, partner, supply, and acquire each other. Their technology choices cluster in patterns. Their risk profiles correlate across industries.
+
+This project builds a **knowledge graph** that captures these relationships, enabling queries that would be impossible (or extremely complex) in relational databases:
+
+- *"Find companies similar to Apple by business model AND technology stack AND competitive position"*
+- *"Map the supply chain network 3 hops out from Tesla"*
+- *"Which technologies commonly co-occur with Kubernetes adoption?"*
+
+### Related Research
+
+This project draws inspiration from:
+
+- **[CompanyKG: A Large-Scale Heterogeneous Graph for Company Similarity Quantification](https://arxiv.org/abs/2306.10649)** (NeurIPS 2023) - Academic research on building company knowledge graphs from SEC filings
+- **[SEC EDGAR](https://www.sec.gov/edgar)** - The source of truth for public company disclosures
+
+---
 
 ## What This Project Does
 
-**Extracts structured intelligence from SEC filings**:
-- Company websites, business descriptions, and risk factors from 10-K filings
-- Competitor mentions and business relationships
-- Technology stack detection from company websites
+### 1. Data Collection
 
-**Builds a knowledge graph** connecting:
-- ~8,000+ public companies with their properties
-- Technologies they use
-- Similarity relationships (companies similar to each other)
-- Competitor relationships extracted from filings
+| Source | What We Extract | Tool/Method |
+|--------|-----------------|-------------|
+| **SEC EDGAR** | 10-K filings, company metadata | [datamule](https://github.com/john-googletv/datamule-python) library |
+| **Yahoo Finance** | Sector, industry, market cap, employees | `yfinance` library |
+| **Company Websites** | Technology fingerprints (566+ technologies) | [domain_status](https://github.com/alexwoolford/domain_status) (Rust) |
 
-**Computes graph analytics** using Neo4j GDS:
-- Company similarity via embeddings (business description vectors)
-- Technology adoption prediction via Personalized PageRank
-- Technology co-occurrence patterns via Node Similarity
+### 2. Information Extraction
 
-## Why Graph?
+From each 10-K filing, we extract:
+- **Business descriptions** (Item 1) - What the company does
+- **Risk factors** (Item 1A) - Company-specific risks
+- **Competitor mentions** - Who they compete with
+- **Customer/supplier/partner mentions** - Business relationships
 
-Traditional relational approaches struggle with questions like:
-- "Which companies are similar to Apple based on their business model AND technology stack?"
-- "Find companies 2-3 hops away that might be acquisition targets"
-- "What technologies commonly appear together across public companies?"
+### 3. Knowledge Graph Construction
 
-Graph excels at these multi-dimensional, relationship-driven queries.
+We build a graph with:
+- **5,398 Company nodes** with 17+ properties each
+- **4,337 Domain nodes** with technology detection
+- **827 Technology nodes** categorized by type
+- **2+ million relationships** capturing similarity and business connections
 
-## Quick Start
+### 4. Graph Analytics
 
-### Prerequisites
+Using Neo4j Graph Data Science (GDS):
+- **Company similarity** via embedding cosine similarity
+- **Technology adoption prediction** via Personalized PageRank
+- **Technology co-occurrence** via Jaccard similarity
+- **Industry/size/risk clustering** via custom algorithms
 
-- **Neo4j** (5.x+) with GDS library installed
-- **Python 3.11+**
-- **OpenAI API key** (for embeddings)
+---
 
-### Setup
+## Graph Schema Overview
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│                         PUBLIC COMPANY GRAPH                            │
+├─────────────────────────────────────────────────────────────────────────┤
+│                                                                         │
+│  ┌──────────┐     HAS_DOMAIN      ┌────────┐      USES      ┌────────┐ │
+│  │ Company  │ ─────────────────▶  │ Domain │ ────────────▶  │  Tech  │ │
+│  │  (5,398) │                     │(4,337) │                │ (827)  │ │
+│  └──────────┘                     └────────┘                └────────┘ │
+│       │                                │                         │      │
+│       │ HAS_COMPETITOR (3,843)         │ LIKELY_TO_ADOPT        │      │
+│       │ HAS_CUSTOMER (1,714)           │ (41,250)               │      │
+│       │ HAS_SUPPLIER (2,597)           │                        │      │
+│       │ HAS_PARTNER (2,139)            │                   CO_OCCURS   │
+│       │                                │                   (41,220)    │
+│       ▼                                ▼                        ▼      │
+│  ┌──────────┐                     ┌────────┐                ┌────────┐ │
+│  │ Company  │                     │ Domain │                │  Tech  │ │
+│  └──────────┘                     └────────┘                └────────┘ │
+│       │                                                                 │
+│       │ SIMILAR_DESCRIPTION (420,531)                                  │
+│       │ SIMILAR_INDUSTRY (520,672)                                     │
+│       │ SIMILAR_SIZE (414,096)                                         │
+│       │ SIMILAR_RISK (394,372)                                         │
+│       │ SIMILAR_TECHNOLOGY (124,584)                                   │
+│       ▼                                                                 │
+│  ┌──────────┐                                                          │
+│  │ Company  │                                                          │
+│  └──────────┘                                                          │
+│                                                                         │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+For complete schema documentation, see [docs/graph_schema.md](docs/graph_schema.md).
+
+---
+
+## Prerequisites
+
+### Required Software
+
+| Component | Version | Purpose |
+|-----------|---------|---------|
+| **Python** | 3.11+ | Runtime environment |
+| **Neo4j** | 5.x+ | Graph database |
+| **Neo4j GDS** | 2.x+ | Graph Data Science library (plugin) |
+| **Conda** | Latest | Environment management (recommended) |
+
+### Required API Keys
+
+| Service | Purpose | Get Key |
+|---------|---------|---------|
+| **OpenAI** | Text embeddings for similarity | [platform.openai.com](https://platform.openai.com/api-keys) |
+| **Datamule** | SEC 10-K filing download/parsing | [datamule.xyz](https://datamule.xyz) |
+
+### Optional Data Sources
+
+| Component | Purpose | Notes |
+|-----------|---------|-------|
+| **[domain_status](https://github.com/alexwoolford/domain_status)** | Technology detection on company websites | Rust tool, generates `domain_status.db` |
+| **Yahoo Finance** | Company metadata enrichment | Free, no API key needed |
+
+---
+
+## Installation
+
+### 1. Clone and Setup Environment
 
 ```bash
 git clone https://github.com/alexwoolford/public-company-graph.git
 cd public-company-graph
+
+# Create conda environment (recommended)
+conda create -n public_company_graph python=3.13
+conda activate public_company_graph
+
+# Install package in editable mode
 pip install -e .
-cp .env.sample .env
-# Edit .env with your Neo4j and OpenAI credentials
+
+# For development (linting, testing)
+pip install -e ".[dev]"
 ```
 
-### Run the Pipeline
+### 2. Configure Environment
 
 ```bash
-# Bootstrap graph from existing data
+cp .env.sample .env
+```
+
+Edit `.env` with your credentials:
+
+```bash
+# Neo4j Connection (required)
+NEO4J_URI=neo4j://localhost:7687
+NEO4J_USER=neo4j
+NEO4J_PASSWORD=your_neo4j_password
+NEO4J_DATABASE=domain
+
+# OpenAI API (required for embeddings)
+OPENAI_API_KEY=sk-proj-your_openai_key_here
+
+# Datamule API (required for 10-K download/parsing)
+DATAMULE_API_KEY=your_datamule_key_here
+
+# Optional
+FINNHUB_API_KEY=your_finnhub_key_here
+```
+
+### 3. Verify Setup
+
+```bash
+# Check Neo4j connection
+python -c "from public_company_graph.neo4j import verify_connection; verify_connection()"
+
+# Run health check
+health-check
+```
+
+---
+
+## Running the Pipeline
+
+### Option A: Full Pipeline (Recommended for Fresh Start)
+
+```bash
+# Download 10-K filings, parse, load, compute all features
+python scripts/run_all_pipelines.py --execute
+```
+
+This runs the complete pipeline:
+1. Download 10-K filings via datamule
+2. Parse business descriptions and extract relationships
+3. Load companies, domains, technologies into Neo4j
+4. Create embeddings via OpenAI
+5. Compute similarity relationships
+6. Compute GDS features (adoption prediction, co-occurrence)
+
+### Option B: Step-by-Step
+
+```bash
+# 1. Download 10-K filings (uses datamule)
+python scripts/download_10k_filings.py --execute
+
+# 2. Parse filings and extract data
+python scripts/parse_10k_filings.py --execute
+
+# 3. Load company data into Neo4j
+python scripts/load_company_data.py --execute
+
+# 4. Bootstrap domain/technology graph (requires domain_status.db)
 python scripts/bootstrap_graph.py --execute
 
-# Or run the full pipeline (download 10-Ks, parse, load, compute)
-python scripts/run_all_pipelines.py --execute
+# 5. Create embeddings
+python scripts/create_company_embeddings.py --execute
+
+# 6. Compute similarity relationships
+python scripts/compute_company_similarity.py --execute
+
+# 7. Extract business relationships (competitors, customers, etc.)
+python scripts/extract_business_relationships.py --execute
+
+# 8. Compute GDS features
+python scripts/compute_gds_features.py --execute
 ```
 
 ### CLI Commands
 
+All scripts support `--help` and follow a dry-run pattern (omit `--execute` to see plan without changes):
+
 | Command | Description |
 |---------|-------------|
-| `run-all-pipelines` | Full pipeline: download, parse, load, compute |
-| `bootstrap-graph` | Load data from SQLite into Neo4j |
-| `compute-gds-features` | Compute GDS analytics (similarity, adoption) |
 | `health-check` | Verify Neo4j connection and data |
+| `bootstrap-graph` | Load domains/technologies from SQLite |
+| `compute-gds-features` | Compute GDS analytics |
+| `compute-company-similarity` | Compute all similarity relationships |
+| `validate-famous-pairs` | Validate known competitor pairs |
 
-## Data Sources
-
-| Source | What We Extract |
-|--------|-----------------|
-| **SEC EDGAR** | 10-K filings (business descriptions, risk factors, competitors) |
-| **Yahoo Finance** | Company metadata (sector, industry, market cap) |
-| **FinHub/FinViz** | Additional company data |
-| **domain_status** | Technology fingerprints from company websites |
-
-## Graph Schema
-
-```
-(:Company)-[:SIMILAR_TO {score}]->(:Company)
-(:Company)-[:USES]->(:Technology)
-(:Company)-[:COMPETES_WITH]->(:Company)
-(:Technology)-[:CO_OCCURS_WITH {similarity}]->(:Technology)
-(:Domain)-[:LIKELY_TO_ADOPT {score}]->(:Technology)
-```
+---
 
 ## Example Queries
 
-### Find companies similar to Apple
+### Find Companies Similar to Apple
+
 ```cypher
-MATCH (apple:Company {ticker: 'AAPL'})-[r:SIMILAR_TO]->(similar:Company)
-RETURN similar.name, similar.ticker, r.score
+MATCH (apple:Company {ticker: 'AAPL'})-[r:SIMILAR_DESCRIPTION]->(similar:Company)
+WHERE r.score > 0.85
+RETURN similar.ticker, similar.name, similar.sector, r.score
 ORDER BY r.score DESC
 LIMIT 10
 ```
 
-### Find technology adoption candidates
+### Map NVIDIA's Competitive Landscape
+
 ```cypher
-MATCH (t:Technology {name: 'Kubernetes'})<-[r:LIKELY_TO_ADOPT]-(d:Domain)
-RETURN d.final_domain, r.score
-ORDER BY r.score DESC
-LIMIT 20
+MATCH (nvda:Company {ticker: 'NVDA'})-[r:HAS_COMPETITOR]->(comp:Company)
+RETURN comp.ticker, comp.name, r.raw_mention, r.confidence
+ORDER BY r.confidence DESC
 ```
 
-### Find competitor clusters
+### Find Supply Chain Relationships
+
 ```cypher
-MATCH (c:Company)-[:COMPETES_WITH]-(competitor:Company)
-WHERE c.sector = 'Technology'
-RETURN c.name, collect(competitor.name) AS competitors
+MATCH (c:Company {ticker: 'TSLA'})
+OPTIONAL MATCH (c)-[:HAS_SUPPLIER]->(supp:Company)
+OPTIONAL MATCH (c)-[:HAS_CUSTOMER]->(cust:Company)
+RETURN c.name,
+       collect(DISTINCT supp.name) as suppliers,
+       collect(DISTINCT cust.name) as customers
+```
+
+### Technology Adoption Prediction
+
+```cypher
+MATCH (c:Company {ticker:'MSFT'})-[:HAS_DOMAIN]->(d:Domain)
+MATCH (d)-[r:LIKELY_TO_ADOPT]->(t:Technology)
+WHERE NOT (d)-[:USES]->(t)
+RETURN t.name, t.category, r.score
+ORDER BY r.score DESC
 LIMIT 10
 ```
+
+For more queries, see [docs/money_queries.md](docs/money_queries.md).
+
+---
 
 ## Project Structure
 
 ```
 public-company-graph/
-├── public_company_graph/     # Python package
-│   ├── parsing/              # 10-K filing parsers
-│   ├── sources/              # Data source integrations
-│   ├── embeddings/           # Embedding creation
-│   ├── gds/                  # Graph Data Science features
-│   ├── neo4j/                # Neo4j utilities
-│   └── ingest/               # Data loading
-├── scripts/                  # Pipeline scripts
-├── tests/                    # Test suite
-├── docs/                     # Documentation
-└── data/                     # Data files (git-ignored)
+├── public_company_graph/        # Main Python package
+│   ├── parsing/                 # 10-K parsing (datamule + custom fallback)
+│   │   ├── business_description.py    # Item 1 extraction
+│   │   ├── risk_factors.py            # Item 1A extraction
+│   │   └── business_relationship_extraction.py  # Competitor/customer/supplier
+│   ├── embeddings/              # OpenAI embedding creation
+│   ├── gds/                     # Graph Data Science utilities
+│   ├── neo4j/                   # Neo4j connection and utilities
+│   ├── ingest/                  # Data loading (SQLite → Neo4j)
+│   ├── similarity/              # Similarity computation
+│   ├── sources/                 # Data source integrations
+│   └── utils/                   # Shared utilities (datamule, caching)
+├── scripts/                     # Pipeline scripts (see above)
+├── tests/                       # Test suite (unit + integration)
+├── docs/                        # Documentation
+│   ├── graph_schema.md          # Complete schema reference
+│   ├── architecture.md          # Package architecture
+│   └── money_queries.md         # High-value Cypher queries
+└── data/                        # Data files (git-ignored)
+    ├── domain_status.db         # Technology detection results
+    ├── 10k_filings/             # Downloaded 10-K HTML files
+    ├── 10k_portfolios/          # Datamule portfolio files
+    └── cache/                   # Embedding and parsing caches
 ```
+
+---
+
+## Key Dependencies
+
+| Package | Purpose |
+|---------|---------|
+| [datamule](https://github.com/john-googletv/datamule-python) | SEC 10-K filing download and parsing |
+| [neo4j](https://neo4j.com/docs/python-manual/current/) | Neo4j Python driver |
+| [graphdatascience](https://neo4j.com/docs/graph-data-science-client/current/) | Neo4j GDS Python client |
+| [openai](https://platform.openai.com/docs/libraries/python) | Text embeddings |
+| [beautifulsoup4](https://www.crummy.com/software/BeautifulSoup/) | HTML parsing (fallback parser) |
+| [yfinance](https://github.com/ranaroussi/yfinance) | Yahoo Finance data |
+
+---
 
 ## Documentation
 
-- **[SETUP_GUIDE.md](SETUP_GUIDE.md)** - Complete setup instructions
-- **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)** - Package architecture
-- **[docs/10K_PARSING.md](docs/10K_PARSING.md)** - 10-K parsing pipeline
-- **[docs/money_queries.md](docs/money_queries.md)** - High-value Cypher queries
-- **[docs/graph_schema.md](docs/graph_schema.md)** - Complete schema reference
+| Document | Description |
+|----------|-------------|
+| [docs/graph_schema.md](docs/graph_schema.md) | Complete graph schema with all nodes, relationships, and properties |
+| [docs/architecture.md](docs/architecture.md) | Package architecture and design principles |
+| [docs/money_queries.md](docs/money_queries.md) | High-value Cypher queries for business intelligence |
+| [docs/10k_parsing.md](docs/10k_parsing.md) | 10-K parsing pipeline details |
+| [SETUP_GUIDE.md](SETUP_GUIDE.md) | Detailed setup instructions |
 
-## Requirements
+---
 
-- Python 3.11+ (tested on 3.11, 3.12, 3.13)
-- Neo4j 5.x+ with GDS library
-- OpenAI API access (for embeddings)
+## Development
+
+```bash
+# Run tests
+pytest tests/ -v
+
+# Run linter
+ruff check public_company_graph/ scripts/
+
+# Format code
+ruff format public_company_graph/ scripts/
+
+# Run pre-commit hooks
+pre-commit run --all-files
+```
+
+---
+
+## Acknowledgments
+
+- **[datamule](https://datamule.xyz)** by Mike Metzger - SEC filing download and parsing
+- **[CompanyKG paper](https://arxiv.org/abs/2306.10649)** - Inspiration for company knowledge graph design
+- **[Neo4j](https://neo4j.com)** - Graph database and GDS library
+- **[domain_status](https://github.com/alexwoolford/domain_status)** - Rust-based technology detection
+
+---
 
 ## License
 
@@ -148,4 +375,4 @@ MIT
 
 ## Author
 
-Built as a showcase of graph analytics for business intelligence.
+[Alex Woolford](https://github.com/alexwoolford)

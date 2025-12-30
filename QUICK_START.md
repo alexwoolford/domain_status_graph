@@ -1,105 +1,100 @@
-# Quick Start: What You Actually Have
+# Quick Start
 
 ## TL;DR
 
-You have **2 high-value Graph Data Science features** that provide real business value:
+The Public Company Graph is a knowledge graph of **5,398 U.S. public companies** with:
+- Business relationships extracted from SEC 10-K filings (competitors, customers, suppliers, partners)
+- Company similarity across 5 dimensions (description, industry, size, risk, technology)
+- Technology detection on company websites (827 technologies)
+- Graph analytics via Neo4j GDS
 
-1. **Technology Adopter Prediction** - Uses GDS Personalized PageRank to predict which domains are likely to adopt a technology (⭐ HIGH VALUE)
-2. **Technology Co-Occurrence & Affinity** - Uses GDS Node Similarity (Jaccard) to find technology pairs that commonly appear together (⭐ HIGH VALUE)
+## What Can You Do With It?
 
-Both features leverage Neo4j's Graph Data Science library to provide insights that would be difficult or impossible with traditional SQL queries. They solve the problem of finding indirect relationships (2-3 hops away) that SQL struggles with.
+### 1. Find Similar Companies
 
-**Note**: The project also includes Company Description Similarity (using cosine similarity on embeddings), but this is implemented with numpy, not GDS. The two GDS features above are the core focus.
-
----
-
-## What to Read First
-
-1. **`docs/money_queries.md`** - Start here. 2 GDS features with query examples.
-
----
-
-## How to Use the Useful Features
-
-### 1. Technology Adopter Prediction (Technology → Domain)
-
-**What it does**: For any technology, predicts which domains are most likely to adopt it.
-
-**Query**:
 ```cypher
-MATCH (t:Technology {name: 'YourProduct'})<-[r:LIKELY_TO_ADOPT]-(d:Domain)
-RETURN d.final_domain AS likely_adopter, r.score AS adoption_score
-ORDER BY r.score DESC
-LIMIT 20
+MATCH (apple:Company {ticker: 'AAPL'})-[r:SIMILAR_DESCRIPTION]->(similar:Company)
+WHERE r.score > 0.85
+RETURN similar.ticker, similar.name, similar.sector, r.score
+ORDER BY r.score DESC LIMIT 10
 ```
 
-**Use case**: Software companies finding customers for their product, sales targeting
+### 2. Map Competitive Landscape
 
----
-
-### 2. Technology Affinity Bundling
-
-**What it does**: Finds technology pairs that commonly co-occur (e.g., WordPress + MySQL).
-
-**Query**:
 ```cypher
-MATCH (t1:Technology {name: 'WordPress'})-[r:CO_OCCURS_WITH]->(t2:Technology)
-RETURN t2.name AS technology, r.similarity AS co_occurrence_score
-ORDER BY r.similarity DESC
-LIMIT 10
+MATCH (c:Company {ticker: 'NVDA'})-[r:HAS_COMPETITOR]->(comp:Company)
+RETURN comp.ticker, comp.name, r.raw_mention, r.confidence
+ORDER BY r.confidence DESC
 ```
 
-**Use case**: Partnership opportunities, integration targeting, bundling strategies
+### 3. Explore Supply Chains
 
----
+```cypher
+MATCH (c:Company {ticker: 'TSLA'})
+OPTIONAL MATCH (c)-[:HAS_SUPPLIER]->(supp:Company)
+OPTIONAL MATCH (c)-[:HAS_CUSTOMER]->(cust:Company)
+RETURN c.name, collect(DISTINCT supp.name) as suppliers, collect(DISTINCT cust.name) as customers
+```
 
----
+### 4. Technology Adoption Prediction
+
+```cypher
+MATCH (c:Company {ticker:'MSFT'})-[:HAS_DOMAIN]->(d:Domain)
+MATCH (d)-[r:LIKELY_TO_ADOPT]->(t:Technology)
+WHERE NOT (d)-[:USES]->(t)
+RETURN t.name, t.category, r.score ORDER BY r.score DESC LIMIT 10
+```
 
 ## How to Run
 
-### Option A: Run Scripts Individually
+### Option A: Full Pipeline
 
-1. **Bootstrap the Graph**:
-   ```bash
-   python scripts/bootstrap_graph.py --execute
-   ```
-
-2. **Compute GDS Features**:
-   ```bash
-   python scripts/compute_gds_features.py --execute
-   ```
-
-### Option B: Use Orchestration Script
-
-Run all pipelines in the correct order:
 ```bash
 python scripts/run_all_pipelines.py --execute
 ```
 
-This runs: bootstrap → GDS features → company data pipeline (if configured)
+### Option B: Step-by-Step
 
----
+```bash
+# 1. Bootstrap domain/technology graph
+python scripts/bootstrap_graph.py --execute
 
-## Project Focus
+# 2. Download and parse 10-K filings
+python scripts/download_10k_filings.py --execute
+python scripts/parse_10k_filings.py --execute
 
-This project focuses on two core GDS features that provide clear business value:
-- **Adoption Prediction**: Identify likely customers for your technology
-- **Affinity Analysis**: Discover technology partnerships and integration opportunities
+# 3. Load companies
+python scripts/load_company_data.py --execute
 
-All code and documentation is streamlined to support these two high-value use cases.
+# 4. Extract business relationships
+python scripts/extract_business_relationships.py --execute
 
-See `SETUP_GUIDE.md` for complete setup instructions.
+# 5. Create embeddings and compute similarity
+python scripts/create_company_embeddings.py --execute
+python scripts/compute_company_similarity.py --execute
 
-For architecture and package structure details, see `docs/ARCHITECTURE.md`.
+# 6. Compute GDS features
+python scripts/compute_gds_features.py --execute
+```
 
----
+## Prerequisites
 
-## Bottom Line
+1. **Neo4j** with GDS plugin installed
+2. **API Keys**: OpenAI (embeddings), Datamule (10-K downloads)
+3. **domain_status.db**: Run [domain_status](https://github.com/alexwoolford/domain_status) first for technology detection
 
-**You have 2 high-value GDS features** that provide real business value. Both features use Graph Data Science algorithms (Personalized PageRank and Node Similarity) that would be difficult or impossible with simple SQL.
+## What's in the Graph?
 
-**Read**: `docs/money_queries.md` for the 2 GDS features with query examples.
+| Component | Count |
+|-----------|-------|
+| Company nodes | 5,398 |
+| Domain nodes | 4,337 |
+| Technology nodes | 827 |
+| Total relationships | ~2M |
 
----
+## Next Steps
 
-*Last Updated: 2024-11-25*
+- **[README.md](README.md)** - Full project overview
+- **[docs/money_queries.md](docs/money_queries.md)** - High-value query examples
+- **[docs/graph_schema.md](docs/graph_schema.md)** - Complete schema reference
+- **[SETUP_GUIDE.md](SETUP_GUIDE.md)** - Detailed setup instructions

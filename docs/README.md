@@ -1,68 +1,65 @@
 # Public Company Graph Documentation
 
-This directory contains documentation for the domain status graph project.
-
 ## Documentation Index
 
-### [Architecture Documentation](./ARCHITECTURE.md) 🏗️ **NEW**
-Complete architecture overview:
-- Package structure and module organization
-- Design principles and patterns
-- Data flow diagrams
-- Testing strategy
-- **Essential reference** for understanding the codebase structure
+### Core Documentation
 
-## Quick Links
+| Document | Description |
+|----------|-------------|
+| [**graph_schema.md**](./graph_schema.md) | Complete graph schema - nodes, relationships, properties |
+| [**money_queries.md**](./money_queries.md) | High-value business intelligence queries |
+| [**architecture.md**](./architecture.md) | Package structure and design principles |
 
-### [High-Value Queries](./money_queries.md) 💰 **START HERE**
-2 high-value Graph Data Science features that provide real business value:
-- Technology Adopter Prediction - GDS Personalized PageRank
-- Technology Co-Occurrence & Affinity - GDS Node Similarity
+### Setup & Operations
 
-### [Graph Schema Documentation](./graph_schema.md) 📋
-Complete schema documentation:
-- Domain and Technology nodes
-- USES, LIKELY_TO_ADOPT, and CO_OCCURS_WITH relationships
-- Property definitions and examples
-- Common query patterns
-- **Essential reference** for understanding the graph structure
+| Document | Description |
+|----------|-------------|
+| [**step_by_step_guide.md**](./step_by_step_guide.md) | Complete pipeline walkthrough |
+| [**datamule_setup.md**](./datamule_setup.md) | Datamule API setup for 10-K downloads |
+| [**cache_management.md**](./cache_management.md) | Cache management and troubleshooting |
 
-### [GDS Features](./gds_features.md) 🚀
-Documentation of the two implemented GDS features:
-- Technology Adoption Prediction (Personalized PageRank)
-- Technology Affinity Bundling (Node Similarity)
-- Implementation details, use cases, and example queries
-- Configuration and performance notes
+### Development
 
-### [The "Money Queries"](./money_queries.md) 💰
-Implementation guide for high-value business queries:
-- ✅ 2 GDS features fully supported (both provide unique graph value)
-- Complete Cypher query examples for each use case
-
-### [GDS Algorithm Coverage](./GDS_ALGORITHM_COVERAGE.md) 📊
-Analysis of GDS algorithm coverage:
-- What's implemented (2 algorithms)
-- What's not implemented and why
-- Algorithm details and business value
-
-### [Validation](./VALIDATION.md) ✅
-Validation approach for company similarity:
-- Famous pairs validation (quick smoke tests)
-- Current status: 32.6% pass rate (data quality issue)
-- Limitations and future use
-
-### [Famous Competitor Pairs](./FAMOUS_COMPETITOR_PAIRS.md) 📝
-Reference corpus of 46 famous competitor pairs used for validation.
+| Document | Description |
+|----------|-------------|
+| [**10k_parsing.md**](./10k_parsing.md) | 10-K parsing pipeline details |
+| [**adding_new_parser.md**](./adding_new_parser.md) | How to add new parsing capabilities |
 
 ## Quick Start
 
-1. **Read**: `money_queries.md` - Understand the 2 GDS features
-2. **Bootstrap**: Run `python scripts/bootstrap_graph.py --execute`
-3. **Compute Features**: Run `python scripts/compute_gds_features.py --execute`
-4. **Query**: Use examples from `money_queries.md`
+1. **Setup**: Follow `../README.md` for installation
+2. **Run Pipeline**: `python scripts/run_all_pipelines.py --execute`
+3. **Query**: Use examples from `money_queries.md`
 
-## Related Documentation
+## Graph Overview
 
-- **Main README**: See `../README.md` for project overview
-- **Quick Start**: See `../QUICK_START.md` for quick reference
-- **Graph Schema**: See `graph_schema.md` for complete schema
+The Public Company Graph contains:
+
+| Component | Count |
+|-----------|-------|
+| **Company nodes** | 5,398 |
+| **Domain nodes** | 4,337 |
+| **Technology nodes** | 827 |
+| **Total relationships** | ~2,013,922 |
+
+### Key Relationship Types
+
+**Business Relationships** (from 10-K filings):
+- `HAS_COMPETITOR` - Competitor mentions
+- `HAS_CUSTOMER` - Customer mentions
+- `HAS_SUPPLIER` - Supplier mentions
+- `HAS_PARTNER` - Partnership mentions
+
+**Similarity Relationships** (computed):
+- `SIMILAR_DESCRIPTION` - Business description similarity
+- `SIMILAR_INDUSTRY` - Same sector/industry
+- `SIMILAR_SIZE` - Similar revenue/market cap
+- `SIMILAR_RISK` - Similar risk profiles
+- `SIMILAR_TECHNOLOGY` - Similar tech stacks
+
+**Technology Relationships**:
+- `USES` - Domain uses technology
+- `LIKELY_TO_ADOPT` - Adoption prediction
+- `CO_OCCURS_WITH` - Technology affinity
+
+See [graph_schema.md](./graph_schema.md) for complete details.

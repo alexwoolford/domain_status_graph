@@ -37,7 +37,7 @@ pip install -e .
 
 ### Setup
 
-1. **Get API key**: Sign up at [datamule.com](https://datamule.com)
+1. **Get API key**: Sign up at [datamule.xyz](https://datamule.xyz)
 2. **Add to `.env`**:
    ```bash
    DATAMULE_API_KEY=your_api_key_here
@@ -57,8 +57,9 @@ The scripts check for `DATAMULE_API_KEY` in your `.env` file:
 **Important**: Parsing does NOT require an API key.
 
 The parsing script (`scripts/parse_10k_filings.py`) uses the `datamule` library to parse existing tar files:
-- If tar files exist: Uses datamule parser (best quality, ~86-93% success)
-- If no tar files: Uses custom parser (faster, ~64% success)
+- If tar files exist: Uses datamule parser (best quality, ~88% success)
+- If datamule fails: Falls back to custom parser (~12% of cases)
+- Combined: **99.85% coverage**
 - **No API calls during parsing** - just reads local files
 
 ## Tar File Management
@@ -72,7 +73,7 @@ The parsing script (`scripts/parse_10k_filings.py`) uses the `datamule` library 
 ### Why Keep Tar Files?
 
 - Datamule parser requires tar files (cannot parse standalone HTML)
-- Better parsing quality (~86-93% vs ~64% for custom parser)
+- Better parsing quality (~88% success with datamule)
 - Storage cost: ~225 GB for all tar files
 
 ### Idempotent Downloads
@@ -113,6 +114,6 @@ The parsing script (`scripts/parse_10k_filings.py`) uses the `datamule` library 
 
 ## Related Documentation
 
-- **Architecture**: See `docs/PIPELINE_ARCHITECTURE.md`
-- **10-K Parsing**: See `docs/10K_PARSING.md` (consolidated)
-- **Pipeline Process**: See `docs/COMPLETE_PIPELINE_PROCESS.md`
+- **Architecture**: See `architecture.md`
+- **10-K Parsing**: See `10k_parsing.md`
+- **Pipeline Guide**: See `step_by_step_guide.md`

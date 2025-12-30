@@ -38,19 +38,22 @@ from public_company_graph.parsing.text_extraction import extract_between_anchors
 # Minimum content length to consider extraction successful
 MIN_BUSINESS_DESCRIPTION_LENGTH = 500
 
-# Maximum content length (truncate larger extractions)
-MAX_BUSINESS_DESCRIPTION_LENGTH = 50000
-
 # Stop patterns that indicate end of Item 1 section
 STOP_PATTERNS = [
     r"Item\s*1A[\.:\s]",  # Item 1A with various separators
     r"ITEM\s*1A[\.:\s]",
     r"Item\s*1B[\.:\s]",  # Item 1B (Unresolved Staff Comments)
     r"ITEM\s*1B[\.:\s]",
+    r"Item\s*1C[\.:\s]",  # Item 1C (Cybersecurity)
+    r"ITEM\s*1C[\.:\s]",
     r"Item\s*2[\.:\s]",  # Item 2 (Properties)
     r"ITEM\s*2[\.:\s]",
+    r"Item\s*10[\.:\s]",  # Item 10 (some smaller filers skip to Part III)
+    r"ITEM\s*10[\.:\s]",
     r"Risk\s*Factors",  # Risk Factors header
     r"RISK\s*FACTORS",
+    r"PART\s*II",  # Part II header
+    r"Part\s*II",
 ]
 
 
@@ -85,17 +88,18 @@ def extract_section_text(start_element, soup: BeautifulSoup) -> str:
     current = start_element
 
     while current:
-        # Check if we hit a stop pattern in any heading or bold text
-        if current.name in ["h1", "h2", "h3", "h4", "b", "strong", "p"]:
-            text = current.get_text()
-            if _is_stop_pattern(text):
+        # Get text content from current element (including nested elements)
+        if hasattr(current, "get_text"):
+            text = current.get_text(strip=True)
+
+            # Check for stop patterns in ANY element's text
+            if text and _is_stop_pattern(text):
                 break
 
-        # Collect text from content elements
-        if current.name in ["p", "div", "span"]:
-            text = current.get_text(strip=True)
-            if text and not _is_stop_pattern(text):
-                text_parts.append(text)
+            # Collect text from content elements
+            if current.name in ["p", "div", "span", "td", "li"]:
+                if text:
+                    text_parts.append(text)
 
         # Move to next sibling
         current = current.next_sibling
@@ -172,12 +176,7 @@ def _extract_via_raw_regex(content: str, file_path: Path) -> str | None:
                 f"Raw regex extraction succeeded ({pattern_name}): "
                 f"{len(best_text):,} chars from {file_path.name}"
             )
-            if len(best_text) > MAX_BUSINESS_DESCRIPTION_LENGTH:
-                logger.warning(
-                    f"Business description truncated from {len(best_text):,} to "
-                    f"{MAX_BUSINESS_DESCRIPTION_LENGTH:,} chars in {file_path.name}"
-                )
-            return best_text[:MAX_BUSINESS_DESCRIPTION_LENGTH]
+            return best_text
 
     return None
 
@@ -233,12 +232,7 @@ def _extract_via_text_node_search(soup: BeautifulSoup, file_path: Path) -> str |
                     logger.debug(
                         f"Text node search succeeded: {len(text):,} chars from {file_path.name}"
                     )
-                    if len(text) > MAX_BUSINESS_DESCRIPTION_LENGTH:
-                        logger.warning(
-                            f"Business description truncated from {len(text):,} to "
-                            f"{MAX_BUSINESS_DESCRIPTION_LENGTH:,} chars in {file_path.name}"
-                        )
-                    return text[:MAX_BUSINESS_DESCRIPTION_LENGTH]
+                    return text
 
     return None
 
@@ -285,6 +279,15 @@ def _extract_via_anchor_navigation(
                 toc_link = link
                 break
 
+    # Strategy 4: Find simple ID-based TOC links like #I1 (common in smaller filings)
+    if not toc_link:
+
+        def simple_i1_matcher(x: Any) -> bool:
+            # Match #I1, #i1, #Item1 etc (short ID patterns)
+            return bool(x and re.search(r"^#I1$|^#item1$", str(x), re.I))
+
+        toc_link = soup.find("a", href=simple_i1_matcher)
+
     if not toc_link or not toc_link.has_attr("href"):
         return None
 
@@ -301,16 +304,22 @@ def _extract_via_anchor_navigation(
     if not start_el:
         return None
 
-    # Find end element (Item 1A or Item 2)
-    def item1a_matcher(x: Any) -> bool:
-        return bool(x and re.search(r"item.*1a", str(x), re.I))
+    # Find end element (Item 1A, Item 1B, Item 1C, Item 2, or Item 10)
+    def end_section_matcher(x: Any) -> bool:
+        if not x:
+            return False
+        x_str = str(x)
+        # Match patterns like: item1a, item_1a, I1A, item2, I2, item10, I10
+        return bool(
+            re.search(r"item.*1[abc]", x_str, re.I)
+            or re.search(r"^I1[ABC]$", x_str, re.I)
+            or re.search(r"item.*2\b", x_str, re.I)
+            or re.search(r"^I2$", x_str, re.I)
+            or re.search(r"item.*10\b", x_str, re.I)
+            or re.search(r"^I10$", x_str, re.I)
+        )
 
-    def item2_matcher(x: Any) -> bool:
-        return bool(x and re.search(r"item.*2\b", str(x), re.I))
-
-    end_el = start_el.find_next(id=item1a_matcher)
-    if not end_el:
-        end_el = start_el.find_next(id=item2_matcher)
+    end_el = start_el.find_next(id=end_section_matcher)
 
     if end_el:
         # Use anchor-based extraction
@@ -323,12 +332,7 @@ def _extract_via_anchor_navigation(
 
     if len(text) >= MIN_BUSINESS_DESCRIPTION_LENGTH:
         logger.debug(f"Anchor navigation succeeded: {len(text):,} chars from {file_path.name}")
-        if len(text) > MAX_BUSINESS_DESCRIPTION_LENGTH:
-            logger.warning(
-                f"Business description truncated from {len(text):,} to "
-                f"{MAX_BUSINESS_DESCRIPTION_LENGTH:,} chars in {file_path.name}"
-            )
-        return text[:MAX_BUSINESS_DESCRIPTION_LENGTH]
+        return text
 
     return None
 
@@ -376,12 +380,7 @@ def _extract_via_direct_id(soup: BeautifulSoup, file_path: Path) -> str | None:
 
     if len(text) >= MIN_BUSINESS_DESCRIPTION_LENGTH:
         logger.debug(f"Direct ID extraction succeeded: {len(text):,} chars from {file_path.name}")
-        if len(text) > MAX_BUSINESS_DESCRIPTION_LENGTH:
-            logger.warning(
-                f"Business description truncated from {len(text):,} to "
-                f"{MAX_BUSINESS_DESCRIPTION_LENGTH:,} chars in {file_path.name}"
-            )
-        return text[:MAX_BUSINESS_DESCRIPTION_LENGTH]
+        return text
 
     return None
 
