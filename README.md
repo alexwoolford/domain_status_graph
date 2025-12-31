@@ -183,11 +183,17 @@ If you want to explore the graph immediately without running the full ingest pip
 # Pull LFS files if not already done
 git lfs pull
 
+# Copy dump to match target database name (e.g., neo4j)
+cp data/domain.dump data/neo4j.dump
+
 # Restore the database (Neo4j must be stopped)
-neo4j-admin database load domain --from-path=data/ --overwrite-destination=true
+neo4j-admin database load neo4j --from-path=data/ --overwrite-destination=true
 
 # Start Neo4j
 neo4j start
+
+# Clean up the copied file
+rm data/neo4j.dump
 ```
 
 The dump contains:
