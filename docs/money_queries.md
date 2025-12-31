@@ -532,6 +532,141 @@ driver.close()
 
 ---
 
+## 9. Supply Chain Risk Analysis
+
+Analyze supply chain concentration and vulnerability based on research from:
+- **P25**: Cohen & Frazzini (2008) "Economic Links and Predictable Returns"
+- **P26**: Barrot & Sauvagnat (2016) "Input Specificity and Propagation of Idiosyncratic Shocks"
+
+### CLI Tool: analyze_supply_chain.py
+
+```bash
+# Analyze a company's supply chain risk
+python scripts/analyze_supply_chain.py AVGO
+
+# Analyze downstream exposure if a supplier has problems
+python scripts/analyze_supply_chain.py --exposure MSFT
+
+# Output as JSON
+python scripts/analyze_supply_chain.py XERS --json
+
+# Compute risk properties for all relationships (dry run)
+python scripts/analyze_supply_chain.py --compute-all
+
+# Execute risk property computation
+python scripts/analyze_supply_chain.py --compute-all --execute
+```
+
+### Example: Company Risk Analysis
+
+```
+$ python scripts/analyze_supply_chain.py XERS
+
+======================================================================
+SUPPLY CHAIN RISK ANALYSIS: XERS
+======================================================================
+
+Company: Xeris Biopharma Holdings, Inc.
+Suppliers analyzed: 1
+
+High-risk suppliers: 1
+Sole/single source suppliers: 1
+
+⚠️  SOLE SOURCE DEPENDENCIES:
+   • RGS: REGIS CORP
+
+SUPPLIER RISK BREAKDOWN
+----------------------------------------------------------------------
+  RGS: REGIS CORP
+    [███████████████░░░░░] Overall: 0.79
+    Components: concentration=1.00, specificity=0.90, dependency=0.30
+    Flags: ⚠️ SOLE SOURCE
+```
+
+### Example: Downstream Exposure Analysis
+
+```
+$ python scripts/analyze_supply_chain.py --exposure MSFT
+
+======================================================================
+SUPPLY CHAIN EXPOSURE ANALYSIS: MSFT
+======================================================================
+
+If MSFT experiences disruption, the following companies are affected:
+
+Total downstream exposure: 212 companies
+
+🔴 DIRECT CUSTOMERS (81)
+   • AMD: ADVANCED MICRO DEVICES INC (impact: 0.50)
+   • NVDA: NVIDIA CORP (impact: 0.50)
+   • ORCL: ORACLE CORP (impact: 0.50)
+   ...
+
+🟡 INDIRECT CUSTOMERS (131 - 2nd order)
+   • PENG: Penguin Solutions, Inc. (impact: 0.25)
+   ...
+```
+
+### Risk Score Components
+
+| Component | Weight | Description |
+|-----------|--------|-------------|
+| `concentration_risk` | 40% | Risk from supplier concentration (1/N suppliers, or explicit %) |
+| `specificity_risk` | 35% | Risk from input specificity (hard to replace) |
+| `dependency_risk` | 25% | Risk from explicit dependency language in 10-K |
+
+### Python API
+
+```python
+from public_company_graph.supply_chain import (
+    analyze_supply_chain_risk,
+    analyze_supply_chain_exposure,
+)
+from public_company_graph.neo4j.connection import get_neo4j_driver
+from public_company_graph.config import get_neo4j_database
+
+driver = get_neo4j_driver()
+db = get_neo4j_database()
+
+# Analyze a company's supply chain risk
+risks = analyze_supply_chain_risk(driver, "XERS", database=db)
+for risk in risks:
+    if risk.is_sole_source:
+        print(f"⚠️ {risk.supplier_ticker}: {risk.supplier_name} (sole source!)")
+    print(f"  Overall risk: {risk.overall_score:.2f}")
+
+# Analyze downstream exposure
+exposure = analyze_supply_chain_exposure(driver, "TSMC", database=db)
+print(f"Total downstream exposure: {exposure['total_exposure']} companies")
+
+driver.close()
+```
+
+### Cypher Queries
+
+```cypher
+// Find companies with sole-source suppliers (after computing risk properties)
+MATCH (c:Company)-[r:HAS_SUPPLIER]->(s:Company)
+WHERE r.is_sole_source = true
+RETURN c.ticker, c.name, s.ticker, s.name, r.supply_chain_risk
+ORDER BY r.supply_chain_risk DESC
+
+// Find downstream exposure for a supplier
+MATCH (supplier:Company {ticker: 'TSMC'})<-[:HAS_SUPPLIER*1..2]-(affected:Company)
+RETURN DISTINCT affected.ticker, affected.name, length(path) as hops
+ORDER BY hops ASC
+
+// Find companies with highest overall supply chain risk
+MATCH (c:Company)-[r:HAS_SUPPLIER]->(s:Company)
+WHERE r.supply_chain_risk > 0.7
+RETURN c.ticker, c.name, count(s) as high_risk_suppliers,
+       avg(r.supply_chain_risk) as avg_risk
+ORDER BY avg_risk DESC
+LIMIT 20
+```
+
+---
+
 ## Related Documentation
 
 - **[Graph Schema](graph_schema.md)** - Complete schema with all properties

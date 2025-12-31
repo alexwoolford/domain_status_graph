@@ -8,7 +8,7 @@ This document outlines enhancements to the Public Company Graph inspired by acad
 
 | Priority | Enhancement | Papers | Status | Business Value |
 |----------|-------------|--------|--------|----------------|
-| **1** | Supply Chain Risk Scoring | P25, P26 | 🔲 Planned | Supply chain due diligence |
+| **1** | Supply Chain Risk Scoring | P25, P26 | ✅ Complete | Supply chain due diligence |
 | **2** | Risk Profile Convergence | P19 | 🔲 Planned | M&A signals, competitive dynamics |
 | **3** | Entity Resolution Improvement | P39, P40 | 🔲 Planned | Data quality improvement |
 | **4** | Explainable Similarity | P42, P43 | ✅ Complete | User trust & interpretability |
@@ -416,7 +416,7 @@ ORDER BY h1.value + h2.value DESC
 3. ✅ Enhancement 4: Explainable similarity function
 
 ### Phase 2: Data Enrichment (Week 3-4)
-4. 🔲 Enhancement 1: Supply chain risk properties
+4. ✅ Enhancement 1: Supply chain risk properties
 5. 🔲 Enhancement 3: Entity resolution improvement
 
 ### Phase 3: New Data Sources (Week 5+)
@@ -431,7 +431,8 @@ ORDER BY h1.value + h2.value DESC
 | `papers/papers_manifest.json` | Full paper metadata |
 | `papers/P*.pdf` | Downloaded paper PDFs |
 | `scripts/compute_risk_convergence.py` | Risk convergence computation (to create) |
-| `scripts/compute_supply_chain_risk.py` | Supply chain risk scoring (to create) |
+| `scripts/analyze_supply_chain.py` | Supply chain risk analysis CLI ✅ |
+| `public_company_graph/supply_chain/` | Supply chain risk scoring module ✅ |
 | `public_company_graph/company/explain.py` | Explainable similarity functions ✅ |
 | `scripts/explain_similarity.py` | CLI tool for similarity explanation ✅ |
 
