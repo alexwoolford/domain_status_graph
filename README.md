@@ -11,7 +11,7 @@ Traditional company databases treat businesses as isolated records. But companie
 This project builds a **knowledge graph** that captures these relationships, enabling queries that would be impossible (or extremely complex) in relational databases:
 
 - *"Find companies similar to Apple by business model AND technology stack AND competitive position"*
-- *"Map the supply chain network 3 hops out from Tesla"*
+- *"Map NVIDIA's supply chain and find companies 2 hops away"*
 - *"Which technologies commonly co-occur with Kubernetes adoption?"*
 
 ### Related Research
@@ -75,11 +75,11 @@ Using Neo4j Graph Data Science (GDS):
 | `USES` | Domain → Technology | 46,081 | HTTP fingerprinting |
 | `LIKELY_TO_ADOPT` | Domain → Technology | 41,250 | PageRank prediction |
 | `CO_OCCURS_WITH` | Technology → Technology | 41,220 | Co-occurrence analysis |
-| `HAS_COMPETITOR` | Company → Company | 3,843 | Extracted from 10-K |
+| `HAS_COMPETITOR` | Company → Company | 3,793 | Extracted from 10-K |
 | `HAS_DOMAIN` | Company → Domain | 3,745 | Company website |
-| `HAS_SUPPLIER` | Company → Company | 2,597 | Extracted from 10-K |
-| `HAS_PARTNER` | Company → Company | 2,139 | Extracted from 10-K |
-| `HAS_CUSTOMER` | Company → Company | 1,714 | Extracted from 10-K |
+| `HAS_SUPPLIER` | Company → Company | 2,313 | Extracted from 10-K |
+| `HAS_PARTNER` | Company → Company | 1,960 | Extracted from 10-K |
+| `HAS_CUSTOMER` | Company → Company | 1,558 | Extracted from 10-K |
 
 For complete schema documentation, see [docs/graph_schema.md](docs/graph_schema.md).
 
@@ -290,13 +290,15 @@ ORDER BY r.confidence DESC
 ### Find Supply Chain Relationships
 
 ```cypher
-MATCH (c:Company {ticker: 'TSLA'})
+MATCH (c:Company {ticker: 'NVDA'})
 OPTIONAL MATCH (c)-[:HAS_SUPPLIER]->(supp:Company)
 OPTIONAL MATCH (c)-[:HAS_CUSTOMER]->(cust:Company)
 RETURN c.name,
        collect(DISTINCT supp.name) as suppliers,
        collect(DISTINCT cust.name) as customers
 ```
+
+**Note**: Supply chain data depends on 10-K disclosure. Large companies like Tesla often use generic language ("key suppliers") rather than naming specific companies. NVIDIA, Broadcom, and AMD have richer supply chain data.
 
 ### Technology Adoption Prediction
 
