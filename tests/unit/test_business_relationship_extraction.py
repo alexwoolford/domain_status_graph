@@ -10,11 +10,13 @@ import pytest
 from public_company_graph.parsing.business_relationship_extraction import (
     COMPETITOR_KEYWORDS,
     CUSTOMER_KEYWORDS,
+    HIGH_VALUE_COMPANY_NAMES,
     PARTNER_KEYWORDS,
     RELATIONSHIP_TYPE_TO_NEO4J,
     SUPPLIER_KEYWORDS,
     CompanyLookup,
     RelationshipType,
+    _is_high_value_company,
     _normalize_company_name,
     _resolve_candidate,
     extract_all_relationships,
@@ -243,9 +245,27 @@ class TestEntityResolution:
             result = _resolve_candidate(term, sample_lookup, None)
             assert result is None, f"{term} should be blocklisted"
 
+    def test_blocks_technology_acronyms(self, sample_lookup):
+        """Test that technology acronyms are blocklisted to prevent false positives."""
+        # These are commonly used acronyms that could match tickers
+        blocklisted = ["AI", "API", "CRM"]
+
+        for term in blocklisted:
+            result = _resolve_candidate(term, sample_lookup, None)
+            assert result is None, f"{term} should be blocklisted"
+
     def test_blocks_common_names(self, sample_lookup):
         """Test that blocklisted names are filtered."""
         blocklisted = ["reliance", "alliance", "target", "focus"]
+
+        for term in blocklisted:
+            result = _resolve_candidate(term, sample_lookup, None)
+            assert result is None, f"{term} should be blocklisted"
+
+    def test_blocks_business_terms(self, sample_lookup):
+        """Test that generic business terms are blocklisted."""
+        # These are business terms that could match company names
+        blocklisted = ["cost", "joint", "regis", "nasdaq"]
 
         for term in blocklisted:
             result = _resolve_candidate(term, sample_lookup, None)
@@ -255,6 +275,89 @@ class TestEntityResolution:
         """Test returns None for unknown companies."""
         result = _resolve_candidate("UnknownCorp", sample_lookup, None)
         assert result is None
+
+
+# =============================================================================
+# Test High-Value Company Logic
+# =============================================================================
+
+
+class TestHighValueCompanyLogic:
+    """Tests for the high-value company allowlist feature."""
+
+    def test_is_high_value_company_exact_match(self):
+        """Test exact match for high-value company names."""
+        # Major tech companies should be high-value
+        assert _is_high_value_company("nvidia") is True
+        assert _is_high_value_company("NVIDIA") is True
+        assert _is_high_value_company("apple") is True
+        assert _is_high_value_company("microsoft") is True
+
+    def test_is_high_value_company_contains(self):
+        """Test that high-value detection works with full company names."""
+        assert _is_high_value_company("NVIDIA Corporation") is True
+        assert _is_high_value_company("Apple Inc.") is True
+        assert _is_high_value_company("Microsoft Corp") is True
+
+    def test_is_high_value_company_negative(self):
+        """Test that random names are not high-value."""
+        assert _is_high_value_company("RandomCorp") is False
+        assert _is_high_value_company("XYZ Holdings") is False
+        assert _is_high_value_company("") is False
+
+    def test_high_value_company_names_populated(self):
+        """Test that the high-value list contains major companies."""
+        # Ensure key companies are in the list
+        major_companies = {"nvidia", "apple", "microsoft", "google", "amazon", "intel"}
+        for company in major_companies:
+            assert company in HIGH_VALUE_COMPANY_NAMES, f"{company} should be high-value"
+
+    def test_short_ticker_blocked_for_non_high_value(self):
+        """Test that short tickers are blocked unless company is high-value."""
+        # Create a lookup with a non-high-value short ticker company
+        lookup = CompanyLookup()
+        lookup.ticker_to_company = {
+            "ABC": ("1234567", "ABC", "ABC Tiny Corp")  # Short, non-high-value
+        }
+        lookup.name_to_company = {}
+
+        # Short ticker should be blocked for non-high-value company
+        result = _resolve_candidate("ABC", lookup, None)
+        assert result is None, "Short ticker for non-high-value company should be blocked"
+
+    def test_short_ticker_allowed_for_high_value(self):
+        """Test that short tickers are allowed if resolved company is high-value."""
+        # NVDA resolves to "NVIDIA Corporation" which contains "nvidia"
+        lookup = CompanyLookup()
+        lookup.ticker_to_company = {"NVDA": ("0001045810", "NVDA", "NVIDIA Corporation")}
+        lookup.name_to_company = {}
+
+        result = _resolve_candidate("NVDA", lookup, None)
+        assert result is not None, "NVDA should resolve (NVIDIA is high-value)"
+        assert result["ticker"] == "NVDA"
+
+    def test_short_ticker_allowed_if_candidate_is_high_value_name(self):
+        """Test that using a high-value name as candidate allows resolution."""
+        # Using "nvidia" as the candidate (which is in HIGH_VALUE_COMPANY_NAMES)
+        lookup = CompanyLookup()
+        lookup.ticker_to_company = {}
+        lookup.name_to_company = {"nvidia": ("0001045810", "NVDA", "NVIDIA Corporation")}
+
+        result = _resolve_candidate("nvidia", lookup, None)
+        assert result is not None, "High-value name should resolve"
+        assert result["ticker"] == "NVDA"
+
+    def test_longer_ticker_allowed_for_non_high_value(self):
+        """Test that longer tickers (>4 chars) are allowed even for non-high-value."""
+        lookup = CompanyLookup()
+        lookup.ticker_to_company = {
+            "ABCDE": ("1234567", "ABCDE", "Random Corp Inc.")  # 5 chars, non-high-value
+        }
+        lookup.name_to_company = {}
+
+        result = _resolve_candidate("ABCDE", lookup, None)
+        assert result is not None, "Longer ticker should resolve"
+        assert result["ticker"] == "ABCDE"
 
 
 # =============================================================================

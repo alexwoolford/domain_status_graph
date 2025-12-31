@@ -4,6 +4,8 @@ Thread-safe statistics tracking for parallel execution.
 Provides a simple, reusable pattern for tracking statistics across multiple threads.
 """
 
+from __future__ import annotations
+
 from dataclasses import dataclass
 from threading import Lock
 
