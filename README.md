@@ -168,6 +168,38 @@ health-check
 
 ---
 
+## Quick Start with Pre-built Graph
+
+If you want to explore the graph immediately without running the full ingest pipeline, you can restore from the included database dump.
+
+### Prerequisites
+
+- Neo4j 5.x+ installed and **stopped** (`bin/neo4j stop`)
+- Git LFS installed (`brew install git-lfs` on macOS)
+
+### Restore the Dump
+
+```bash
+# Pull LFS files if not already done
+git lfs pull
+
+# Restore the database (Neo4j must be stopped)
+neo4j-admin database load domain --from-path=data/ --overwrite-destination=true
+
+# Start Neo4j
+neo4j start
+```
+
+The dump contains:
+- **10,562 nodes** (5,398 Companies, 4,337 Domains, 827 Technologies)
+- **2+ million relationships** (similarity, competitors, tech adoption, etc.)
+
+After restore, connect to Neo4j and start exploring with the [example queries](#example-queries) below.
+
+> **Note**: The dump is stored in Git LFS (~6MB compressed, ~34MB uncompressed). The full pipeline with all data sources requires running the steps in [Running the Pipeline](#running-the-pipeline).
+
+---
+
 ## Running the Pipeline
 
 ### Option A: Full Pipeline (Recommended for Fresh Start)
