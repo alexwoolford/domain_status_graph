@@ -9,7 +9,7 @@ This document outlines enhancements to the Public Company Graph inspired by acad
 | Priority | Enhancement | Papers | Status | Business Value |
 |----------|-------------|--------|--------|----------------|
 | **1** | Supply Chain Risk Scoring | P25, P26 | ✅ Complete | Supply chain due diligence |
-| **2** | Risk Profile Convergence | P19 | 🔲 Planned | M&A signals, competitive dynamics |
+| **2** | Risk Profile Convergence | P19 | ⏸️ Blocked | Requires historical 10-Ks (we only have latest) |
 | **3** | Entity Resolution Improvement | P39, P40 | 🔲 Planned | Data quality improvement |
 | **4** | Explainable Similarity | P42, P43 | ✅ Complete | User trust & interpretability |
 | **5** | Institutional Ownership Links | P32 | 🔲 Planned | Common owner effects |

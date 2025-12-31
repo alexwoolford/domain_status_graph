@@ -214,6 +214,7 @@ TICKER_BLOCKLIST = {
     "Z",
     # 2-letter common words/abbreviations
     "AD",  # AD (advertisement) - matches ARRAY DIGITAL ticker
+    "AI",  # AI (Artificial Intelligence) - common industry term
     "AN",
     "AS",
     "AT",
@@ -251,12 +252,14 @@ TICKER_BLOCKLIST = {
     "ALL",
     "AND",
     "ANY",
+    "API",  # API (Application Programming Interface) - common tech term
     "ARE",
     "BDC",
     "BIG",
     "CAR",
     "CAN",
     "CMS",  # CMS (Content Management System) - matches CMS Energy ticker
+    "CRM",  # CRM (Customer Relationship Management) - matches Salesforce ticker
     "CPU",
     "DEI",  # DEI (Diversity Equity Inclusion) - matches Douglas Emmett ticker
     "DMA",
@@ -363,6 +366,7 @@ NAME_BLOCKLIST = {
     "associates",
     "capital",
     "catalyst",
+    "cost",  # "cost of..." is common, matches COST (Costco)
     "enterprises",
     "financial",
     "focus",
@@ -372,12 +376,14 @@ NAME_BLOCKLIST = {
     "insight",
     "investment",
     "investments",
+    "joint",  # "joint venture" is common, matches JYNT (Joint Corp)
     "management",
     "partners",
     "platform",
     "platforms",
     "premier",
     "progress",
+    "regis",  # Common name that matches RGS (Regis Corp hair salons)
     "reliance",
     "resources",
     "securities",
