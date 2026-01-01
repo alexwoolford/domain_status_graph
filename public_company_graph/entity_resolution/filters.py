@@ -297,7 +297,7 @@ class BiographicalContextFilter(CandidateFilter):
         r"\bother\s+directorships?\b",
         r"\boutside\s+director\b",
         r"\bindependent\s+director\b",
-        # Employment history
+        # Employment history - general patterns
         r"\bprior\s+to\s+joining\b",
         r"\bpreviously\s+(?:at|with|served)\b",
         r"\bformerly\s+(?:at|with|of)\b",
@@ -309,6 +309,17 @@ class BiographicalContextFilter(CandidateFilter):
         r"\bcareer\s+(?:at|with|includes?)\b",
         r"\bjoined\s+(?:us|the\s+company)\s+from\b",
         r"\bcame\s+to\s+(?:us|the\s+company)\s+from\b",
+        # Employment history - expanded patterns from ground truth errors
+        r"\b\w+'s\s+time\s+at\b",  # "Fitzgerald's time at American Express"
+        r"\b(?:his|her|their)\s+time\s+at\b",  # "her time at Company"
+        r"\bserved\s+as\s+(?:senior\s+)?(?:vice\s+)?(?:president|officer|director|manager)\b",  # "served as Senior Vice President"
+        r"\bheld\s+(?:the\s+)?(?:position|role|title)s?\s+(?:at|of|with)\b",  # "held positions at"
+        r"\bheld\s+(?:\w+\s+){0,3}(?:executive|management|leadership)\s+positions?\b",  # "held executive positions"
+        r"\bpositions?\s+(?:at|with)\s+(?:several|various|multiple)\b",  # "positions with several companies"
+        r"\bmultinational\s+companies?\s+including\b",  # "multinational companies including"
+        r"\b(?:before|prior\s+to)\s+(?:\w+\s*,?\s*){0,3}(?:he|she|they)\s+held\b",  # "Before Mitel, he held"
+        r"\bvarious\s+(?:roles|positions)\s+(?:at|with|in)\b",  # "various roles at"
+        r"\b(?:his|her)\s+(?:roles?\s+)?(?:at|in|with)\s+\w+\s*,?\s+(?:he|she)\s+(?:also\s+)?held\b",  # "at Company, she also held"
         # Biographical sections
         r"\bbiographical\b",
         r"\bbackground\s+(?:of|includes?)\b",
@@ -336,14 +347,28 @@ class BiographicalContextFilter(CandidateFilter):
     def name(self) -> str:
         return "biographical_context"
 
+    def _normalize_quotes(self, text: str) -> str:
+        """Normalize curly quotes to straight quotes for pattern matching."""
+        # Use code points to avoid editor/terminal conversion issues
+        # U+2018 LEFT SINGLE QUOTATION MARK
+        # U+2019 RIGHT SINGLE QUOTATION MARK
+        # U+201C LEFT DOUBLE QUOTATION MARK
+        # U+201D RIGHT DOUBLE QUOTATION MARK
+        return (
+            text.replace(chr(8216), "'")
+            .replace(chr(8217), "'")
+            .replace(chr(8220), '"')
+            .replace(chr(8221), '"')
+        )
+
     def filter(self, candidate: Candidate, context: dict | None = None) -> FilterResult:
         """Filter if candidate appears in biographical context."""
         # Check the sentence containing the mention
-        text_to_check = candidate.sentence.lower()
+        text_to_check = self._normalize_quotes(candidate.sentence.lower())
 
         # Also check surrounding context if available
         if hasattr(candidate, "context") and candidate.context:
-            text_to_check = f"{text_to_check} {candidate.context.lower()}"
+            text_to_check = f"{text_to_check} {self._normalize_quotes(candidate.context.lower())}"
 
         for pattern in self.patterns:
             if pattern.search(text_to_check):
@@ -382,9 +407,14 @@ class ExchangeReferenceFilter(CandidateFilter):
         # Exchange as venue
         r"\b(?:NASDAQ|NYSE)\s+(?:stock\s+)?(?:market|exchange)\b",
         r"\bsecurities\s+(?:trade|traded|trading)\s+on\b",
-        # Legal case references
-        r"\bv\.\s+\w+(?:,?\s+Inc\.?)?\s+\(",  # "v. Wayfair, Inc. (2018)"
-        r"\bSupreme\s+Court\b.{0,50}\bv\.\b",
+        r"\b(?:Nasdaq|NASDAQ|NYSE)\s+Global\s+(?:Select\s+)?Market\b",  # "Nasdaq Global Select Market"
+        r"\bcommon\s+stock\s+is\s+(?:listed|traded)\b",  # "common stock is listed"
+        # Legal case references - expanded
+        r"\bv\.\s+\w+(?:,?\s+Inc\.?)?\s*\(",  # "v. Wayfair, Inc. (2018)"
+        r"\bSupreme\s+Court\b.{0,100}\bv\.\b",  # Supreme Court cases
+        r"\bSouth\s+Dakota\s+v\.\b",  # "South Dakota v. Wayfair"
+        r"\bcourt(?:'s)?\s+(?:decision|ruling)\s+in\b",  # "court's decision in [case]"
+        r"\bSupreme\s+Court(?:'s)?\s+\w+\s+decision\b",  # "Supreme Court's Wayfair decision"
     ]
 
     def __init__(self, patterns: list[str] | None = None):
@@ -400,9 +430,19 @@ class ExchangeReferenceFilter(CandidateFilter):
     def name(self) -> str:
         return "exchange_reference"
 
+    def _normalize_quotes(self, text: str) -> str:
+        """Normalize curly quotes to straight quotes for pattern matching."""
+        # Use code points to avoid editor/terminal conversion issues
+        return (
+            text.replace(chr(8216), "'")
+            .replace(chr(8217), "'")
+            .replace(chr(8220), '"')
+            .replace(chr(8221), '"')
+        )
+
     def filter(self, candidate: Candidate, context: dict | None = None) -> FilterResult:
         """Filter if candidate is an exchange reference."""
-        text_to_check = candidate.sentence
+        text_to_check = self._normalize_quotes(candidate.sentence)
 
         for pattern in self.patterns:
             if pattern.search(text_to_check):
