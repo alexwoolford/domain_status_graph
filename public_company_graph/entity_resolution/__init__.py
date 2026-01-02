@@ -37,10 +37,21 @@ from public_company_graph.entity_resolution.combined_scorer import (
     compute_combined_score,
     create_scorer,
 )
+from public_company_graph.entity_resolution.embedding_scorer import (
+    EmbeddingSimilarityResult,
+    EmbeddingSimilarityScorer,
+    score_embedding_similarity,
+)
 from public_company_graph.entity_resolution.filters import (
     CandidateFilter,
     FilterResult,
     filter_candidate,
+)
+from public_company_graph.entity_resolution.layered_validator import (
+    LayeredEntityValidator,
+    RejectionReason,
+    ValidationResult,
+    validate_entity,
 )
 from public_company_graph.entity_resolution.matchers import (
     CandidateMatcher,
@@ -97,4 +108,13 @@ __all__ = [
     "ConfidenceTier",
     "compute_combined_score",
     "create_scorer",
+    # Embedding similarity (P58 Zeakis)
+    "EmbeddingSimilarityScorer",
+    "EmbeddingSimilarityResult",
+    "score_embedding_similarity",
+    # Layered validation (combining all approaches)
+    "LayeredEntityValidator",
+    "ValidationResult",
+    "RejectionReason",
+    "validate_entity",
 ]
