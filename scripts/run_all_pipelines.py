@@ -297,7 +297,7 @@ def main():
         extra_args=["--clean"],  # Start fresh for reproducibility
         logger=logger,
     ):
-        logger.error("Failed at extract_business_relationships step")
+        logger.error("Failed at extract_with_llm_verification step")
         return
 
     # Then create embeddings for the Company nodes

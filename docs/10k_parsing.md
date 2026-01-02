@@ -30,7 +30,7 @@ This achieves **99.85% coverage** across all companies.
 2. **Parse** (`scripts/parse_10k_filings.py`):
    - Extracts websites, descriptions, risk factors, metadata
    - Stores in cache (`10k_extracted` namespace)
-   - Used by other scripts (load_company_data, extract_business_relationships, etc.)
+   - Used by other scripts (load_company_data, extract_with_llm_verification, etc.)
 
 ## Business Description Extraction
 

@@ -85,10 +85,10 @@ companies-exec:
 
 # Step 6: Extract business relationships from 10-K filings
 relationships:
-	$(PYTHON) scripts/extract_business_relationships.py
+	$(PYTHON) scripts/extract_with_llm_verification.py
 
 relationships-exec:
-	$(PYTHON) scripts/extract_business_relationships.py --execute
+	$(PYTHON) scripts/extract_with_llm_verification.py --clean --execute
 
 # Step 7: Create embeddings (requires OPENAI_API_KEY)
 embeddings:
