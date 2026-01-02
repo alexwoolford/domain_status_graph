@@ -50,18 +50,23 @@ The Public Company Graph is a knowledge graph modeling **public companies**, the
 | - Company | 5,398 |
 | - Domain | 4,337 |
 | - Technology | 827 |
-| **Total Relationships** | ~2,033,384 |
+| **Total Relationships** | ~2,028,329 |
 | - Similarity relationships | 1,890,697 |
 |   - SIMILAR_INDUSTRY | 520,672 |
 |   - SIMILAR_DESCRIPTION | 436,973 |
 |   - SIMILAR_SIZE | 414,096 |
 |   - SIMILAR_RISK | 394,372 |
 |   - SIMILAR_TECHNOLOGY | 124,584 |
-| - Business relationships | 10,293 |
-|   - HAS_COMPETITOR | 3,843 |
-|   - HAS_SUPPLIER | 2,597 |
-|   - HAS_PARTNER | 2,139 |
-|   - HAS_CUSTOMER | 1,714 |
+| - Business relationships (facts) | 3,960 |
+|   - HAS_COMPETITOR | 2,999 |
+|   - HAS_PARTNER | 588 |
+|   - HAS_CUSTOMER | 243 |
+|   - HAS_SUPPLIER | 130 |
+| - Business candidates (medium confidence) | 1,298 |
+|   - CANDIDATE_PARTNER | 673 |
+|   - CANDIDATE_COMPETITOR | 361 |
+|   - CANDIDATE_SUPPLIER | 151 |
+|   - CANDIDATE_CUSTOMER | 113 |
 | - Technology relationships | 128,551 |
 |   - USES | 46,081 |
 |   - LIKELY_TO_ADOPT | 41,250 |
@@ -208,7 +213,7 @@ The Public Company Graph is a knowledge graph modeling **public companies**, the
 
 **Description**: Company A explicitly mentioned Company B as a competitor in their 10-K filing. Directional - reverse may not exist.
 
-**Count**: 3,843
+**Count**: 2,999 (high confidence, embedding-verified)
 
 **Properties**:
 | Property | Type | Description |
@@ -245,7 +250,7 @@ RETURN a.ticker, b.ticker
 
 **Description**: Company A mentioned Company B as a customer in their 10-K filing.
 
-**Count**: 1,714
+**Count**: 243 (high confidence, LLM-verified)
 
 **Properties**: Same as HAS_COMPETITOR
 
@@ -265,7 +270,7 @@ ORDER BY r.confidence DESC
 
 **Description**: Company A mentioned Company B as a supplier/vendor in their 10-K filing.
 
-**Count**: 2,597
+**Count**: 130 (high confidence, LLM-verified)
 
 **Properties**: Same as HAS_COMPETITOR
 
@@ -284,9 +289,45 @@ RETURN supp.name, r.raw_mention
 
 **Description**: Company A mentioned Company B as a partner/alliance in their 10-K filing.
 
-**Count**: 2,139
+**Count**: 588 (high confidence, embedding-verified)
 
 **Properties**: Same as HAS_COMPETITOR
+
+---
+
+### Business Relationship Candidates
+
+> **Note**: CANDIDATE_* relationships are medium-confidence business relationships that didn't meet the high-confidence threshold but have supporting evidence. They are available for review or analysis but should not be treated as established facts.
+
+#### CANDIDATE_COMPETITOR / CANDIDATE_CUSTOMER / CANDIDATE_SUPPLIER / CANDIDATE_PARTNER
+
+**Pattern**: `(Company)-[:CANDIDATE_*]->(Company)`
+
+**Description**: Medium-confidence business relationships extracted from 10-K filings. These contain the same properties as their HAS_* counterparts but didn't meet the embedding similarity or LLM verification thresholds.
+
+**Counts**:
+- CANDIDATE_PARTNER: 673
+- CANDIDATE_COMPETITOR: 361
+- CANDIDATE_SUPPLIER: 151
+- CANDIDATE_CUSTOMER: 113
+
+**Properties**:
+| Property | Type | Description |
+|----------|------|-------------|
+| `confidence` | FLOAT | Entity resolution confidence |
+| `confidence_tier` | STRING | Always `medium` for candidates |
+| `embedding_similarity` | FLOAT | Semantic similarity score (0-1) |
+| `raw_mention` | STRING | How company was mentioned |
+| `context` | STRING | Surrounding text from filing |
+| `source` | STRING | Always `ten_k_filing` |
+
+**Example**:
+```cypher
+// Review candidate suppliers for potential promotion to facts
+MATCH (c:Company {ticker:'AAPL'})-[r:CANDIDATE_SUPPLIER]->(supp:Company)
+RETURN supp.name, r.embedding_similarity, r.context
+ORDER BY r.embedding_similarity DESC
+```
 
 ---
 
@@ -304,7 +345,7 @@ RETURN supp.name, r.raw_mention
 
 **Description**: Companies with similar business descriptions based on embedding cosine similarity.
 
-**Count**: 420,531
+**Count**: 436,973
 
 **Properties**:
 | Property | Type | Description |
