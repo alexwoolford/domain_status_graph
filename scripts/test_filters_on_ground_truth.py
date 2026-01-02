@@ -2,8 +2,9 @@
 """
 Test new filters against ground truth to measure improvement.
 
-This script applies the BiographicalContextFilter and ExchangeReferenceFilter
-to our labeled ground truth to see how many errors would be caught.
+This script applies the BiographicalContextFilter, ExchangeReferenceFilter,
+and RelationshipVerifier to our labeled ground truth to see how many errors
+would be caught.
 """
 
 import csv
@@ -22,6 +23,10 @@ from public_company_graph.entity_resolution.filters import (
     BiographicalContextFilter,
     ExchangeReferenceFilter,
 )
+from public_company_graph.entity_resolution.relationship_verifier import (
+    RelationshipVerifier,
+    VerificationResult,
+)
 
 
 def load_ground_truth(filepath: str) -> list[dict]:
@@ -38,11 +43,13 @@ def test_filters_on_record(
     record: dict,
     bio_filter: BiographicalContextFilter,
     exchange_filter: ExchangeReferenceFilter,
+    rel_verifier: RelationshipVerifier,
 ) -> dict:
-    """Test both filters on a single ground truth record."""
+    """Test filters and relationship verifier on a single ground truth record."""
     # Create a candidate from the record
     raw_mention = record.get("raw_mention", "")
     context = record.get("context", "")
+    relationship_type = record.get("relationship_type", "")
 
     # Use context as the sentence for filter checking
     candidate = Candidate(
@@ -59,27 +66,37 @@ def test_filters_on_record(
     # Test exchange filter
     exchange_result = exchange_filter.filter(candidate)
 
+    # Test relationship verifier
+    rel_verification = rel_verifier.verify(relationship_type, context, raw_mention)
+    rel_contradicted = rel_verification.result == VerificationResult.CONTRADICTED
+
     return {
         "bio_filtered": not bio_result.passed,
         "bio_reason": bio_result.reason.value if not bio_result.passed else None,
         "exchange_filtered": not exchange_result.passed,
-        "exchange_reason": exchange_result.reason.value if not exchange_result.passed else None,
-        "any_filtered": not bio_result.passed or not exchange_result.passed,
+        "exchange_reason": (exchange_result.reason.value if not exchange_result.passed else None),
+        "rel_contradicted": rel_contradicted,
+        "rel_suggested_type": (
+            rel_verification.suggested_type.value if rel_verification.suggested_type else None
+        ),
+        "rel_explanation": rel_verification.explanation,
+        "any_filtered": (not bio_result.passed or not exchange_result.passed or rel_contradicted),
     }
 
 
 def main():
     print("=" * 70)
-    print("TESTING NEW FILTERS ON GROUND TRUTH")
+    print("TESTING FILTERS + RELATIONSHIP VERIFIER ON GROUND TRUTH")
     print("=" * 70)
 
     # Load ground truth
     records = load_ground_truth("data/er_ground_truth_labeled.csv")
     print(f"\nLoaded {len(records)} ground truth records")
 
-    # Initialize filters
+    # Initialize filters and verifier
     bio_filter = BiographicalContextFilter()
     exchange_filter = ExchangeReferenceFilter()
+    rel_verifier = RelationshipVerifier()
 
     # Categorize records
     correct = [r for r in records if r["ai_label"] == "correct"]
@@ -93,12 +110,12 @@ def main():
     # Test filters on all records
     results = []
     for record in records:
-        filter_result = test_filters_on_record(record, bio_filter, exchange_filter)
+        filter_result = test_filters_on_record(record, bio_filter, exchange_filter, rel_verifier)
         results.append({**record, **filter_result})
 
     # Analyze results
     print("\n" + "=" * 70)
-    print("FILTER EFFECTIVENESS")
+    print("FILTER + VERIFIER EFFECTIVENESS")
     print("=" * 70)
 
     # How many incorrect records would be filtered?
@@ -107,16 +124,20 @@ def main():
     incorrect_exchange = [
         r for r in results if r["ai_label"] == "incorrect" and r["exchange_filtered"]
     ]
+    incorrect_rel = [r for r in results if r["ai_label"] == "incorrect" and r["rel_contradicted"]]
 
-    print("\n✓ INCORRECT matches caught by new filters:")
+    print("\n✓ INCORRECT matches caught:")
     print(
-        f"  Biographical filter: {len(incorrect_bio)}/{len(incorrect)} ({100 * len(incorrect_bio) / len(incorrect):.0f}%)"
+        f"  Biographical filter:     {len(incorrect_bio)}/{len(incorrect)} ({100 * len(incorrect_bio) / len(incorrect):.0f}%)"
     )
     print(
-        f"  Exchange filter:     {len(incorrect_exchange)}/{len(incorrect)} ({100 * len(incorrect_exchange) / len(incorrect):.0f}%)"
+        f"  Exchange filter:         {len(incorrect_exchange)}/{len(incorrect)} ({100 * len(incorrect_exchange) / len(incorrect):.0f}%)"
     )
     print(
-        f"  Combined:            {len(incorrect_filtered)}/{len(incorrect)} ({100 * len(incorrect_filtered) / len(incorrect):.0f}%)"
+        f"  Relationship verifier:   {len(incorrect_rel)}/{len(incorrect)} ({100 * len(incorrect_rel) / len(incorrect):.0f}%)"
+    )
+    print(
+        f"  Combined (any):          {len(incorrect_filtered)}/{len(incorrect)} ({100 * len(incorrect_filtered) / len(incorrect):.0f}%)"
     )
 
     # How many correct records would be (wrongly) filtered? (false positives)
@@ -128,15 +149,27 @@ def main():
     )
     if correct_filtered:
         for r in correct_filtered[:5]:
-            print(f"    - {r['raw_mention']} → {r['target_ticker']}")
+            reason = "REL" if r["rel_contradicted"] else "FILTER"
+            print(f"    [{reason}] {r['raw_mention']} → {r['target_ticker']}")
+            if r["rel_contradicted"]:
+                print(f"          {r['rel_explanation']}")
 
     # Show which incorrect records were caught
     print("\n✓ DETAILS: Incorrect matches caught:")
     for r in incorrect_filtered:
-        filter_type = "BIO" if r["bio_filtered"] else "EXCHANGE"
+        if r["bio_filtered"]:
+            filter_type = "BIO"
+        elif r["exchange_filtered"]:
+            filter_type = "EXCHANGE"
+        elif r["rel_contradicted"]:
+            filter_type = "REL_TYPE"
+        else:
+            filter_type = "???"
         print(
             f'  [{filter_type}] {r["source_ticker"]} → {r["target_ticker"]}: "{r["raw_mention"]}"'
         )
+        if r["rel_contradicted"] and r["rel_suggested_type"]:
+            print(f"           Suggested: {r['rel_suggested_type']}")
 
     # Show which incorrect records were NOT caught
     incorrect_missed = [
