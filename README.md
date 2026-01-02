@@ -75,11 +75,12 @@ Using Neo4j Graph Data Science (GDS):
 | `USES` | Domain → Technology | 46,081 | HTTP fingerprinting |
 | `LIKELY_TO_ADOPT` | Domain → Technology | 41,250 | PageRank prediction |
 | `CO_OCCURS_WITH` | Technology → Technology | 41,220 | Co-occurrence analysis |
-| `HAS_COMPETITOR` | Company → Company | 3,793 | Extracted from 10-K |
+| `HAS_COMPETITOR` | Company → Company | 2,999 | Extracted from 10-K (embedding verified) |
 | `HAS_DOMAIN` | Company → Domain | 3,745 | Company website |
-| `HAS_SUPPLIER` | Company → Company | 2,313 | Extracted from 10-K |
-| `HAS_PARTNER` | Company → Company | 1,960 | Extracted from 10-K |
-| `HAS_CUSTOMER` | Company → Company | 1,558 | Extracted from 10-K |
+| `HAS_PARTNER` | Company → Company | 588 | Extracted from 10-K (embedding verified) |
+| `HAS_CUSTOMER` | Company → Company | 243 | Extracted from 10-K (LLM verified) |
+| `HAS_SUPPLIER` | Company → Company | 130 | Extracted from 10-K (LLM verified) |
+| `CANDIDATE_*` | Company → Company | 1,298 | Medium confidence (with evidence) |
 
 For complete schema documentation, see [docs/graph_schema.md](docs/graph_schema.md).
 
@@ -245,7 +246,8 @@ python scripts/create_company_embeddings.py --execute
 python scripts/compute_company_similarity.py --execute
 
 # 7. Extract business relationships (competitors, customers, etc.)
-python scripts/extract_business_relationships.py --execute
+#    Uses embedding similarity + LLM verification for high precision
+python scripts/extract_with_llm_verification.py --clean --execute
 
 # 8. Compute GDS features
 python scripts/compute_gds_features.py --execute
