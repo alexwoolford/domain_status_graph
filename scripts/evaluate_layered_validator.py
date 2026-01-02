@@ -185,7 +185,7 @@ def print_results(results: dict):
 
 def main():
     # Load ground truth
-    data_file = Path(__file__).parent.parent / "data" / "er_ground_truth.csv"
+    data_file = Path(__file__).parent.parent / "data" / "er_ai_audit.csv"
     with open(data_file) as f:
         records = [r for r in csv.DictReader(f) if r.get("ai_label") in ("correct", "incorrect")]
 

@@ -1,31 +1,39 @@
 #!/usr/bin/env python3
 """
-Entity Resolution Ground Truth Tool.
+Entity Resolution AI Audit Tool.
 
-A unified CLI for creating, labeling, and evaluating entity resolution
-ground truth datasets. This tool helps measure and improve the accuracy
-of company mention extraction from SEC 10-K filings.
+A CLI for creating AI-labeled evaluation datasets for entity resolution.
+Uses GPT-5.2-Pro to judge whether extracted company relationships are correct.
+
+IMPORTANT: This produces AI-LABELED data, not human-verified ground truth.
+The labels reflect GPT-5.2-Pro's judgment, which is highly accurate but not
+infallible. For production validation, use the 'spot-check' command to
+export samples for human review.
 
 WORKFLOW:
     1. Sample relationships from the graph
-    2. Label samples with AI assistance (parallel)
-    3. Evaluate filter/verifier performance against labeled data
+    2. Label samples with AI (parallel, using GPT-5.2-Pro)
+    3. Evaluate filter/verifier performance against AI labels
+    4. Spot-check: Export samples for human verification
 
 USAGE:
     # Step 1: Extract 200 random samples from Neo4j
-    python scripts/er_ground_truth.py sample --count 200
+    python scripts/er_ai_audit.py sample --count 200
 
     # Step 2: Label samples with AI (parallel, ~10x faster)
-    python scripts/er_ground_truth.py label --concurrency 10
+    python scripts/er_ai_audit.py label --concurrency 10
 
-    # Step 3: Evaluate current filters against labeled data
-    python scripts/er_ground_truth.py evaluate
+    # Step 3: Evaluate current filters against AI-labeled data
+    python scripts/er_ai_audit.py evaluate
+
+    # Step 4: Export 50 random samples for human spot-check
+    python scripts/er_ai_audit.py spot-check --count 50
 
     # View dataset statistics
-    python scripts/er_ground_truth.py stats
+    python scripts/er_ai_audit.py stats
 
 DATA FILE:
-    All operations use: data/er_ground_truth.csv
+    All operations use: data/er_ai_audit.csv
     - Unlabeled samples have empty ai_label column
     - Labeled samples have ai_label = correct|incorrect|ambiguous
 """
@@ -58,7 +66,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # Default data file path
-DEFAULT_DATA_FILE = Path("data/er_ground_truth.csv")
+DEFAULT_DATA_FILE = Path("data/er_ai_audit.csv")
 
 # CSV columns
 BASE_COLUMNS = [
@@ -472,7 +480,7 @@ async def run_labeling(args: argparse.Namespace) -> None:
 
     if not data_file.exists():
         logger.error(f"Data file not found: {data_file}")
-        logger.info("Run: python scripts/er_ground_truth.py sample --count 100")
+        logger.info("Run: python scripts/er_ai_audit.py sample --count 100")
         return
 
     # Load records
@@ -695,7 +703,7 @@ def cmd_stats(args: argparse.Namespace) -> None:
 
     if not data_file.exists():
         logger.error(f"Data file not found: {data_file}")
-        logger.info("Run: python scripts/er_ground_truth.py sample --count 100")
+        logger.info("Run: python scripts/er_ai_audit.py sample --count 100")
         return
 
     with open(data_file, encoding="utf-8") as f:
@@ -709,7 +717,7 @@ def cmd_stats(args: argparse.Namespace) -> None:
     ambiguous = [r for r in labeled if r["ai_label"] == "ambiguous"]
 
     print("=" * 50)
-    print("GROUND TRUTH DATASET STATISTICS")
+    print("AI AUDIT DATASET STATISTICS")
     print("=" * 50)
     print(f"\nFile: {data_file}")
     print(f"Total records: {len(records)}")
@@ -738,37 +746,130 @@ def cmd_stats(args: argparse.Namespace) -> None:
 
 
 # =============================================================================
+# SPOT-CHECK (human verification)
+# =============================================================================
+
+
+def cmd_spot_check(args: argparse.Namespace) -> None:
+    """Export random samples for human spot-check verification."""
+    data_file: Path = args.data_file
+    count: int = args.count
+    output_file: Path = args.output
+    focus: str = args.focus
+
+    if not data_file.exists():
+        logger.error(f"Data file not found: {data_file}")
+        return
+
+    with open(data_file, encoding="utf-8") as f:
+        records = list(csv.DictReader(f))
+
+    # Filter to labeled records only
+    labeled = [r for r in records if r.get("ai_label") in ("correct", "incorrect")]
+
+    if not labeled:
+        logger.error("No labeled records found. Run 'label' command first.")
+        return
+
+    # Focus on specific types if requested
+    if focus == "incorrect":
+        pool = [r for r in labeled if r["ai_label"] == "incorrect"]
+    elif focus == "correct":
+        pool = [r for r in labeled if r["ai_label"] == "correct"]
+    elif focus == "mixed":
+        # Balanced sample
+        correct = [r for r in labeled if r["ai_label"] == "correct"]
+        incorrect = [r for r in labeled if r["ai_label"] == "incorrect"]
+        random.shuffle(correct)
+        random.shuffle(incorrect)
+        half = count // 2
+        pool = correct[:half] + incorrect[:half]
+    else:
+        pool = labeled
+
+    random.shuffle(pool)
+    samples = pool[:count]
+
+    # Create simplified CSV for human review
+    spot_check_columns = [
+        "id",
+        "source_ticker",
+        "target_ticker",
+        "relationship_type",
+        "raw_mention",
+        "context",
+        "ai_label",
+        "ai_reasoning",
+        "human_label",  # Empty column for human to fill
+        "human_notes",  # Empty column for notes
+    ]
+
+    with open(output_file, "w", encoding="utf-8", newline="") as f:
+        writer = csv.DictWriter(f, fieldnames=spot_check_columns)
+        writer.writeheader()
+        for r in samples:
+            row = {col: r.get(col, "") for col in spot_check_columns}
+            row["human_label"] = ""  # Empty for human to fill
+            row["human_notes"] = ""
+            writer.writerow(row)
+
+    print(f"\n{'=' * 60}")
+    print("SPOT-CHECK EXPORT COMPLETE")
+    print("=" * 60)
+    print(f"\nExported {len(samples)} samples to: {output_file}")
+    print(f"Focus: {focus}")
+    print("\nInstructions:")
+    print("  1. Open the CSV in a spreadsheet")
+    print("  2. Review each row's context and AI label")
+    print("  3. Fill 'human_label' column with: correct/incorrect/unsure")
+    print("  4. Add any notes in 'human_notes' column")
+    print(f"\nTime estimate: ~{len(samples) * 20 // 60} minutes")
+    print("(~20 seconds per sample for quick review)")
+
+    # Show sample distribution
+    ai_correct = sum(1 for r in samples if r.get("ai_label") == "correct")
+    ai_incorrect = sum(1 for r in samples if r.get("ai_label") == "incorrect")
+    print("\nSample composition:")
+    print(f"  AI-labeled correct:   {ai_correct}")
+    print(f"  AI-labeled incorrect: {ai_incorrect}")
+
+
+# =============================================================================
 # MAIN CLI
 # =============================================================================
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="Entity Resolution Ground Truth Tool",
+        description="Entity Resolution AI Audit Tool",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 WORKFLOW:
-  1. sample   - Extract random samples from Neo4j
-  2. label    - AI-label samples (parallel, 10x faster)
-  3. evaluate - Test filters against labeled data
-  4. stats    - Show dataset statistics
+  1. sample     - Extract random samples from Neo4j
+  2. label      - AI-label samples (parallel, 10x faster)
+  3. evaluate   - Test filters against AI-labeled data
+  4. spot-check - Export samples for human verification
+  5. stats      - Show dataset statistics
 
 EXAMPLES:
   # Create initial dataset
-  python scripts/er_ground_truth.py sample --count 200
+  python scripts/er_ai_audit.py sample --count 200
 
   # Label with AI
-  python scripts/er_ground_truth.py label
+  python scripts/er_ai_audit.py label
 
   # Evaluate current system
-  python scripts/er_ground_truth.py evaluate
+  python scripts/er_ai_audit.py evaluate
+
+  # Export 50 samples for human spot-check
+  python scripts/er_ai_audit.py spot-check --count 50
         """,
     )
     parser.add_argument(
         "--data-file",
         type=Path,
         default=DEFAULT_DATA_FILE,
-        help=f"Ground truth CSV file (default: {DEFAULT_DATA_FILE})",
+        help=f"AI audit CSV file (default: {DEFAULT_DATA_FILE})",
     )
 
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -817,6 +918,27 @@ EXAMPLES:
     # STATS subcommand
     stats_parser = subparsers.add_parser("stats", help="Show dataset statistics")
     stats_parser.set_defaults(func=cmd_stats)
+
+    # SPOT-CHECK subcommand
+    spot_parser = subparsers.add_parser("spot-check", help="Export samples for human verification")
+    spot_parser.add_argument(
+        "--count", "-n", type=int, default=50, help="Number of samples to export"
+    )
+    spot_parser.add_argument(
+        "--output",
+        "-o",
+        type=Path,
+        default=Path("data/er_spot_check.csv"),
+        help="Output file for spot-check",
+    )
+    spot_parser.add_argument(
+        "--focus",
+        "-f",
+        choices=["all", "correct", "incorrect", "mixed"],
+        default="mixed",
+        help="Focus on specific label types (default: mixed balanced sample)",
+    )
+    spot_parser.set_defaults(func=cmd_spot_check)
 
     args = parser.parse_args()
     args.func(args)

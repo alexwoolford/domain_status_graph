@@ -69,7 +69,7 @@ def get_cached_description(ticker: str, name: str) -> str:
 
 def main():
     # Load ground truth
-    data_file = Path(__file__).parent.parent / "data" / "er_ground_truth.csv"
+    data_file = Path(__file__).parent.parent / "data" / "er_ai_audit.csv"
     with open(data_file) as f:
         records = list(csv.DictReader(f))
 
