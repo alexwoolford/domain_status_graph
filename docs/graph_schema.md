@@ -570,7 +570,7 @@ LIMIT 20
 |--------|---------|
 | `scripts/bootstrap_graph.py` | Load Domain and Technology nodes + USES relationships |
 | `scripts/load_company_data.py` | Load Company nodes from SEC EDGAR |
-| `scripts/extract_business_relationships.py` | Extract HAS_COMPETITOR/CUSTOMER/SUPPLIER/PARTNER from 10-Ks |
+| `scripts/extract_with_llm_verification.py --clean` | Extract HAS_COMPETITOR/CUSTOMER/SUPPLIER/PARTNER from 10-Ks |
 | `scripts/compute_gds_features.py` | Compute LIKELY_TO_ADOPT, CO_OCCURS_WITH |
 | `scripts/compute_company_similarity.py` | Compute all SIMILAR_* relationships |
 

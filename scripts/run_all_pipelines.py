@@ -40,8 +40,7 @@ COMPUTE_KEYWORD_SIMILARITY_SCRIPT = SCRIPT_DIR / "compute_keyword_similarity.py"
 COMPUTE_COMPANY_SIMILARITY_VIA_DOMAINS_SCRIPT = (
     SCRIPT_DIR / "compute_company_similarity_via_domains.py"
 )
-EXTRACT_COMPETITORS_SCRIPT = SCRIPT_DIR / "extract_competitors.py"
-EXTRACT_BUSINESS_RELATIONSHIPS_SCRIPT = SCRIPT_DIR / "extract_business_relationships.py"
+EXTRACT_BUSINESS_RELATIONSHIPS_SCRIPT = SCRIPT_DIR / "extract_with_llm_verification.py"
 CREATE_RISK_SIMILARITY_SCRIPT = SCRIPT_DIR / "create_risk_similarity_graph.py"
 
 
@@ -138,9 +137,10 @@ def main():
         logger.info("  - enrich_company_properties.py - Enrich Company nodes with properties")
         logger.info("  - compute_company_similarity.py - Create SIMILAR_INDUSTRY and SIMILAR_SIZE")
         logger.info(
-            "  - extract_business_relationships.py - Extract business relationships from 10-K filings"
+            "  - extract_with_llm_verification.py - Extract business relationships from 10-K filings"
         )
         logger.info("    (HAS_COMPETITOR, HAS_CUSTOMER, HAS_SUPPLIER, HAS_PARTNER)")
+        logger.info("    Uses embedding similarity + LLM verification for high precision")
         logger.info(
             "  - create_risk_similarity_graph.py - Create risk factor embeddings & SIMILAR_RISK"
         )
@@ -288,11 +288,13 @@ def main():
 
     # Extract business relationships from 10-K filings (CompanyKG edge types)
     # This extracts: HAS_COMPETITOR, HAS_CUSTOMER, HAS_SUPPLIER, HAS_PARTNER
+    # Uses embedding similarity + LLM verification for high precision
     # NOTE: Requires name/ticker from enrich_company_identifiers step!
     if not run_script(
         EXTRACT_BUSINESS_RELATIONSHIPS_SCRIPT,
         execute=True,
-        description="Step 2.6: Extract Business Relationships from 10-K Filings (competitor, customer, supplier, partner)",
+        description="Step 2.6: Extract Business Relationships from 10-K Filings",
+        extra_args=["--clean"],  # Start fresh for reproducibility
         logger=logger,
     ):
         logger.error("Failed at extract_business_relationships step")

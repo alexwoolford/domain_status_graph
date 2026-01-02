@@ -246,7 +246,6 @@ python scripts/create_company_embeddings.py --execute
 python scripts/compute_company_similarity.py --execute
 
 # 7. Extract business relationships (competitors, customers, etc.)
-#    Uses embedding similarity + LLM verification for high precision
 python scripts/extract_with_llm_verification.py --clean --execute
 
 # 8. Compute GDS features

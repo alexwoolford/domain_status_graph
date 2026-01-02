@@ -108,7 +108,7 @@ python scripts/enrich_company_properties.py --execute
 **What it does**: Extracts competitors, customers, suppliers, partners from 10-K text
 
 ```bash
-python scripts/extract_business_relationships.py --execute
+python scripts/extract_with_llm_verification.py --clean --execute
 ```
 
 **Expected output**:

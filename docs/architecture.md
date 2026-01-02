@@ -196,7 +196,7 @@ SIMILAR_DESCRIPTION relationships
 
 ```
 10-K text (business descriptions, risk factors)
-  ↓ [extract_business_relationships.py]
+  ↓ [extract_with_llm_verification.py --clean]
 Entity resolution against SEC CIK database
   ↓
 HAS_COMPETITOR, HAS_CUSTOMER, HAS_SUPPLIER, HAS_PARTNER relationships

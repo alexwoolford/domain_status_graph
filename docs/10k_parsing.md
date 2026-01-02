@@ -60,7 +60,7 @@ When datamule fails, we use a multi-strategy custom parser:
 
 After parsing, we extract business relationships from the text:
 
-**Script**: `scripts/extract_business_relationships.py`
+**Script**: `scripts/extract_with_llm_verification.py --clean`
 
 **What it extracts**:
 - Competitors (HAS_COMPETITOR)
@@ -98,7 +98,7 @@ python scripts/parse_10k_filings.py --execute --workers 4
 ### Extract Business Relationships
 
 ```bash
-python scripts/extract_business_relationships.py --execute
+python scripts/extract_with_llm_verification.py --clean --execute
 ```
 
 ## Data Quality

@@ -67,7 +67,7 @@ python scripts/parse_10k_filings.py --execute
 python scripts/load_company_data.py --execute
 
 # 4. Extract business relationships
-python scripts/extract_business_relationships.py --execute
+python scripts/extract_with_llm_verification.py --clean --execute
 
 # 5. Create embeddings and compute similarity
 python scripts/create_company_embeddings.py --execute
