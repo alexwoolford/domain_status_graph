@@ -1,20 +1,26 @@
 #!/usr/bin/env python3
 """
-Extract business relationships from 10-K filings and load into Neo4j.
+DEPRECATED: Use extract_with_llm_verification.py instead.
 
-This script extracts four relationship types from 10-K filings (matching CompanyKG schema):
+This script extracts business relationships without quality controls.
+For reproducible, quality-controlled extraction, use:
+
+    python scripts/extract_with_llm_verification.py --clean --execute
+
+The new script provides:
+- Embedding similarity verification for COMPETITOR/PARTNER (~85% precision)
+- LLM verification for SUPPLIER/CUSTOMER (~95% precision)
+- Tiered storage (HAS_* for facts, CANDIDATE_* for uncertain)
+- Full reproducibility with --clean flag
+
+---
+LEGACY DOCUMENTATION (for reference only):
+
+This script extracts four relationship types from 10-K filings:
 - HAS_COMPETITOR: Direct competitors
-- HAS_CUSTOMER: Significant customers (SEC requires disclosure if >10% of revenue)
+- HAS_CUSTOMER: Significant customers
 - HAS_SUPPLIER: Key suppliers and vendors
 - HAS_PARTNER: Business partners and strategic alliances
-
-Based on CompanyKG paper: https://arxiv.org/abs/2306.10649
-
-Usage:
-    python scripts/extract_business_relationships.py                    # Dry-run
-    python scripts/extract_business_relationships.py --execute          # Extract all types
-    python scripts/extract_business_relationships.py --execute --type competitor  # Single type
-    python scripts/extract_business_relationships.py --execute --limit 100  # Test with 100 companies
 """
 
 import argparse

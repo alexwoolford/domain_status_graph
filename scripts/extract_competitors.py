@@ -1,8 +1,17 @@
 #!/usr/bin/env python3
 """
-Extract competitor relationships from 10-K filings and load into Neo4j.
+DEPRECATED: Use extract_with_llm_verification.py instead.
 
-This script:
+For reproducible, quality-controlled competitor extraction, use:
+
+    python scripts/extract_with_llm_verification.py --clean --execute --type competitor
+
+The new script provides embedding similarity verification (~85% precision).
+
+---
+LEGACY DOCUMENTATION (for reference only):
+
+This script extracts competitor relationships from 10-K filings:
 1. Builds a lookup table from Neo4j Company nodes for entity resolution
 2. Iterates through cached 10-K extracted data (business descriptions + risk factors)
 3. Extracts competitor mentions using pattern matching

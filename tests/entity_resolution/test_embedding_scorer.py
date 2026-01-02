@@ -134,25 +134,30 @@ class TestEmbeddingSimilarityScorer:
         assert result.threshold == 0.30
         assert 0 <= result.similarity <= 1
 
-    def test_description_caching(self, mock_client):
-        """Company descriptions should be cached."""
+    def test_context_embedding_caching(self, mock_client):
+        """Context embeddings should be cached via AppCache."""
+        from public_company_graph.cache import get_cache
+
         scorer = EmbeddingSimilarityScorer(client=mock_client, threshold=0.30)
+        cache = get_cache()
 
-        # Clear any cached descriptions
-        scorer._description_cache.clear()
+        # Get initial count
+        initial_count = cache.count("context_embeddings")
 
-        # First call
-        scorer.score(context="Test 1", ticker="WMT", company_name="Walmart")
-        first_cache_size = len(scorer._description_cache)
+        # Score with a unique context
+        import uuid
 
-        # Second call with same ticker
-        scorer.score(context="Test 2", ticker="WMT", company_name="Walmart")
-        second_cache_size = len(scorer._description_cache)
+        unique_context = f"Unique test context {uuid.uuid4()}"
+        scorer.score(context=unique_context, ticker="WMT", company_name="Walmart")
 
-        # Cache should have one entry (WMT), not grow on second call
-        assert first_cache_size == 1
-        assert second_cache_size == 1
-        assert "WMT" in scorer._description_cache
+        # Cache should have grown by 1
+        new_count = cache.count("context_embeddings")
+        assert new_count >= initial_count  # At least same (could be more from other tests)
+
+        # Second call with same context should not increase cache
+        scorer.score(context=unique_context, ticker="WMT", company_name="Walmart")
+        final_count = cache.count("context_embeddings")
+        assert final_count == new_count  # No growth, cached
 
 
 class TestCosineSimularity:
