@@ -1,19 +1,37 @@
 #!/usr/bin/env python3
 """
-Extract business relationships with LLM verification for SUPPLIER/CUSTOMER.
+Extract business relationships with LLM verification.
 
-This script:
-1. Extracts candidates using the current method
-2. For HAS_COMPETITOR: Uses embedding threshold (already high precision)
-3. For HAS_SUPPLIER/CUSTOMER: Verifies each candidate with GPT
-4. Only creates edges for verified relationships
+REPRODUCIBLE EXTRACTION PIPELINE
+================================
+This is the canonical script for creating Company-to-Company business
+relationships in the graph. Running with --clean --execute produces
+a reproducible, quality-controlled set of relationships.
+
+Approach:
+1. COMPETITOR/PARTNER: Embedding similarity thresholds (fast, ~85% precision)
+2. SUPPLIER/CUSTOMER: LLM verification (slower, ~95% precision)
+
+Output:
+- HAS_* relationships: High confidence facts (analytics-ready)
+- CANDIDATE_* relationships: Medium confidence (with evidence for review)
+- LOW confidence: Not created (filtered out)
 
 Usage:
-    # Dry run (preview)
-    python scripts/extract_with_llm_verification.py --limit 10
+    # Reproducible full extraction (recommended)
+    python scripts/extract_with_llm_verification.py --clean --execute
 
-    # Execute with LLM verification
-    python scripts/extract_with_llm_verification.py --execute --limit 100
+    # Dry run (preview what would happen)
+    python scripts/extract_with_llm_verification.py --limit 100
+
+    # Estimate cost before running
+    python scripts/extract_with_llm_verification.py --estimate-cost
+
+    # Skip LLM verification (faster but lower precision for supplier/customer)
+    python scripts/extract_with_llm_verification.py --clean --execute --skip-llm-verification
+
+Cost: ~$2.50 for full run (5K+ companies, 15K verifications)
+Time: ~40 minutes for full run (mostly embedding generation on first run)
 """
 
 from __future__ import annotations
@@ -391,6 +409,11 @@ def main():
         action="store_true",
         help="Estimate cost without running",
     )
+    parser.add_argument(
+        "--clean",
+        action="store_true",
+        help="Clear existing business relationships before extraction (for reproducibility)",
+    )
 
     args = parser.parse_args()
 
@@ -426,9 +449,42 @@ def main():
     cache = get_cache()
     driver, database = get_driver_and_database(log)
 
+    # Relationship types to manage
+    BUSINESS_REL_TYPES = [
+        "HAS_COMPETITOR",
+        "HAS_SUPPLIER",
+        "HAS_CUSTOMER",
+        "HAS_PARTNER",
+        "CANDIDATE_COMPETITOR",
+        "CANDIDATE_SUPPLIER",
+        "CANDIDATE_CUSTOMER",
+        "CANDIDATE_PARTNER",
+    ]
+
     try:
         if not verify_neo4j_connection(driver, database, log):
             sys.exit(1)
+
+        # Clean existing relationships if requested
+        if args.clean and args.execute:
+            log.info("=" * 60)
+            log.info("CLEANING existing business relationships...")
+            log.info("=" * 60)
+
+            with driver.session(database=database) as session:
+                for rel_type in BUSINESS_REL_TYPES:
+                    result = session.run(
+                        f"""
+                        MATCH (c1:Company)-[r:{rel_type}]->(c2:Company)
+                        DELETE r
+                        RETURN count(*) as deleted
+                        """
+                    )
+                    deleted = result.single()["deleted"]
+                    if deleted > 0:
+                        log.info(f"  Deleted {deleted} {rel_type} relationships")
+
+            log.info("Clean complete - ready for fresh extraction")
 
         if not args.execute:
             # Dry run
