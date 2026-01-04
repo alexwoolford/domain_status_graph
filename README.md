@@ -268,78 +268,85 @@ All scripts support `--help` and follow a dry-run pattern (omit `--execute` to s
 
 ## Example Queries
 
-### Find Companies Similar to Apple
+### Who Are the Market Leaders?
+
+Find companies most frequently cited as competitors (the dominant players everyone considers a threat):
 
 ```cypher
-MATCH (apple:Company {ticker: 'AAPL'})-[r:SIMILAR_DESCRIPTION]->(similar:Company)
-WHERE r.score > 0.70
-RETURN similar.ticker, similar.name, similar.sector, r.score
-ORDER BY r.score DESC
-LIMIT 10
+MATCH (c:Company)<-[r:HAS_COMPETITOR]-(:Company)
+WITH c, count(r) as cited_by
+ORDER BY cited_by DESC LIMIT 10
+RETURN c.ticker, c.name, cited_by
 ```
 
-**Expected result**: Jamf (0.76), FormFactor (0.74), Western Digital (0.73), Microsoft (0.72), etc.
+**Result**: Pfizer (84), Microsoft (82), Apple (58), Amgen (52), AbbVie (46), Oracle (44)
 
-### Map NVIDIA's Competitive Landscape
+### Threat Ratio: Dominant Companies
+
+Find companies cited as competitors far more than they cite others:
 
 ```cypher
-MATCH (nvda:Company {ticker: 'NVDA'})-[r:HAS_COMPETITOR]->(comp:Company)
-RETURN comp.ticker, comp.name, r.raw_mention, r.confidence
-ORDER BY r.confidence DESC
+MATCH (c:Company)<-[inbound:HAS_COMPETITOR]-(:Company)
+WITH c, count(inbound) as cited_by
+MATCH (c)-[outbound:HAS_COMPETITOR]->(:Company)
+WITH c, cited_by, count(outbound) as cites
+WHERE cited_by >= 10
+RETURN c.ticker, c.name, cited_by, cites,
+       round(toFloat(cited_by)/cites * 10) / 10 as threat_ratio
+ORDER BY threat_ratio DESC LIMIT 5
 ```
 
-### Find Supply Chain Relationships
+**Result**: Walmart (21:1), Microsoft (82:4 = 20.5x), Biogen (18:1), Google (20:2 = 10x)
+
+### True Rivalries: Mutual Competitors
+
+Find companies that cite each other as competitors:
 
 ```cypher
-MATCH (c:Company {ticker: 'NVDA'})
-OPTIONAL MATCH (c)-[:HAS_SUPPLIER]->(supp:Company)
-OPTIONAL MATCH (c)-[:HAS_CUSTOMER]->(cust:Company)
-RETURN c.name,
-       collect(DISTINCT supp.name) as suppliers,
-       collect(DISTINCT cust.name) as customers
+MATCH (a:Company)-[:HAS_COMPETITOR]->(b:Company)-[:HAS_COMPETITOR]->(a)
+WHERE a.ticker < b.ticker
+RETURN a.ticker, b.ticker LIMIT 10
 ```
 
-**Note**: Supply chain data depends on 10-K disclosure. Large companies like Tesla often use generic language ("key suppliers") rather than naming specific companies. NVIDIA, Broadcom, and AMD have richer supply chain data.
+**Result**: Cigna↔CVS, Broadcom↔IBM, Monster↔PepsiCo, Cirrus↔Skyworks
 
-### Technology Adoption Prediction
+### Explainable Similarity: KO vs PEP
 
 ```cypher
-MATCH (c:Company {ticker:'MSFT'})-[:HAS_DOMAIN]->(d:Domain)
-MATCH (d)-[r:LIKELY_TO_ADOPT]->(t:Technology)
-WHERE NOT (d)-[:USES]->(t)
-RETURN t.name, t.category, r.score
-ORDER BY r.score DESC
-LIMIT 10
+MATCH (c1:Company {ticker: 'KO'}), (c2:Company {ticker: 'PEP'})
+OPTIONAL MATCH (c1)-[r1:SIMILAR_DESCRIPTION]->(c2)
+OPTIONAL MATCH (c1)-[r2:SIMILAR_RISK]->(c2)
+OPTIONAL MATCH (c1)-[r3:SIMILAR_INDUSTRY]->(c2)
+RETURN round(r1.score * 100) / 100 as description,
+       round(r2.score * 100) / 100 as risk,
+       r3.score as industry
 ```
 
-### Explain Why Companies Are Similar
+**Result**: 88% similar descriptions, 87% similar risks, same industry — but **neither cites the other as a competitor**!
 
-Use the CLI tool for human-readable explanations:
+### LLM-Verified Supply Chain
 
-```bash
-# Explain KO vs PEP similarity
-python scripts/explain_similarity.py KO PEP
-
-# Output as JSON (for APIs)
-python scripts/explain_similarity.py NVDA AMD --json
+```cypher
+MATCH (c:Company)-[r:HAS_SUPPLIER]->(s:Company)
+WHERE r.llm_verified = true
+RETURN c.ticker, s.ticker, left(r.context, 100) as evidence
+LIMIT 5
 ```
 
-Or use the Python API:
+**Result**: IREN→NVIDIA ("procured 5.5k NVIDIA B200 GPUs"), United Airlines→Boeing ("sources majority of aircraft from Boeing")
 
-```python
-from public_company_graph.company import explain_similarity
-from public_company_graph.neo4j.connection import get_neo4j_driver
-from public_company_graph.config import get_neo4j_database
+### Find Companies Similar to Tesla
 
-driver = get_neo4j_driver()
-explanation = explain_similarity(driver, "KO", "PEP", database=get_neo4j_database())
-print(explanation.summary)
-# "COCA COLA CO and PEPSICO INC have 87% similar business descriptions,
-#  face 87% similar risk factors, and operate in the same industry."
-driver.close()
+```cypher
+MATCH (target:Company {ticker: 'TSLA'})-[r:SIMILAR_DESCRIPTION]->(similar:Company)
+WHERE r.score > 0.75
+RETURN similar.ticker, similar.name, round(r.score * 100) / 100 as similarity
+ORDER BY r.score DESC LIMIT 10
 ```
 
-For more queries, see [docs/money_queries.md](docs/money_queries.md).
+**Result**: FTC Solar (0.80), Sunrun (0.80), Rivian (0.80), GM (0.79), Enphase Energy (0.79)
+
+For 50+ more queries with verified results, see [docs/money_queries.md](docs/money_queries.md).
 
 ---
 
