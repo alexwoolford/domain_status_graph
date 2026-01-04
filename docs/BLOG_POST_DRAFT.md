@@ -100,6 +100,87 @@ When three companies all cite each other, the competitive relationship is highly
 
 ---
 
+## Insights Only a Graph Can Reveal
+
+Some patterns are invisible when reading individual filings. They only emerge from graph traversal:
+
+### 92.5% of Competition is One-Way
+
+```
+Total competitive edges: 3,249
+Mutual pairs (both cite each other): 122
+Mutual edges: 244 (7.5%)
+One-way edges: 3,005 (92.5%)
+```
+
+Almost all competitive relationships are asymmetric. Company A names Company B, but B doesn't name A. You'd never know this from reading any single filing.
+
+### Six Degrees of Microsoft
+
+From Microsoft, you can reach 1,403 companies through competitive relationships:
+
+| Hops | Companies Reachable |
+|------|---------------------|
+| 1 | 85 |
+| 2 | 190 |
+| 3 | 224 |
+| 4 | 295 |
+| 5 | 329 |
+| 6 | 280 |
+
+The competitive network is highly connected. Most companies competing in the same space are 3-5 hops apart.
+
+### Competitive Chains Span Industries
+
+```
+CareCloud → Veradigm → EverCommerce → Intuit
+(Healthcare IT)  →  (Healthcare IT)  →  (Business Services)  →  (Consumer Finance)
+```
+
+A healthcare tech company is competitively connected to Intuit through 3 hops. Each company only knows its immediate neighbors — the chain is invisible without the graph.
+
+### NVIDIA's Indirect Competitors
+
+NVIDIA's 10-K only names AMD as a competitor. But through AMD, NVIDIA is one hop from:
+
+- Analog Devices
+- Intel
+- Texas Instruments
+- Lattice Semiconductor
+- NXP Semiconductors
+- Broadcom
+- Marvell
+
+These are **indirect competitors** — companies AMD competes with that NVIDIA doesn't mention. A portfolio manager tracking NVIDIA should know about all of them.
+
+### Competitive "Hubs" — Cite One, Get Many
+
+When you cite Broadcom as a competitor, you transitively enter a network of 24 additional companies:
+
+| Company | Times Cited | Avg Indirect Competitors Gained |
+|---------|-------------|--------------------------------|
+| **Broadcom** | 16 | **24.4** |
+| Caribou Biosciences | 5 | 18.0 |
+| ImmunityBio | 6 | 14.2 |
+| Allogene Therapeutics | 11 | 8.7 |
+| Oracle | 44 | 6.1 |
+
+Broadcom is a competitive "hub." Citing them connects you to their entire network. Oracle is cited 44 times but only adds 6 indirect competitors — it's more of a destination than a connector.
+
+### For Every Direct Relationship, 64 Indirect Ones
+
+| Hops | Pairs of Companies |
+|------|-------------------|
+| 1 (direct) | 1,325 |
+| 2 | 17,987 |
+| 3 | 34,270 |
+| 4 | 68,533 |
+| 5 | 85,144 |
+
+For every pair of companies with a direct competitive relationship, there are 64 pairs connected through 5 hops. The indirect network is **64x larger** than the direct one.
+
+---
+
 ## The KO-PEP Paradox
 
 Some rivalries are so obvious they go unspoken:
@@ -129,8 +210,20 @@ Bloomberg and Refinitiv classify companies by industry codes. This graph capture
 | **Similarity** | Single dimension (sector) | Four dimensions (description, risk, industry, tech) |
 | **Evidence** | None | Exact sentence from filing |
 | **Asymmetry** | Not captured | Who cites whom |
+| **Transitivity** | Not possible | 2+ hop paths, indirect competitors |
+| **Network structure** | Not captured | Hubs, bridges, clusters |
 
-Traditional databases tell you Apple and Microsoft are both "Technology." The graph tells you that 82 companies cite Microsoft as a competitor, 4 companies Microsoft cites back, and exactly which sentences establish each relationship.
+Traditional databases tell you Apple and Microsoft are both "Technology."
+
+The graph tells you:
+- 82 companies cite Microsoft as a competitor
+- Microsoft cites 4 back (20.5x threat ratio)
+- Microsoft connects to 1,403 companies within 6 hops
+- The exact sentences establishing each relationship
+- Which companies are "hubs" (Broadcom adds 24 indirect competitors)
+- Which competitive chains span industries
+
+**The indirect network is 64x larger than the direct one.** That's invisible without graph traversal.
 
 ---
 
@@ -162,6 +255,12 @@ Traditional databases tell you Apple and Microsoft are both "Technology." The gr
 
 5. **Silence is data.** Amazon naming zero competitors tells you as much as Broadcom naming 27.
 
+6. **The indirect network dwarfs the direct one.** For every direct competitive pair, there are 64 pairs connected through 5 hops.
+
+7. **Competitive hubs matter.** Citing Broadcom transitively connects you to 24 more companies. Oracle connects you to only 6.
+
+8. **Graphs reveal what filings hide.** Asymmetry (92.5% one-way), path length, and cross-industry chains are invisible in any single document.
+
 ---
 
 ## Try It Yourself
@@ -189,6 +288,29 @@ WITH c, cited_by, count(outbound) as cites
 WHERE cites = 0
 RETURN c.ticker, c.name, cited_by
 ORDER BY cited_by DESC
+```
+
+Find indirect competitors (2-hop rivals):
+
+```cypher
+MATCH (company:Company {ticker: 'NVDA'})-[:HAS_COMPETITOR]->(mid:Company)-[:HAS_COMPETITOR]->(indirect:Company)
+WHERE NOT (company)-[:HAS_COMPETITOR]->(indirect) AND company <> indirect
+RETURN indirect.ticker, indirect.name,
+       collect(DISTINCT mid.ticker) as connected_through
+ORDER BY size(collect(DISTINCT mid)) DESC
+```
+
+Find competitive "hubs" that connect networks:
+
+```cypher
+MATCH (citer:Company)-[:HAS_COMPETITOR]->(hub:Company)-[:HAS_COMPETITOR]->(friend:Company)
+WHERE citer <> friend AND NOT (citer)-[:HAS_COMPETITOR]->(friend)
+WITH hub, citer, count(DISTINCT friend) as transitive_competitors
+WITH hub, avg(transitive_competitors) as avg_indirect, count(citer) as times_cited
+WHERE times_cited >= 5
+RETURN hub.ticker, hub.name, times_cited,
+       round(avg_indirect * 10) / 10 as avg_indirect_competitors_gained
+ORDER BY avg_indirect DESC
 ```
 
 ---
