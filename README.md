@@ -81,7 +81,6 @@ Using Neo4j Graph Data Science (GDS):
 | `HAS_CUSTOMER` | Company → Company | 243 | Extracted from 10-K (LLM verified) |
 | `HAS_SUPPLIER` | Company → Company | 130 | Extracted from 10-K (LLM verified) |
 | `CANDIDATE_*` | Company → Company | 1,048 | Medium confidence (with evidence) |
-| `IMPLICIT_COMPETITOR` | Company → Company | 15,000 | Same industry (Yahoo Finance) |
 
 For complete schema documentation, see [docs/graph_schema.md](docs/graph_schema.md).
 

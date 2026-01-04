@@ -67,8 +67,6 @@ The Public Company Graph is a knowledge graph modeling **public companies**, the
 |   - CANDIDATE_COMPETITOR | 111 |
 |   - CANDIDATE_SUPPLIER | 151 |
 |   - CANDIDATE_CUSTOMER | 113 |
-| - Implicit competitor relationships | 15,000 |
-|   - IMPLICIT_COMPETITOR | 15,000 |
 | - Technology relationships | 128,551 |
 |   - USES | 46,081 |
 |   - LIKELY_TO_ADOPT | 41,250 |
@@ -330,39 +328,6 @@ MATCH (c:Company {ticker:'AAPL'})-[r:CANDIDATE_SUPPLIER]->(supp:Company)
 RETURN supp.name, r.embedding_similarity, r.context
 ORDER BY r.embedding_similarity DESC
 ```
-
----
-
-### Implicit Competitor Relationships
-
-#### IMPLICIT_COMPETITOR
-
-**Pattern**: `(Company)-[:IMPLICIT_COMPETITOR]->(Company)`
-
-**Description**: Companies in the same industry (from Yahoo Finance classification) are considered implicit competitors. This provides additional graph density beyond explicitly mentioned competitors from 10-K filings.
-
-**Count**: 15,000
-
-**Properties**:
-| Property | Type | Description |
-|----------|------|-------------|
-| `source` | STRING | Always `same_industry` |
-| `industry` | STRING | The shared industry classification |
-| `created_at` | DATETIME | When relationship was created |
-
-**Example**:
-```cypher
-// Find implicit competitors for Apple
-MATCH (c:Company {ticker:'AAPL'})-[r:IMPLICIT_COMPETITOR]-(comp:Company)
-RETURN comp.ticker, comp.name, r.industry
-ORDER BY comp.market_cap DESC
-LIMIT 10
-```
-
-**Notes**:
-- Excludes certain broad industries (Shell Companies, Asset Management, etc.)
-- Does not duplicate explicit HAS_COMPETITOR relationships
-- Useful for expanding competitive landscape analysis beyond explicit mentions
 
 ---
 
@@ -647,7 +612,6 @@ LIMIT 20
 | `scripts/bootstrap_graph.py` | Load Domain and Technology nodes + USES relationships |
 | `scripts/load_company_data.py` | Load Company nodes from SEC EDGAR |
 | `scripts/extract_with_llm_verification.py --clean` | Extract HAS_COMPETITOR/CUSTOMER/SUPPLIER/PARTNER from 10-Ks |
-| `scripts/create_implicit_competitors.py` | Create IMPLICIT_COMPETITOR from shared industry |
 | `scripts/compute_gds_features.py` | Compute LIKELY_TO_ADOPT, CO_OCCURS_WITH |
 | `scripts/compute_company_similarity.py` | Compute all SIMILAR_* relationships |
 
