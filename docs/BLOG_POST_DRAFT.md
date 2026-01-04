@@ -1,161 +1,166 @@
-# What 5,398 Companies Reveal About Themselves (And Each Other) in SEC Filings
+# What 5,398 Companies Reveal About Competition in Their SEC Filings
 
-*Building a knowledge graph from 10-K filings to discover competitive relationships, hidden rivals, and trillion-dollar blind spots.*
-
----
-
-## The $6.5 Trillion Blind Spot
-
-Here's a surprising discovery from analyzing SEC 10-K filings of every U.S. public company:
-
-**Apple ($4.1T market cap) and Amazon ($2.5T market cap) — the world's two largest companies — are cited as competitors by almost no one in their SEC filings.**
-
-| Company | Market Cap | Times Cited as Competitor |
-|---------|-----------|--------------------------|
-| Apple | $4.1 trillion | 58 (mostly tiny companies) |
-| Amazon | $2.5 trillion | 0 |
-| Pfizer | $165 billion | 84 |
-| Microsoft | $3.0 trillion | 82 |
-
-The most-cited competitors aren't the biggest companies. They're industry specialists like Pfizer (84 citations) and infrastructure giants like Microsoft (82 citations). Why? Because SEC disclosure rules don't require companies to name competitors unless they're material to risks — and when you're a $1M software startup, you're not competing with Amazon in any material way.
-
-But smaller companies *do* cite them. A $1M mobile game company says they compete with Apple. A $9M radio broadcaster says Apple competes for advertising. They're not wrong — but Apple doesn't mention them back.
-
-**This asymmetry reveals something important**: competitive disclosure in SEC filings captures *perceived* competitive pressure, not market share. And that perception flows upward.
+*Analyzing 10-K filings to discover who acknowledges whom as competitors — and who stays silent.*
 
 ---
 
-## The Most Transparent (and Most Secretive) Companies
+## The Infinite Threat Ratio
 
-Some companies name 27 competitors. Others name zero.
+We built a knowledge graph from SEC 10-K filings to map competitive relationships. The most striking finding? **The companies most frequently cited as competitors never cite anyone back.**
 
-### Most Transparent About Competition
+| Company | Cited By | Cites | Threat Ratio |
+|---------|----------|-------|--------------|
+| **Pfizer** | 84 companies | 0 | ∞ |
+| **Apple** | 58 companies | 0 | ∞ |
+| **Amgen** | 52 companies | 0 | ∞ |
+| **AbbVie** | 46 companies | 0 | ∞ |
+| **Medtronic** | 42 companies | 0 | ∞ |
+| Microsoft | 82 companies | 4 | 20.5x |
+| Oracle | 44 companies | 7 | 6.3x |
 
-| Company | Market Cap | Competitors Disclosed |
-|---------|-----------|----------------------|
-| **Broadcom** | $1.7T | 27 |
-| AMD | $349B | 8 |
-| Booking Holdings | $175B | 6 |
-| Arch Capital | $35B | 7 |
+Pfizer appears in 84 companies' 10-K filings as a competitor. Pfizer's own 10-K names zero.
 
-Broadcom ($1.7T) discloses 27 competitors in their 10-K, from AMD to Intel to Microsoft. They explicitly say: *"In semiconductor solutions, we compete with integrated device manufacturers, fabless semiconductor companies..."*
+**This isn't negligence — it's strategy.** When you're the market leader, naming competitors validates them. When you're a $50M biotech, naming Pfizer explains your risk factors.
 
-### Completely Silent About Competition
+---
 
-| Company | Market Cap | Competitors Disclosed |
-|---------|-----------|----------------------|
-| **Apple** | $4.1T | 0 |
-| **Amazon** | $2.5T | 0 |
-| **Bank of America** | $410B | 0 |
-| **AbbVie** | $408B | 0 |
-| **Abbott Labs** | $217B | 0 |
-| **Blackstone** | $190B | 0 |
+## The Asymmetry of Competitive Awareness
 
-The pattern is clear: **the biggest companies say the least about competition.** This isn't negligence — it's strategy. When you're $4 trillion, naming competitors validates them.
+SEC filings don't require companies to name competitors. They require disclosure of *material* competitive risks. That creates a one-way information flow:
+
+**Small companies cite large companies.** A $1 million mobile game company (Appsoft Technologies) explicitly names Apple as a competitor: *"We could face increased competition if large companies...such as Apple, Google, Amazon...choose to enter or expand in the games space."*
+
+**Large companies cite no one.** Apple's 10-K doesn't name Appsoft — because Appsoft isn't a material risk to Apple.
+
+The most extreme example: Appsoft ($1M market cap) cites Apple ($4.1T market cap) — a **3.4-million-to-one** size ratio.
+
+This asymmetry means competitive edges in SEC filings measure *perceived threat*, not market share. Small companies feel threatened by giants; giants don't feel threatened by anyone they'd name.
+
+---
+
+## Who Actually Discloses Competitors?
+
+The most transparent company in our dataset is **Broadcom** — they name 27 competitors in their 10-K, from AMD to Intel to Microsoft to Cisco. They're also highly cited (16 companies name them), creating a balanced competitive profile:
+
+| Company | Cited By | Cites | Notes |
+|---------|----------|-------|-------|
+| **Broadcom** | 16 | 27 | Most transparent |
+| Oracle | 44 | 7 | Tech leader, names some |
+| Allogene Therapeutics | 11 | 12 | Balanced biotech |
+| Qorvo | 9 | 7 | Semiconductor, balanced |
+
+**Why Broadcom?** They operate in semiconductors (highly competitive, many named players) and enterprise software (also competitive). Their 10-K explicitly lists competitors by segment: *"In semiconductor solutions, we compete with integrated device manufacturers, fabless semiconductor companies..."*
+
+Compare to **Amazon** ($2.5T market cap): cited by zero companies as a competitor, names zero competitors. Complete competitive silence.
 
 ---
 
 ## Hidden Rivals: 90% Similar, Never Mentioned
 
-The graph reveals pairs of companies that are:
-- 85%+ similar by business description
-- Competing against 5+ of the same companies
-- But **never mention each other** as competitors
+The graph reveals pairs of companies that should know about each other — but apparently don't:
 
 | Company A | Company B | Shared Competitors | Description Similarity |
 |-----------|-----------|-------------------|----------------------|
 | Caribou Biosciences | MiNK Therapeutics | 8 | 90% |
 | Caribou Biosciences | Alaunos Therapeutics | 8 | 89% |
 | Adicet Bio | Celularity | 9 | 86% |
-| Adicet Bio | Alaunos Therapeutics | 7 | 89% |
 
-These are cell therapy companies competing against the exact same rivals (Fate Therapeutics, Atara Biotherapeutics, CRISPR Therapeutics) but apparently unaware of each other. The graph surfaces relationships that individual filings miss.
+These are cell therapy companies. They:
+- Describe themselves 86-90% similarly (by embedding comparison)
+- Compete against the same 7-9 companies (Fate Therapeutics, CRISPR Therapeutics, Atara Biotherapeutics)
+- **Never mention each other**
+
+Why? Probably because they're all relatively small and focused on different therapeutic targets within cell therapy. But from an investor or analyst perspective, these are *hidden rivals* — similar enough to be substitutes, competing for the same talent and capital, but not on each other's radar.
+
+The graph surfaces relationships that individual filings miss.
 
 ---
 
-## Triangular Rivalries: When Everyone Knows Everyone
+## Triangular Rivalries
 
-Some competitive clusters are so tight that every company cites every other company:
+Some competitive clusters are so tight that every company acknowledges every other. These are complete competitive triangles — the most validated relationships in the graph:
 
 **Semiconductor RF Chips:**
 - Broadcom ↔ Skyworks ↔ Qorvo
+- All three name each other as competitors
 
-**Commercial Real Estate Services:**
+**Commercial Real Estate:**
 - CBRE ↔ Jones Lang LaSalle ↔ Newmark
+- Complete mutual acknowledgment
 
 **Contract Electronics Manufacturing:**
 - Benchmark Electronics ↔ Celestica ↔ Sanmina
+- All compete for the same manufacturing contracts
 
 **Cell Therapy:**
 - Caribou Biosciences ↔ Century Therapeutics ↔ Sana Biotechnology
+- Despite some pairs being "hidden rivals," this triangle is fully acknowledged
 
-These are *complete competitive triangles* — each company cites both others as competitors. This validates the relationship and makes these some of the most reliable competitive edges in the graph.
-
----
-
-## David vs. Goliath: The 3.4-Million-to-One Ratio
-
-The most extreme competitive asymmetry in the data:
-
-| Small Company | Market Cap | Cites As Competitor | Market Cap | Size Ratio |
-|---------------|-----------|---------------------|-----------|------------|
-| Appsoft Technologies | $1M | Apple | $4.1T | **3,381,633x** |
-| Beasley Broadcast | $9M | Apple | $4.1T | 439,421x |
-
-A $1M company saying they compete with a $4.1T company. That's not hubris — it's SEC-required disclosure of material competitive risks. The graph captures these because they're self-declared, not inferred.
+When three companies all cite each other, the competitive relationship is highly reliable. These triangles are the gold standard of SEC-derived competitive intelligence.
 
 ---
 
-## What You Can't Get From Bloomberg
+## The KO-PEP Paradox
 
-Traditional financial databases classify companies by industry codes. This graph captures:
-
-1. **Self-declared competitive relationships** — What companies say about themselves, not what analysts infer
-2. **Explainable similarity** — *Why* two companies are similar (description, risk profile, technology stack)
-3. **Competitive asymmetry** — Who cites whom (and who ignores whom)
-4. **Multi-hop relationships** — NVIDIA cites AMD, AMD cites Intel, Intel cites NVIDIA...
-
-### Example: Why Are Coca-Cola and PepsiCo Similar?
+Some rivalries are so obvious they go unspoken:
 
 ```
-Description similarity: 88%
-Risk profile similarity: 87%
-Same industry: Yes
-KO cites PEP as competitor: No
-PEP cites KO as competitor: No
+Coca-Cola vs. PepsiCo:
+  Description similarity: 88%
+  Risk profile similarity: 87%
+  Same industry: Yes
+  KO cites PEP as competitor: No
+  PEP cites KO as competitor: No
 ```
 
-They're 88% similar by business description, face 87% similar risks, and are in the exact same industry — **but neither explicitly names the other as a competitor in their 10-K.** Some things are so obvious they go unsaid.
+Neither Coca-Cola nor PepsiCo names the other in their 10-K filings. They're 88% similar by business description, face 87% similar risks, and are in the exact same industry — but explicit competitor disclosure? Zero.
+
+This suggests a third category beyond "transparent" and "silent": **implicitly known**. Some competitive relationships are so universal that naming them adds no information.
 
 ---
 
-## Building the Graph
+## What You Can't Get From Traditional Databases
 
-The graph contains:
-- **5,398 Companies** with business descriptions, risk factors, and market data
-- **3,249 Competitive relationships** extracted from 10-K filings (embedding-verified)
-- **2+ million similarity edges** (description, risk, industry, technology stack)
-- **Every edge has evidence** — the exact sentence from the filing that establishes the relationship
+Bloomberg and Refinitiv classify companies by industry codes. This graph captures something different:
 
-### Data Quality
+| Dimension | Traditional | This Graph |
+|-----------|------------|------------|
+| **Competition** | Inferred from industry | Self-declared in filings |
+| **Similarity** | Single dimension (sector) | Four dimensions (description, risk, industry, tech) |
+| **Evidence** | None | Exact sentence from filing |
+| **Asymmetry** | Not captured | Who cites whom |
 
-- Competitive relationships use embedding similarity (≥0.35 threshold) to filter false positives
-- Supply chain relationships (130 suppliers, 243 customers) are LLM-verified for precision
-- Every relationship includes the source context from the 10-K filing
+Traditional databases tell you Apple and Microsoft are both "Technology." The graph tells you that 82 companies cite Microsoft as a competitor, 4 companies Microsoft cites back, and exactly which sentences establish each relationship.
 
 ---
 
-## Key Insights for Analysts
+## Graph Statistics
 
-1. **Competitive disclosure flows upward**: Small companies cite large competitors; large companies cite peers or no one.
+| Metric | Count |
+|--------|-------|
+| Companies | 5,398 |
+| Competitive relationships | 3,249 |
+| Similarity edges | 2+ million |
+| Complete triangles | 4 verified |
 
-2. **Silence is strategic**: The biggest companies disclose the fewest competitors. Apple and Amazon name zero.
+**Data quality:**
+- Competitive edges are embedding-verified (≥0.35 similarity threshold)
+- Supply chain edges (130 suppliers, 243 customers) are LLM-verified
+- Every edge stores the source sentence from the 10-K
 
-3. **Graph reveals hidden rivals**: Companies with 90%+ similar descriptions and shared competitors often don't acknowledge each other.
+---
 
-4. **Triangular clusters validate relationships**: When three companies all cite each other, the competitive relationship is highly reliable.
+## Key Takeaways
 
-5. **SEC filings capture perceived threats, not market share**: A $1M company citing Apple tells you about *their* competitive pressures, not Apple's.
+1. **Competitive disclosure flows upward.** Small companies cite large; large cite peers or no one.
+
+2. **Infinite threat ratios are real.** Pfizer is cited 84 times, cites zero. This is strategy, not negligence.
+
+3. **Hidden rivals exist.** Companies 90% similar may never acknowledge each other.
+
+4. **Triangles are gold.** When three companies all cite each other, that's validated competitive intelligence.
+
+5. **Silence is data.** Amazon naming zero competitors tells you as much as Broadcom naming 27.
 
 ---
 
@@ -166,36 +171,25 @@ The full graph is open source:
 ```bash
 git clone https://github.com/alexwoolford/public-company-graph
 cd public-company-graph
-git lfs pull  # Download the database dump
+git lfs pull
 
 # Restore to Neo4j (must be stopped)
 neo4j-admin database load neo4j --from-path=data/ --overwrite-destination=true
 neo4j start
 ```
 
-Then run queries like:
+Find the "infinite threat ratio" companies:
 
 ```cypher
-// Find the "sleeping giants" - big companies that name no competitors
-MATCH (c:Company)
-WHERE c.market_cap > 50000000000
-AND NOT EXISTS { (c)-[:HAS_COMPETITOR]->() }
-RETURN c.ticker, c.name, round(c.market_cap / 1e9) as market_cap_B
-ORDER BY c.market_cap DESC
-LIMIT 10
+MATCH (c:Company)<-[inbound:HAS_COMPETITOR]-(:Company)
+WITH c, count(inbound) as cited_by
+WHERE cited_by >= 10
+OPTIONAL MATCH (c)-[outbound:HAS_COMPETITOR]->(:Company)
+WITH c, cited_by, count(outbound) as cites
+WHERE cites = 0
+RETURN c.ticker, c.name, cited_by
+ORDER BY cited_by DESC
 ```
-
----
-
-## What's Next?
-
-This is a snapshot. Future work could:
-- Add **temporal analysis** (how do competitive relationships change over 5 years?)
-- Add **M&A relationships** from 8-K filings
-- Add **executive/board relationships** from proxy statements
-- Enable **predictive analytics** (which companies will become competitors?)
-
-The graph is reproducible — every step from SEC filing to Neo4j is scripted and documented.
 
 ---
 
