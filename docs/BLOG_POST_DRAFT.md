@@ -451,6 +451,153 @@ RETURN hub.ticker, hub.name, times_cited,
 ORDER BY avg_indirect DESC
 ```
 
+### Investment Risk Queries
+
+**Supplier concentration risk** — Companies depending on a single supplier:
+
+```cypher
+MATCH (c:Company)-[:HAS_SUPPLIER]->(supplier:Company)
+WITH c, count(supplier) as supplier_count, collect(supplier.ticker) as suppliers
+WHERE supplier_count = 1
+RETURN c.ticker, c.name, suppliers[0] as sole_supplier
+ORDER BY c.ticker
+```
+
+**Boeing dependency network** — All companies that depend on Boeing:
+
+```cypher
+MATCH (c:Company)-[:HAS_SUPPLIER]->(ba:Company {ticker: 'BA'})
+RETURN c.ticker, c.name, c.yahoo_industry
+ORDER BY c.name
+```
+
+**NVIDIA systemic risk** — Companies dependent on NVIDIA:
+
+```cypher
+MATCH (c:Company)-[:HAS_SUPPLIER]->(nvda:Company {ticker: 'NVDA'})
+OPTIONAL MATCH (c)-[:HAS_COMPETITOR]->(comp:Company)
+RETURN c.ticker, c.name,
+       collect(DISTINCT comp.ticker) as also_competes_with
+ORDER BY c.ticker
+```
+
+**Stealth competitors** — Companies attacking many but not cited back:
+
+```cypher
+MATCH (c:Company)
+WHERE NOT EXISTS { (:Company)-[:HAS_COMPETITOR]->(c) }
+AND EXISTS { (c)-[:HAS_COMPETITOR]->(:Company) }
+MATCH (c)-[:HAS_COMPETITOR]->(target:Company)
+WITH c, collect(target.ticker) as targets, count(*) as attack_count
+WHERE attack_count >= 5
+RETURN c.ticker, c.name, attack_count, targets[0..5] as attacking
+ORDER BY attack_count DESC
+```
+
+**Transitive customer risk** — "Competitor of my customer":
+
+```cypher
+MATCH (company:Company)-[:HAS_CUSTOMER]->(customer:Company)
+MATCH (customer)-[:HAS_COMPETITOR]->(cust_competitor:Company)
+WHERE company <> cust_competitor
+RETURN company.ticker, company.name,
+       customer.ticker as my_customer,
+       collect(cust_competitor.ticker) as their_competitors
+LIMIT 15
+```
+
+**Risk profile clustering** — Companies with 90%+ similar risks:
+
+```cypher
+MATCH (c:Company)-[r:SIMILAR_RISK]->()
+WHERE r.score >= 0.90
+WITH c, count(*) as high_risk_connections
+WHERE high_risk_connections >= 20
+RETURN c.ticker, c.name, c.yahoo_sector, high_risk_connections
+ORDER BY high_risk_connections DESC
+LIMIT 15
+```
+
+**Customer concentration** — Companies with single customer:
+
+```cypher
+MATCH (c:Company)-[:HAS_CUSTOMER]->(cust:Company)
+WITH c, count(cust) as customer_count
+WHERE customer_count = 1
+RETURN c.ticker, c.name, 'Single customer' as concentration
+LIMIT 15
+```
+
+### Graph Analytics Queries
+
+**Top PageRank companies** (most central in competitive network):
+
+```cypher
+MATCH (c:Company)
+WHERE c.competitive_pagerank IS NOT NULL
+RETURN c.ticker, c.name,
+       round(c.competitive_pagerank * 100) / 100 as pagerank_score,
+       c.competitive_in_degree as cited_by,
+       c.competitive_out_degree as cites
+ORDER BY c.competitive_pagerank DESC
+LIMIT 15
+```
+
+**Top betweenness companies** (bridge companies):
+
+```cypher
+MATCH (c:Company)
+WHERE c.competitive_betweenness IS NOT NULL
+RETURN c.ticker, c.name,
+       round(c.competitive_betweenness * 100) / 100 as betweenness_score,
+       c.competitive_in_degree as cited_by,
+       c.competitive_out_degree as cites
+ORDER BY c.competitive_betweenness DESC
+LIMIT 15
+```
+
+**Largest competitive communities**:
+
+```cypher
+MATCH (c:Company)
+WHERE c.competitive_community IS NOT NULL
+WITH c.competitive_community as community, count(*) as size
+WHERE size >= 5
+RETURN community, size
+ORDER BY size DESC
+LIMIT 10
+```
+
+**Companies in a specific community** (e.g., largest pharma cluster):
+
+```cypher
+MATCH (c:Company)
+WHERE c.competitive_community = 2511
+RETURN c.ticker, c.name,
+       round(c.competitive_pagerank * 100) / 100 as pagerank,
+       c.competitive_in_degree as cited_by
+ORDER BY c.competitive_pagerank DESC
+LIMIT 20
+```
+
+**Multi-dimensional risk exposure** — Companies similar on risk, description, and technology:
+
+```cypher
+MATCH (a:Company)-[r:SIMILAR_RISK]->(b:Company)
+WHERE r.score >= 0.85
+MATCH (a)-[d:SIMILAR_DESCRIPTION]->(b)
+WHERE d.score >= 0.70
+MATCH (a)-[t:SIMILAR_TECHNOLOGY]->(b)
+WHERE t.score >= 0.50
+AND a.ticker < b.ticker
+RETURN a.ticker, a.name, b.ticker, b.name,
+       round(r.score * 100) as risk_pct,
+       round(d.score * 100) as desc_pct,
+       round(t.score * 100) as tech_pct
+ORDER BY r.score + d.score + t.score DESC
+LIMIT 15
+```
+
 ---
 
 *Built with Neo4j, Python, OpenAI embeddings, and SEC EDGAR data. Inspired by [CompanyKG](https://arxiv.org/abs/2306.10649) (NeurIPS 2023).*
