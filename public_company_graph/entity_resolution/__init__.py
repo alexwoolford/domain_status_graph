@@ -8,9 +8,9 @@ This module separates concerns into distinct, testable components:
 - Candidate filtering (blocklists, length checks)
 - Candidate matching (lookup table resolution)
 - Confidence scoring (multi-factor scoring)
-- Semantic similarity (embedding-based disambiguation) [NEW]
-- Character similarity (n-gram surface-form matching) [NEW]
-- Combined scoring (Wide & Deep approach) [NEW]
+- Semantic similarity (embedding-based disambiguation)
+- Character similarity (n-gram surface-form matching)
+- Combined scoring (Wide & Deep approach)
 
 Each component can be tested independently and swapped out for improved versions.
 

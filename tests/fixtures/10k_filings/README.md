@@ -23,7 +23,7 @@ Test fixtures should:
 
 *To be added: Select 2-3 good test files from recent years*
 
-## Adding New Test Files
+## Adding Test Files
 
 1. **Select a good file** from `data/10k_filings/{CIK}/10k_{YEAR}.html`
 2. **Verify it parses correctly**:

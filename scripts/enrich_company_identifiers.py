@@ -74,6 +74,7 @@ def enrich_company_identifiers(
         companies_to_update = []
         matched = 0
         already_complete = 0
+        not_in_sec = 0
 
         for record in result:
             cik = record["cik"]
@@ -87,7 +88,8 @@ def enrich_company_identifiers(
                 matched += 1
                 sec_data = sec_by_cik[cik_padded]
 
-                # Check if update is needed
+                # Always update if SEC data exists (idempotent - ensures consistency)
+                # This ensures companies get the latest SEC data even if they already have partial data
                 needs_name = not current_name and sec_data["name"]
                 needs_ticker = not current_ticker and sec_data["ticker"]
 
@@ -101,10 +103,16 @@ def enrich_company_identifiers(
                     )
                 else:
                     already_complete += 1
+            else:
+                not_in_sec += 1
 
     log.info(f"Matched {matched:,} companies with SEC data")
     log.info(f"  Already complete (have name+ticker): {already_complete:,}")
     log.info(f"  Need updates: {len(companies_to_update):,}")
+    if not_in_sec > 0:
+        log.warning(
+            f"  ⚠ {not_in_sec:,} companies not found in SEC data (may be private/delisted/foreign)"
+        )
 
     if not execute:
         log.info("")

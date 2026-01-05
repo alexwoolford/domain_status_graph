@@ -3,7 +3,7 @@
 Analyze errors on a specific split to guide improvements.
 
 ONLY run this on train or validation sets during development.
-Use this to understand patterns and develop new logic.
+Use this to understand patterns and develop additional logic.
 
 Usage:
   python scripts/er_analyze_errors.py --split train
@@ -158,7 +158,7 @@ def analyze_errors(records: list[dict], error_type: str | None = None):
     print(f"False Negatives: {len(false_negatives)} (hurting recall)")
     print()
     print("Next steps:")
-    print("  - For FPs: Find patterns that can be filtered (new rules)")
+    print("  - For FPs: Find patterns that can be filtered (additional rules)")
     print("  - For FNs: Check if filters are too aggressive (relax thresholds)")
     print("  - After changes, validate on: python scripts/er_evaluate_split.py --split validation")
 

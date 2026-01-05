@@ -70,7 +70,7 @@ def write_industry_relationships(
         if deleted > 0:
             log.info(f"Deleted {deleted} existing relationships")
 
-    # Write new relationships (bidirectional - both directions for symmetric similarity)
+    # Write relationships (bidirectional - both directions for symmetric similarity)
     log.info(f"Writing {len(pairs)} SIMILAR_INDUSTRY relationships (bidirectional)...")
     batch = []
     relationships_written = 0
@@ -180,7 +180,7 @@ def write_size_relationships(
         if deleted > 0:
             log.info(f"Deleted {deleted} existing relationships")
 
-    # Write new relationships using optimized UNWIND batching (bidirectional)
+    # Write relationships using optimized UNWIND batching (bidirectional)
     # This approach is reliable, performant, and works on all systems
     log.info(f"Writing {len(pairs):,} SIMILAR_SIZE relationships (bidirectional)...")
 
@@ -310,7 +310,8 @@ def compute_all_similarity(
         return {"industry": 0, "size": 0}
 
     # Compute industry similarity
-    log.info("\n" + "=" * 80)
+    log.info("")
+    log.info("=" * 80)
     log.info("Computing Industry Similarity")
     log.info("=" * 80)
 
@@ -334,7 +335,8 @@ def compute_all_similarity(
     )
 
     # Compute size similarity
-    log.info("\n" + "=" * 80)
+    log.info("")
+    log.info("=" * 80)
     log.info("Computing Size Similarity")
     log.info("=" * 80)
 

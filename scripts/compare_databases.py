@@ -69,6 +69,83 @@ def get_database_stats(driver, database_name: str) -> dict:
     return stats
 
 
+def check_key_entities(driver, db1: str, db2: str) -> None:
+    """Check for specific key entities that should exist in both databases."""
+    print("\n" + "-" * 40)
+    print("KEY ENTITY CHECKS")
+    print("-" * 40)
+
+    checks = [
+        (
+            "Company nodes with CIK",
+            "MATCH (c:Company) WHERE c.cik IS NOT NULL RETURN count(c) AS count",
+        ),
+        (
+            "Company nodes with ticker",
+            "MATCH (c:Company) WHERE c.ticker IS NOT NULL RETURN count(c) AS count",
+        ),
+        (
+            "Company nodes with description",
+            "MATCH (c:Company) WHERE c.description IS NOT NULL RETURN count(c) AS count",
+        ),
+        (
+            "Company nodes with embeddings",
+            "MATCH (c:Company) WHERE c.description_embedding IS NOT NULL RETURN count(c) AS count",
+        ),
+        ("Domain nodes", "MATCH (d:Domain) RETURN count(d) AS count"),
+        ("Technology nodes", "MATCH (t:Technology) RETURN count(t) AS count"),
+        (
+            "Company-Domain relationships",
+            "MATCH (c:Company)-[:HAS_DOMAIN]->(d:Domain) RETURN count(*) AS count",
+        ),
+        (
+            "Company-Technology relationships",
+            "MATCH (c:Company)-[:USES]->(t:Technology) RETURN count(*) AS count",
+        ),
+        (
+            "Domain-Technology relationships",
+            "MATCH (d:Domain)-[:USES]->(t:Technology) RETURN count(*) AS count",
+        ),
+        (
+            "Business relationships (HAS_COMPETITOR)",
+            "MATCH ()-[r:HAS_COMPETITOR]->() RETURN count(r) AS count",
+        ),
+        (
+            "Business relationships (HAS_SUPPLIER)",
+            "MATCH ()-[r:HAS_SUPPLIER]->() RETURN count(r) AS count",
+        ),
+        (
+            "Business relationships (HAS_CUSTOMER)",
+            "MATCH ()-[r:HAS_CUSTOMER]->() RETURN count(r) AS count",
+        ),
+        (
+            "Similarity relationships (SIMILAR_INDUSTRY)",
+            "MATCH ()-[r:SIMILAR_INDUSTRY]->() RETURN count(r) AS count",
+        ),
+        (
+            "Similarity relationships (SIMILAR_SIZE)",
+            "MATCH ()-[r:SIMILAR_SIZE]->() RETURN count(r) AS count",
+        ),
+    ]
+
+    print(f"\n{'Check':<50} {'domain':>15} {'domain1':>15} {'Diff':>15}")
+    print("-" * 95)
+
+    for check_name, query in checks:
+        with driver.session(database=db1) as session:
+            result = session.run(query)
+            count1 = result.single()["count"] if result.peek() else 0
+
+        with driver.session(database=db2) as session:
+            result = session.run(query)
+            count2 = result.single()["count"] if result.peek() else 0
+
+        diff = count2 - count1
+        diff_str = f"+{diff}" if diff > 0 else str(diff)
+        status = "✓" if count1 == count2 else "⚠"
+        print(f"{status} {check_name:<48} {count1:>15,} {count2:>15,} {diff_str:>15}")
+
+
 def compare_databases(stats1: dict, stats2: dict) -> None:
     """Compare two database stats and print differences."""
     print("=" * 80)
@@ -217,11 +294,14 @@ def main():
         print("Fetching stats for 'domain' database...")
         domain_stats = get_database_stats(driver, "domain")
 
-        print("Fetching stats for 'domain3' database...")
-        domain3_stats = get_database_stats(driver, "domain3")
+        print("Fetching stats for 'domain2' database...")
+        domain2_stats = get_database_stats(driver, "domain2")
 
         # Compare
-        compare_databases(domain_stats, domain3_stats)
+        compare_databases(domain_stats, domain2_stats)
+
+        # Check key entities
+        check_key_entities(driver, "domain", "domain2")
 
     except Exception as e:
         print(f"Error: {e}")

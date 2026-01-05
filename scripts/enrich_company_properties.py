@@ -5,9 +5,9 @@ Enrich Company nodes with additional properties from public data sources.
 This script:
 1. Fetches company properties from SEC EDGAR, Yahoo Finance, and Wikidata
 2. Stores enriched data in unified cache (namespace: company_properties)
-3. Updates Company nodes in Neo4j with new properties
+3. Updates Company nodes in Neo4j with properties
 
-New Company Properties:
+Company Properties:
 - Industry classification: sic_code, naics_code, sector, industry
 - Financial metrics: market_cap, revenue, employees
 - Geographic data: headquarters_city, headquarters_state, headquarters_country

@@ -159,6 +159,61 @@ class TestEmbeddingSimilarityScorer:
         final_count = cache.count("context_embeddings")
         assert final_count == new_count  # No growth, cached
 
+    def test_missing_embedding_defaults_to_1_0(self, mock_client):
+        """
+        Test that missing company embeddings default to similarity=1.0.
+
+        This documents the current behavior which can cause data corruption
+        if embeddings are not created before extraction.
+        """
+        scorer = EmbeddingSimilarityScorer(client=mock_client, threshold=0.30)
+
+        # Clear the company cache to simulate missing embeddings
+        EmbeddingSimilarityScorer._company_cache.clear()
+        EmbeddingSimilarityScorer._cache_loaded = False
+
+        # Score with a ticker that doesn't exist in cache
+        result = scorer.score(
+            context="Test context about a company",
+            ticker="NONEXISTENT",
+            company_name="Nonexistent Company",
+        )
+
+        # When embedding is missing, should default to 1.0
+        assert result.similarity == 1.0
+        assert result.passed is True  # 1.0 always passes any threshold
+        assert result.company_description == "(no embedding available)"
+
+        # This is problematic behavior - documents the bug we fixed
+        # Consider: Should this fail loudly instead of defaulting to 1.0?
+
+    def test_missing_embedding_causes_all_to_pass_threshold(self, mock_client):
+        """
+        Test that missing embeddings cause all relationships to pass high threshold.
+
+        This demonstrates why the pipeline ordering bug was so dangerous.
+        """
+        # High threshold that should normally reject most relationships
+        scorer = EmbeddingSimilarityScorer(client=mock_client, threshold=0.90)
+
+        # Clear cache to simulate missing embeddings
+        EmbeddingSimilarityScorer._company_cache.clear()
+        EmbeddingSimilarityScorer._cache_loaded = False
+
+        # Even with high threshold, missing embedding defaults to 1.0
+        result = scorer.score(
+            context="Unrelated context",
+            ticker="MISSING",
+            company_name="Missing Company",
+        )
+
+        # Should pass even high threshold because similarity=1.0
+        assert result.similarity == 1.0
+        assert result.passed is True  # Passes even 0.90 threshold!
+
+        # This means no CANDIDATE relationships would be created
+        # Everything would be marked as HIGH confidence incorrectly
+
 
 class TestCosineSimularity:
     """Tests for cosine similarity calculation."""

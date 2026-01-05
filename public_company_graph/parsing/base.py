@@ -2,7 +2,7 @@
 Base interface for 10-K parsers.
 
 This module provides a pluggable interface pattern for extracting data from 10-K filings.
-New parsers can be easily added by implementing the TenKParser interface.
+Parsers can be easily added by implementing the TenKParser interface.
 """
 
 from abc import ABC, abstractmethod
@@ -14,7 +14,7 @@ class TenKParser(ABC):
     """
     Base interface for 10-K parsers.
 
-    This is the "plug-in" interface - implement this to add new extraction logic.
+    This is the "plug-in" interface - implement this to add extraction logic.
 
     Example:
         class CompetitorParser(TenKParser):
@@ -194,7 +194,7 @@ def parse_10k_with_parsers(
     Parse a 10-K file using a list of pluggable parsers.
 
     This is the main entry point for extensible parsing.
-    Add new parsers by implementing TenKParser and adding them to the list.
+    Add parsers by implementing TenKParser and adding them to the list.
 
     PERFORMANCE: HTML is parsed ONCE with BeautifulSoup and shared across all parsers.
     This avoids redundant parsing which was the main bottleneck (3x parsing per file).
@@ -265,10 +265,10 @@ def get_default_parsers() -> list:
     This is the SINGLE SOURCE OF TRUTH for which parsers are active.
     Used by parse_10k_filings.py and the worker functions in tenk_workers.py.
 
-    To add a new parser:
+    To add a parser:
     1. Implement TenKParser interface
     2. Add to the list below
-    3. See docs/ADDING_NEW_PARSER.md for details
+    3. See docs/ADDING_PARSER.md for details
 
     Returns:
         List of TenKParser instances

@@ -161,7 +161,7 @@ FINNHUB_API_KEY=your_finnhub_key_here
 
 ```bash
 # Check Neo4j connection
-python -c "from public_company_graph.neo4j import verify_connection; verify_connection()"
+python -c "from public_company_graph.neo4j import get_neo4j_driver, verify_connection; driver = get_neo4j_driver(); verify_connection(driver); driver.close()"
 
 # Run health check
 health-check

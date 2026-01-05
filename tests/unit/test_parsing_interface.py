@@ -3,7 +3,7 @@ Unit tests for the pluggable parsing interface.
 
 Tests verify that:
 1. The interface works correctly
-2. New parsers can be easily added
+2. Parsers can be easily added
 3. The pattern is repeatable and testable
 """
 

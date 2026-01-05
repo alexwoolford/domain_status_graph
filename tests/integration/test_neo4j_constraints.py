@@ -99,3 +99,76 @@ class TestConnectionVerification:
         with neo4j_driver.session(database=test_database) as session:
             result = session.run("RETURN 1 AS value")
             assert result.single()["value"] == 1
+
+
+class TestConstraintErrorHandling:
+    """Test that constraint creation handles errors gracefully."""
+
+    def test_create_constraints_handles_invalid_driver(self, test_database):
+        """Test that constraint creation fails gracefully with invalid driver."""
+        from public_company_graph.neo4j.constraints import create_domain_constraints
+
+        # Invalid driver (None)
+        with pytest.raises((AttributeError, TypeError)):
+            create_domain_constraints(None, database=test_database)
+
+    def test_create_constraints_handles_invalid_database(self, neo4j_driver):
+        """Test that constraint creation handles invalid database name."""
+        from public_company_graph.neo4j.constraints import create_domain_constraints
+
+        # Invalid database name (should not raise, but may log warning)
+        # Neo4j will either use default or raise, depending on version
+        try:
+            create_domain_constraints(neo4j_driver, database="nonexistent_database_12345")
+        except Exception as e:
+            # If it raises, that's fine - we're testing error handling
+            assert "database" in str(e).lower() or "not found" in str(e).lower()
+
+    def test_create_constraints_idempotent_on_errors(self, neo4j_driver, test_database):
+        """Test that constraint creation is idempotent even when errors occur."""
+        from public_company_graph.neo4j.constraints import create_domain_constraints
+
+        # Create constraints first time
+        create_domain_constraints(neo4j_driver, database=test_database)
+
+        # Create again - should not raise (idempotent)
+        # Even if constraint already exists, should handle gracefully
+        create_domain_constraints(neo4j_driver, database=test_database)
+
+        # Verify constraints still exist
+        with neo4j_driver.session(database=test_database) as session:
+            result = session.run("SHOW CONSTRAINTS")
+            constraints = [r["name"] for r in result]
+            assert any("domain" in c.lower() for c in constraints)
+
+    def test_create_constraints_handles_malformed_cypher(self, neo4j_driver, test_database):
+        """Test that _run_constraints handles malformed Cypher gracefully."""
+        from public_company_graph.neo4j.constraints import _run_constraints
+
+        # Malformed constraint (should log warning, not raise)
+        malformed_constraints = [
+            "CREATE CONSTRAINT invalid IF NOT EXISTS FOR (d:Domain) REQUIRE d.invalid_field IS UNIQUE",
+        ]
+
+        # Should not raise (logs warning instead)
+        _run_constraints(neo4j_driver, malformed_constraints, database=test_database)
+
+    def test_create_bootstrap_constraints_handles_partial_failure(
+        self, neo4j_driver, test_database
+    ):
+        """Test that bootstrap constraints handle partial failures."""
+        from public_company_graph.neo4j.constraints import create_bootstrap_constraints
+
+        # Create bootstrap constraints
+        create_bootstrap_constraints(neo4j_driver, database=test_database)
+
+        # Verify both domain and technology constraints exist
+        with neo4j_driver.session(database=test_database) as session:
+            result = session.run("SHOW CONSTRAINTS")
+            constraints = [r["name"] for r in result]
+            domain_constraints = [c for c in constraints if "domain" in c.lower()]
+            tech_constraints = [c for c in constraints if "technology" in c.lower()]
+
+            # At least one of each should exist
+            assert len(domain_constraints) > 0, "Domain constraints should exist"
+            assert len(tech_constraints) > 0, "Technology constraints should exist"

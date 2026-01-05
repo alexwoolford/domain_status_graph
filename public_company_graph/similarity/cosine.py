@@ -263,7 +263,7 @@ def write_similarity_relationships(
         if deleted > 0:
             log.info(f"Deleted {deleted} existing relationships")
 
-    # Write new relationships (bidirectional - both directions for symmetric similarity)
+    # Write relationships (bidirectional - both directions for symmetric similarity)
     log.info(f"Writing {len(pairs)} {relationship_type} relationships (bidirectional)...")
     batch = [{"key1": k1, "key2": k2, "score": score} for (k1, k2), score in pairs.items()]
 

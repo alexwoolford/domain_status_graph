@@ -14,7 +14,7 @@ Usage:
     python scripts/parse_10k_filings.py                              # Dry-run (plan only)
     python scripts/parse_10k_filings.py --execute                    # Parse with 8 workers
     python scripts/parse_10k_filings.py --execute --force            # Re-parse and overwrite cache
-    python scripts/parse_10k_filings.py --execute --incremental      # Add new fields to existing entries
+    python scripts/parse_10k_filings.py --execute --incremental      # Add additional fields to existing entries
     python scripts/parse_10k_filings.py --execute --skip-datamule    # Fast mode (custom parser only)
     python scripts/parse_10k_filings.py --execute --workers 4        # Use 4 parallel workers
 """
@@ -50,7 +50,7 @@ def parse_10k_file(file_path: Path, skip_datamule: bool = False) -> dict:
     Parse a single 10-K file and extract structured data.
 
     Uses the pluggable parser interface for extensibility.
-    To add new extractors, implement TenKParser and add to get_default_parsers()
+    To add extractors, implement TenKParser and add to get_default_parsers()
     in public_company_graph/parsing/base.py.
 
     Args:
@@ -154,7 +154,9 @@ def parse_all_10ks(
         if force:
             logger.info("⚠️  FORCE MODE: Will re-parse and overwrite existing cache entries")
         if incremental:
-            logger.info("🔄 INCREMENTAL MODE: Will merge new fields into existing cache entries")
+            logger.info(
+                "🔄 INCREMENTAL MODE: Will merge additional fields into existing cache entries"
+            )
         if skip_datamule:
             logger.info(
                 "⚡ FAST MODE: Skipping datamule (custom parser only, faster but lower quality)"
@@ -203,7 +205,7 @@ def parse_all_10ks(
     if incremental:
         logger.info("🔄 INCREMENTAL MODE: Merging new fields into existing cache entries")
         logger.info("   Existing data (website, business_description) will be preserved")
-        logger.info("   New fields (risk_factors) will be added")
+        logger.info("   Additional fields (risk_factors) will be added")
     if skip_datamule:
         logger.info("⚡ FAST MODE: Skipping datamule (custom parser only)")
     logger.info(f"Found {total} 10-K files")
@@ -225,7 +227,7 @@ def parse_all_10ks(
 
     logger.info("Parsing 10-K files...")
     if incremental:
-        logger.info("🔄 INCREMENTAL MODE: Adding new fields to existing cache entries")
+        logger.info("🔄 INCREMENTAL MODE: Adding additional fields to existing cache entries")
     logger.info("")
 
     import time
@@ -355,7 +357,7 @@ def main():
     parser.add_argument(
         "--incremental",
         action="store_true",
-        help="Incremental mode: Merge new fields into existing cache entries (don't overwrite)",
+        help="Incremental mode: Merge additional fields into existing cache entries (don't overwrite)",
     )
     args = parser.parse_args()
 

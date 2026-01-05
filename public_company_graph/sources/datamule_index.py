@@ -5,8 +5,8 @@ Uses Datamule's Index.search_submissions() to efficiently identify all companies
 with specific filing types (e.g., 10-K) in a single bulk query.
 
 This is MUCH faster than the SEC EDGAR API pre-check approach:
-- Old approach: ~14 minutes to check 8,000 companies one-by-one (SEC rate-limited)
-- New approach: ~60-90 seconds to get all ~10,000 companies with 10-Ks in bulk
+- SEC EDGAR API approach: ~14 minutes to check 8,000 companies one-by-one (SEC rate-limited)
+- Datamule Index approach: ~60-90 seconds to get all ~10,000 companies with 10-Ks in bulk
 
 The search uses Datamule's indexed database, not the SEC API directly,
 so it does NOT consume Datamule API credits and is not rate-limited.
@@ -28,7 +28,7 @@ logger = logging.getLogger(__name__)
 # Cache settings
 CACHE_NAMESPACE = "datamule_10k_index"
 CACHE_NAMESPACE_NO_10K = "datamule_no_10k"  # CIKs with no downloadable 10-K
-CACHE_TTL_DAYS = 7  # Refresh weekly to catch new filers
+CACHE_TTL_DAYS = 7  # Refresh weekly to catch recent filers
 CACHE_TTL_NO_10K_DAYS = 90  # Keep "no 10-K" cache longer (unlikely to change)
 
 # Try to import datamule
@@ -160,7 +160,7 @@ def mark_cik_no_10k_available(cik: str) -> None:
     if existing is None:
         existing = []
 
-    # Add new CIK if not already present
+    # Add CIK if not already present
     existing_set = set(existing)
     if cik_normalized not in existing_set:
         existing_set.add(cik_normalized)
@@ -173,7 +173,7 @@ def clear_no_10k_cache() -> int:
     """
     Clear the cache of CIKs with no downloadable 10-K.
 
-    Use this if Datamule adds new files and you want to retry previously failed CIKs.
+    Use this if Datamule adds files and you want to retry previously failed CIKs.
 
     Returns:
         Number of entries cleared

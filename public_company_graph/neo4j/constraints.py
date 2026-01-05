@@ -97,7 +97,7 @@ def create_company_constraints(
     constraints = [
         "CREATE CONSTRAINT company_cik IF NOT EXISTS FOR (c:Company) REQUIRE c.cik IS UNIQUE",
         "CREATE INDEX company_ticker IF NOT EXISTS FOR (c:Company) ON (c.ticker)",
-        # Indexes for new enrichment properties (Phase 1)
+        # Indexes for enrichment properties (Phase 1)
         "CREATE INDEX company_sector IF NOT EXISTS FOR (c:Company) ON (c.sector)",
         "CREATE INDEX company_industry IF NOT EXISTS FOR (c:Company) ON (c.industry)",
         "CREATE INDEX company_sic_code IF NOT EXISTS FOR (c:Company) ON (c.sic_code)",

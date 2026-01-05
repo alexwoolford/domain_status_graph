@@ -217,3 +217,115 @@ class TestLoaderIdempotency:
         with neo4j_driver.session(database=test_database) as session:
             session.run("MATCH (d:Domain {final_domain: 'test-idempotent.com'}) DETACH DELETE d")
             session.run("MATCH (t:Technology {name: 'TestTech'}) DETACH DELETE t")
+
+
+class TestLoaderErrorHandling:
+    """Test that loaders handle errors gracefully."""
+
+    def test_load_domains_handles_invalid_driver(self, test_database):
+        """Test that load_domains fails gracefully with invalid driver."""
+        from public_company_graph.ingest.loaders import load_domains
+
+        # Invalid driver (None)
+        with pytest.raises((AttributeError, TypeError)):
+            load_domains(None, [{"final_domain": "test.com"}], database=test_database)
+
+    def test_load_domains_handles_empty_batch(self, neo4j_driver, test_database):
+        """Test that load_domains handles empty batch gracefully."""
+        from public_company_graph.ingest.loaders import load_domains
+        from public_company_graph.neo4j.constraints import create_domain_constraints
+
+        create_domain_constraints(neo4j_driver, database=test_database)
+
+        # Should not raise
+        load_domains(neo4j_driver, [], database=test_database)
+
+    def test_load_domains_handles_missing_required_field(self, neo4j_driver, test_database):
+        """Test that load_domains handles missing final_domain field."""
+        from public_company_graph.ingest.loaders import load_domains
+        from public_company_graph.neo4j.constraints import create_domain_constraints
+
+        create_domain_constraints(neo4j_driver, database=test_database)
+
+        # Domain without final_domain should fail (required for MERGE)
+        with pytest.raises((KeyError, TypeError)):
+            load_domains(neo4j_driver, [{"domain": "test.com"}], database=test_database)
+
+    def test_load_technologies_handles_missing_domain(self, neo4j_driver, test_database):
+        """Test that load_technologies handles missing Domain nodes gracefully."""
+        from public_company_graph.ingest.loaders import load_technologies
+        from public_company_graph.neo4j.constraints import create_bootstrap_constraints
+
+        create_bootstrap_constraints(neo4j_driver, database=test_database)
+
+        # Technology mapping referencing non-existent domain
+        # Should not raise, but relationship won't be created
+        tech_mappings = [
+            {
+                "final_domain": "nonexistent.com",
+                "technology_name": "TestTech",
+                "technology_category": "Testing",
+            }
+        ]
+
+        # Should not raise (MATCH will find nothing, MERGE won't create relationship)
+        load_technologies(neo4j_driver, tech_mappings, database=test_database)
+
+        # Verify technology node was created but relationship was not
+        with neo4j_driver.session(database=test_database) as session:
+            result = session.run("MATCH (t:Technology {name: 'TestTech'}) RETURN count(t) AS count")
+            tech_count = result.single()["count"]
+            assert tech_count == 1  # Technology node created
+
+            result = session.run(
+                "MATCH (:Domain)-[r:USES]->(:Technology {name: 'TestTech'}) RETURN count(r) AS count"
+            )
+            rel_count = result.single()["count"]
+            assert rel_count == 0  # No relationship (domain doesn't exist)
+
+        # Cleanup
+        with neo4j_driver.session(database=test_database) as session:
+            session.run("MATCH (t:Technology {name: 'TestTech'}) DETACH DELETE t")
+
+    def test_load_technologies_handles_empty_tech_name(
+        self, neo4j_driver, test_database, sample_sqlite_db
+    ):
+        """Test that load_technologies handles empty technology names."""
+        from public_company_graph.ingest.loaders import load_domains, load_technologies
+        from public_company_graph.ingest.sqlite_readers import read_domains
+        from public_company_graph.neo4j.constraints import create_bootstrap_constraints
+
+        create_bootstrap_constraints(neo4j_driver, database=test_database)
+
+        # Load domains first
+        domains = read_domains(sample_sqlite_db)
+        load_domains(neo4j_driver, domains, database=test_database)
+
+        # Technology mapping with empty name should be filtered out
+        tech_mappings = [
+            {
+                "final_domain": "test-idempotent.com",
+                "technology_name": "",  # Empty name
+                "technology_category": "Testing",
+            },
+            {
+                "final_domain": "test-idempotent.com",
+                "technology_name": "ValidTech",  # Valid name
+                "technology_category": "Testing",
+            },
+        ]
+
+        # Should not raise
+        load_technologies(neo4j_driver, tech_mappings, database=test_database)
+
+        # Verify only valid tech was created
+        with neo4j_driver.session(database=test_database) as session:
+            result = session.run("MATCH (t:Technology) RETURN count(t) AS count")
+            tech_count = result.single()["count"]
+            # Should only have TestTech (from sample data) and ValidTech
+            assert tech_count >= 1  # At least ValidTech
+
+        # Cleanup
+        with neo4j_driver.session(database=test_database) as session:
+            session.run("MATCH (d:Domain {final_domain: 'test-idempotent.com'}) DETACH DELETE d")
+            session.run("MATCH (t:Technology {name: 'ValidTech'}) DETACH DELETE t")

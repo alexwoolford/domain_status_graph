@@ -23,7 +23,7 @@
 | Document | Description |
 |----------|-------------|
 | [**10k_parsing.md**](./10k_parsing.md) | 10-K parsing pipeline details |
-| [**adding_new_parser.md**](./adding_new_parser.md) | How to add new parsing capabilities |
+| [**ADDING_PARSER.md**](./ADDING_PARSER.md) | How to add parsing capabilities |
 | [**research_enhancements.md**](./research_enhancements.md) | Research-backed enhancements roadmap |
 
 ## Quick Start

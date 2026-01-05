@@ -188,7 +188,7 @@ class TestDateExtractionCoverage:
     Ensure date extraction works for ALL observed filename patterns.
 
     These patterns were observed in real datamule downloads across 5,400+ companies.
-    Any new pattern that appears should be added here.
+    Any additional pattern that appears should be added here.
     """
 
     def test_all_observed_patterns(self):

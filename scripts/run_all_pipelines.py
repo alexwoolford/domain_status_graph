@@ -126,16 +126,15 @@ def main():
         logger.info("")
         logger.info("Step 3: Load Company Data")
         logger.info("  - collect_domains.py - Collect company domains (fallback if 10-K missing)")
-        logger.info(
-            "  - create_company_embeddings.py - Create embeddings for "
-            "Company descriptions (uses 10-K if available)"
-        )
         logger.info("  - load_company_data.py - Load Company nodes and HAS_DOMAIN relationships")
         logger.info(
             "  - enrich_company_identifiers.py - Add name/ticker from SEC EDGAR (required!)"
         )
         logger.info("  - enrich_company_properties.py - Enrich Company nodes with properties")
         logger.info("  - compute_company_similarity.py - Create SIMILAR_INDUSTRY and SIMILAR_SIZE")
+        logger.info(
+            "  - create_company_embeddings.py - Create Company description embeddings (REQUIRED for extraction)"
+        )
         logger.info(
             "  - extract_with_llm_verification.py - Extract business relationships from 10-K filings"
         )
@@ -189,7 +188,7 @@ def main():
         logger.error("Failed at bootstrap step")
         return
 
-    # Step 2: Download & Parse 10-K Filings (NEW - Start of pipeline)
+    # Step 2: Download & Parse 10-K Filings (Start of pipeline)
     logger.info("")
     logger.info("=" * 70)
     logger.info("STEP 2: Download & Parse 10-K Filings")
@@ -286,28 +285,29 @@ def main():
         logger.error("Failed at compute_company_similarity step")
         return
 
+    # CRITICAL: Create embeddings for Company nodes BEFORE extraction
+    # Extraction uses embedding similarity for validation, so embeddings must exist first
+    if not run_script(
+        CREATE_COMPANY_EMBEDDINGS_SCRIPT,
+        execute=True,
+        description="Step 2.6: Create Company Description Embeddings",
+        logger=logger,
+    ):
+        logger.error("Pipeline failed at create_company_embeddings step")
+        return
+
     # Extract business relationships from 10-K filings (CompanyKG edge types)
     # This extracts: HAS_COMPETITOR, HAS_CUSTOMER, HAS_SUPPLIER, HAS_PARTNER
     # Uses embedding similarity + LLM verification for high precision
-    # NOTE: Requires name/ticker from enrich_company_identifiers step!
+    # NOTE: Requires name/ticker from enrich_company_identifiers step AND embeddings from create_company_embeddings step!
     if not run_script(
         EXTRACT_BUSINESS_RELATIONSHIPS_SCRIPT,
         execute=True,
-        description="Step 2.6: Extract Business Relationships from 10-K Filings",
+        description="Step 2.7: Extract Business Relationships from 10-K Filings",
         extra_args=["--clean"],  # Start fresh for reproducibility
         logger=logger,
     ):
         logger.error("Failed at extract_with_llm_verification step")
-        return
-
-    # Then create embeddings for the Company nodes
-    if not run_script(
-        CREATE_COMPANY_EMBEDDINGS_SCRIPT,
-        execute=True,
-        description="Step 2.7: Create Company Description Embeddings",
-        logger=logger,
-    ):
-        logger.error("Pipeline 2 failed at create_embeddings step")
         return
 
     # Create risk factor embeddings and SIMILAR_RISK relationships

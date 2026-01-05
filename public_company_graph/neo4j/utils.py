@@ -22,7 +22,7 @@ def clean_properties(props: dict[str, Any]) -> dict[str, Any]:
         props: Dictionary of property name -> value
 
     Returns:
-        New dictionary with empty strings and None values removed
+        Dictionary with empty strings and None values removed
 
     Example:
         >>> clean_properties({"name": "Test", "desc": "", "count": None, "active": True})
@@ -43,7 +43,7 @@ def clean_properties_batch(batch: list[dict[str, Any]]) -> list[dict[str, Any]]:
         batch: List of property dictionaries
 
     Returns:
-        New list with cleaned dictionaries
+        List with cleaned dictionaries
     """
     return [clean_properties(props) for props in batch]
 

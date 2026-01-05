@@ -1,17 +1,17 @@
-# Quick Guide: Adding a New 10-K Parser
+# Quick Guide: Adding a 10-K Parser
 
 ## The Pattern (3 Steps)
 
 ### Step 1: Create Your Parser Class
 
-Create a new file or add to existing: `public_company_graph/parsing/your_parser.py`
+Create a file: `public_company_graph/parsing/your_parser.py`
 
 ```python
 from public_company_graph.parsing.base import TenKParser
 from pathlib import Path
 from typing import Optional
 
-class YourNewParser(TenKParser):
+class YourParser(TenKParser):
     """Extract [what you want] from 10-K filings."""
 
     @property
@@ -66,17 +66,17 @@ def get_default_parsers() -> list:
         RiskFactorsParser(),
         CompetitorParser(),
         FilingMetadataParser(),
-        YourNewParser(),  # ← Add your parser here
+        YourParser(),  # ← Add your parser here
     ]
 ```
 
 ### Step 3: Test It
 
 ```python
-from public_company_graph.parsing.base import YourNewParser
+from public_company_graph.parsing.base import YourParser
 from pathlib import Path
 
-parser = YourNewParser()
+parser = YourParser()
 result = parser.extract(Path("data/10k_filings/0000320193/10k_2024.html"))
 print(f"Extracted: {result}")
 ```
@@ -162,8 +162,8 @@ return [
 
 ## Summary
 
-**To add a new parser:**
-1. Implement `TenKParser` interface in a new file
+**To add a parser:**
+1. Implement `TenKParser` interface in a file
 2. Add to `get_default_parsers()` in `public_company_graph/parsing/base.py`
 3. Done!
 
