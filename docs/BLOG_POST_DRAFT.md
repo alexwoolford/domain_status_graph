@@ -598,6 +598,8 @@ ORDER BY r.score + d.score + t.score DESC
 LIMIT 15
 ```
 
+*Note: This query returns companies with high similarity across all three dimensions. Results may include utility subsidiaries or related entities (e.g., Georgia Power / Southern Co) which share risk profiles, descriptions, and technology stacks.*
+
 ---
 
 *Built with Neo4j, Python, OpenAI embeddings, and SEC EDGAR data. Inspired by [CompanyKG](https://arxiv.org/abs/2306.10649) (NeurIPS 2023).*
