@@ -227,6 +227,144 @@ The graph tells you:
 
 ---
 
+## Investment Insights: What the Graph Reveals About Risk
+
+The graph surfaces investment risks that are invisible in individual filings:
+
+### Supplier Concentration Risk
+
+**78% of companies with suppliers depend on just one supplier.** This creates systemic risk:
+
+| Company | Sole Supplier | Industry |
+|---------|---------------|----------|
+| Southwest Airlines | Boeing | Airlines |
+| United Airlines | Boeing | Airlines |
+| IREN Ltd | NVIDIA | Crypto Mining |
+| HP Inc | Intel | Technology |
+| Rubrik | Super Micro | Data Storage |
+
+**Investment implication:** If Boeing has problems, multiple airlines fail simultaneously. If NVIDIA supply is constrained, crypto miners and AI companies are exposed.
+
+### The "Boeing Dependency Network"
+
+Seven companies explicitly list Boeing as a supplier:
+- Air Lease (aircraft leasing)
+- GE (aerospace)
+- Moog Inc (aerospace)
+- SIFCO Industries (aerospace)
+- Southwest Airlines
+- Textron (aerospace)
+- United Airlines
+
+**Graph-only insight:** You couldn't find this by reading individual filings. You'd need to aggregate all 10-Ks and traverse supplier relationships.
+
+### NVIDIA as Systemic Risk
+
+Four companies depend on NVIDIA as their sole or major supplier:
+
+| Company | Also Competes With |
+|---------|-------------------|
+| IREN Ltd | Riot Platforms, CleanSpark, Marathon |
+| Applied Digital | Equinix, Riot |
+| Bit Digital | Equinix, Riot |
+| Super Micro | Dell |
+
+**Investment implication:** NVDA supply constraints cascade to AI infrastructure and crypto miners. These companies are highly correlated.
+
+### "Stealth Competitors" - Attacking Giants Silently
+
+Some companies cite many competitors but nobody cites them back. These could be emerging disruptors:
+
+| Company | Attacking | Targets |
+|---------|-----------|---------|
+| Alaunos Therapeutics | 14 | Amgen, Incyte, IBRX |
+| Amentum Holdings | 11 | Boeing, CACI, GD, Honeywell |
+| MiNK Therapeutics | 9 | Gilead, Fate Therapeutics |
+| Jacobs Solutions | 9 | GD, Tetra Tech, PWR |
+
+**Investment implication:** These companies are on the offensive but not yet on the radar. They could be early-stage disruptors or aggressive market entrants.
+
+### Transitive Customer Risk
+
+If your customer loses to a competitor, you lose too. The graph reveals "competitor of my customer" relationships:
+
+| Supplier | Customer | Customer's Competitors |
+|----------|----------|----------------------|
+| McCormick | PepsiCo | Conagra, Monster, Keurig |
+| Hormel | Walmart | UnitedHealth |
+| Mattel | Walmart | UnitedHealth |
+| Ducommun | Boeing | GD, Lockheed |
+
+**Investment implication:** Owning a supplier and their customer's competitor creates portfolio risk. If Walmart loses market share to UnitedHealth, Hormel and Mattel are exposed.
+
+### Risk Profile Clustering
+
+Some biotech companies have 400+ companies with 90%+ similar risk profiles:
+
+| Company | High-Risk Connections |
+|---------|----------------------|
+| Design Therapeutics | 511 |
+| Evelo Biosciences | 474 |
+| Janux Therapeutics | 463 |
+
+**Investment implication:** These companies are highly correlated. Owning multiple biotechs with similar risk profiles provides no diversification.
+
+### Customer Concentration
+
+**148 companies have a single customer.** This is extreme concentration risk:
+
+| Concentration | Companies |
+|---------------|-----------|
+| Single customer | 148 |
+| 2-3 customers | 39 |
+| 4-5 customers | 2 |
+
+**Investment implication:** If that one customer switches suppliers or goes bankrupt, the supplier is immediately at risk.
+
+### Graph Analytics Reveal Competitive Structure
+
+Using Neo4j Graph Data Science (GDS), we computed:
+
+#### PageRank: Most Central Companies
+
+PageRank measures centrality in the competitive network. High PageRank = frequently cited as competitor, or cited by companies that are themselves central:
+
+| Company | PageRank | Cited By | Cites |
+|---------|----------|----------|-------|
+| Microsoft | 7.82 | 82 | 4 |
+| Apple | 7.31 | 58 | 0 |
+| Pfizer | 6.33 | 84 | 0 |
+| Caterpillar | 5.67 | 13 | 1 |
+| Oracle | 5.25 | 44 | 7 |
+
+**Investment implication:** Microsoft and Apple are the most central companies in the competitive network. They're not just cited often — they're cited by companies that are themselves central.
+
+#### Betweenness Centrality: Bridge Companies
+
+Betweenness measures which companies act as "bridges" connecting different competitive clusters:
+
+| Company | Betweenness | Role |
+|---------|-------------|------|
+| Broadcom | 8,161 | Connects semiconductor and enterprise software |
+| IBM | 8,127 | Connects enterprise IT and cloud |
+| Oracle | 7,729 | Connects database and enterprise software |
+| Microsoft | 5,015 | Connects multiple tech sectors |
+
+**Investment implication:** Broadcom and IBM are "bridge companies" — they connect otherwise separate competitive clusters. If they fail, multiple industries are disconnected.
+
+#### Competitive Communities: 3,584 Clusters
+
+Louvain community detection found 3,584 competitive clusters. The largest cluster (303 companies) is dominated by pharma/biotech:
+
+- Pfizer (PageRank: 6.33)
+- AbbVie (PageRank: 3.16)
+- Amgen (PageRank: 2.99)
+- Biogen, Gilead, Regeneron, Moderna
+
+**Investment implication:** These companies are highly correlated. Owning multiple pharma companies in the same cluster provides no diversification — they face the same competitive pressures.
+
+---
+
 ## Graph Statistics
 
 | Metric | Count |

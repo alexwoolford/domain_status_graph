@@ -10,6 +10,13 @@ This module provides GDS algorithm implementations:
 
 from public_company_graph.gds.company_similarity import compute_company_description_similarity
 from public_company_graph.gds.company_tech import compute_company_technology_similarity
+from public_company_graph.gds.competitive_analytics import (
+    compute_all_competitive_analytics,
+    compute_betweenness_centrality,
+    compute_competitive_communities,
+    compute_competitive_pagerank,
+    compute_degree_centrality,
+)
 from public_company_graph.gds.tech_adoption import compute_tech_adoption_prediction
 from public_company_graph.gds.tech_affinity import compute_tech_affinity_bundling
 from public_company_graph.gds.utils import cleanup_leftover_graphs, get_gds_client, safe_drop_graph
@@ -19,6 +26,11 @@ __all__ = [
     "compute_tech_affinity_bundling",
     "compute_company_description_similarity",
     "compute_company_technology_similarity",
+    "compute_competitive_pagerank",
+    "compute_competitive_communities",
+    "compute_degree_centrality",
+    "compute_betweenness_centrality",
+    "compute_all_competitive_analytics",
     "get_gds_client",
     "safe_drop_graph",
     "cleanup_leftover_graphs",
