@@ -455,6 +455,8 @@ ORDER BY avg_indirect DESC
 
 **Supplier concentration risk** — Companies depending on a single supplier:
 
+*Why it matters:* If your supplier fails, you fail. Single-supplier dependency creates extreme concentration risk. When Boeing grounded the 737 MAX, airlines couldn't switch suppliers — they were locked in. This query identifies companies with no supplier diversification.
+
 ```cypher
 MATCH (c:Company)-[:HAS_SUPPLIER]->(supplier:Company)
 WITH c, count(supplier) as supplier_count, collect(supplier.ticker) as suppliers
@@ -465,6 +467,8 @@ ORDER BY c.ticker
 
 **Boeing dependency network** — All companies that depend on Boeing:
 
+*Why it matters:* Boeing is a systemic risk. When Boeing has problems (737 MAX grounding, production delays), it cascades to airlines, aerospace suppliers, and leasing companies. This query maps the entire dependency network — if Boeing fails, these companies fail simultaneously. It's a portfolio correlation risk you can't see from individual filings.
+
 ```cypher
 MATCH (c:Company)-[:HAS_SUPPLIER]->(ba:Company {ticker: 'BA'})
 RETURN c.ticker, c.name, c.yahoo_industry
@@ -472,6 +476,8 @@ ORDER BY c.name
 ```
 
 **NVIDIA systemic risk** — Companies dependent on NVIDIA:
+
+*Why it matters:* NVIDIA is the bottleneck for AI infrastructure. Crypto miners, AI startups, and data center companies all depend on NVIDIA GPUs. If NVIDIA supply is constrained (as it was in 2023-2024), these companies can't operate. This query shows who's exposed to NVIDIA's supply chain — and who they also compete with, creating double risk.
 
 ```cypher
 MATCH (c:Company)-[:HAS_SUPPLIER]->(nvda:Company {ticker: 'NVDA'})
@@ -482,6 +488,8 @@ ORDER BY c.ticker
 ```
 
 **Stealth competitors** — Companies attacking many but not cited back:
+
+*Why it matters:* These are emerging disruptors flying under the radar. They're on the offensive (citing many competitors) but not yet recognized as threats. Early-stage biotechs attacking Pfizer/Amgen, or tech startups attacking Microsoft/Apple. If you own the targets, these stealth competitors could be future threats. If you own the attackers, they might be undervalued disruptors.
 
 ```cypher
 MATCH (c:Company)
@@ -496,6 +504,8 @@ ORDER BY attack_count DESC
 
 **Transitive customer risk** — "Competitor of my customer":
 
+*Why it matters:* If your customer loses to a competitor, you lose too. This query reveals hidden portfolio correlations. You might own a supplier (e.g., McCormick) and their customer's competitor (e.g., Conagra), thinking they're uncorrelated. But if PepsiCo loses market share to Conagra, McCormick's revenue drops. This is a diversification failure you can't see without the graph.
+
 ```cypher
 MATCH (company:Company)-[:HAS_CUSTOMER]->(customer:Company)
 MATCH (customer)-[:HAS_COMPETITOR]->(cust_competitor:Company)
@@ -507,6 +517,8 @@ LIMIT 15
 ```
 
 **Risk profile clustering** — Companies with 90%+ similar risks:
+
+*Why it matters:* These companies face identical risks. If you own multiple biotechs with 400+ companies sharing 90%+ similar risk profiles, you're not diversified — they'll all move together when regulatory risks, clinical trial failures, or market conditions change. This query identifies false diversification in your portfolio.
 
 ```cypher
 MATCH (c:Company)-[r:SIMILAR_RISK]->()
@@ -520,6 +532,8 @@ LIMIT 15
 
 **Customer concentration** — Companies with single customer:
 
+*Why it matters:* If that one customer switches suppliers or goes bankrupt, the supplier is immediately at risk. This is extreme revenue concentration. Companies like Mobileye (Intel), Amprius (AeroVironment), or Sidus Space (Lockheed) depend on a single customer. One contract loss = company failure.
+
 ```cypher
 MATCH (c:Company)-[:HAS_CUSTOMER]->(cust:Company)
 WITH c, count(cust) as customer_count
@@ -531,6 +545,8 @@ LIMIT 15
 ### Graph Analytics Queries
 
 **Top PageRank companies** (most central in competitive network):
+
+*Why it matters:* PageRank measures not just how many companies cite you, but how *important* those companies are. Microsoft has high PageRank because it's cited by companies that are themselves central. These are the most influential companies in the competitive network — if they fail, the network fragments. They're also the most threatened (high in-degree) because everyone sees them as a competitor.
 
 ```cypher
 MATCH (c:Company)
@@ -545,6 +561,8 @@ LIMIT 15
 
 **Top betweenness companies** (bridge companies):
 
+*Why it matters:* These companies connect otherwise separate competitive clusters. Broadcom connects semiconductors to enterprise software. IBM connects enterprise IT to cloud. If a bridge company fails, multiple industries disconnect. They're also systemic risks — problems at Broadcom cascade across sectors. Bridge companies are often acquisition targets because they provide access to multiple markets.
+
 ```cypher
 MATCH (c:Company)
 WHERE c.competitive_betweenness IS NOT NULL
@@ -558,6 +576,8 @@ LIMIT 15
 
 **Largest competitive communities**:
 
+*Why it matters:* Communities are groups of companies that compete with each other. The largest community (303 companies) is pharma/biotech — they all face similar competitive pressures. If you own multiple companies in the same community, you're not diversified. Community detection reveals hidden correlations that industry codes miss.
+
 ```cypher
 MATCH (c:Company)
 WHERE c.competitive_community IS NOT NULL
@@ -570,6 +590,8 @@ LIMIT 10
 
 **Companies in a specific community** (e.g., largest pharma cluster):
 
+*Why it matters:* This shows all companies in a competitive cluster. The largest pharma community (ID 2511) includes Pfizer, AbbVie, Amgen, Biogen, Gilead, Regeneron, Moderna. They're all correlated — regulatory changes, clinical trial failures, or market shifts affect them all. Owning Pfizer + AbbVie + Amgen is not diversification — it's triple exposure to the same competitive dynamics.
+
 ```cypher
 MATCH (c:Company)
 WHERE c.competitive_community = 2511
@@ -581,6 +603,8 @@ LIMIT 20
 ```
 
 **Multi-dimensional risk exposure** — Companies similar on risk, description, and technology:
+
+*Why it matters:* Companies similar on risk, description, AND technology are highly correlated. They face the same regulatory risks, operate in the same markets, and use the same tech stacks. If one fails, the others are likely to fail too. This query identifies false diversification — companies that look different but are actually exposed to identical risks.
 
 ```cypher
 MATCH (a:Company)-[r:SIMILAR_RISK]->(b:Company)
