@@ -16,9 +16,17 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-from public_company_graph.entity_resolution.layered_validator import (
-    LayeredEntityValidator,
+# NOTE: This script is for evaluation only
+from public_company_graph.config import Settings
+from public_company_graph.entity_resolution.candidates import Candidate
+from public_company_graph.entity_resolution.embedding_scorer import (
+    EmbeddingSimilarityScorer,
 )
+from public_company_graph.entity_resolution.tiered_decision import (
+    Decision,
+    TieredDecisionSystem,
+)
+from public_company_graph.neo4j.connection import get_neo4j_driver
 
 DATA_DIR = Path(__file__).parent.parent / "data"
 
@@ -48,10 +56,21 @@ def evaluate_baseline(records: list[dict]) -> dict:
 
 
 def evaluate_layered(records: list[dict], embedding_threshold: float) -> dict:
-    """Evaluate layered validator."""
-    validator = LayeredEntityValidator(
-        embedding_threshold=embedding_threshold,
-        skip_embedding=False,
+    """Evaluate tiered decision system."""
+    # Initialize TieredDecisionSystem with embedding support
+    settings = Settings()
+    driver = get_neo4j_driver()
+    embedding_scorer = EmbeddingSimilarityScorer(
+        threshold=embedding_threshold,
+        neo4j_driver=driver,
+        database=settings.neo4j_database,
+    )
+
+    decision_system = TieredDecisionSystem(
+        use_tier1=True,
+        use_tier2=True,
+        use_tier3=True,
+        use_tier4=False,  # Skip LLM for evaluation
     )
 
     kept_correct = 0
@@ -60,17 +79,43 @@ def evaluate_layered(records: list[dict], embedding_threshold: float) -> dict:
     rejected_incorrect = 0
 
     for r in records:
-        result = validator.validate(
-            context=r.get("context", ""),
-            mention=r.get("raw_mention", ""),
-            ticker=r["target_ticker"],
-            company_name=r.get("target_name", ""),
-            relationship_type=r["relationship_type"],
+        # Create candidate from mention
+        mention = r.get("raw_mention", "")
+        context = r.get("context", "")
+        candidate = Candidate(
+            text=mention,
+            sentence=context,
+            start_pos=0,
+            end_pos=len(mention),
+            source_pattern="evaluation",
         )
 
+        # Get embedding similarity
+        embedding_similarity = None
+        try:
+            emb_result = embedding_scorer.score(
+                context=context,
+                ticker=r["target_ticker"],
+                company_name=r.get("target_name", ""),
+            )
+            embedding_similarity = emb_result.similarity
+        except Exception:
+            pass  # Continue without embedding if it fails
+
+        # Make decision
+        decision = decision_system.decide(
+            candidate=candidate,
+            context=context,
+            relationship_type=r["relationship_type"],
+            company_name=r.get("target_name", ""),
+            embedding_similarity=embedding_similarity,
+        )
+
+        # Convert Decision to accepted boolean
+        accepted = decision.decision == Decision.ACCEPT
         is_correct = r["ai_label"] == "correct"
 
-        if result.accepted:
+        if accepted:
             if is_correct:
                 kept_correct += 1
             else:
@@ -89,7 +134,7 @@ def evaluate_layered(records: list[dict], embedding_threshold: float) -> dict:
     recall = kept_correct / total_correct if total_correct > 0 else 0
 
     return {
-        "name": "Layered Validator",
+        "name": "Tiered Decision System",
         "kept_correct": kept_correct,
         "kept_incorrect": kept_incorrect,
         "rejected_correct": rejected_correct,
@@ -137,10 +182,10 @@ def main():
     print(f"  Precision: {baseline['precision']:.1%} ({baseline['correct']}/{baseline['total']})")
     print()
 
-    # Layered validator
+    # Tiered decision system
     layered = evaluate_layered(records, args.embedding_threshold)
 
-    print(f"LAYERED VALIDATOR (threshold={args.embedding_threshold})")
+    print(f"TIERED DECISION SYSTEM (threshold={args.embedding_threshold})")
     print(f"  Kept:     {layered['kept_correct']} correct, {layered['kept_incorrect']} incorrect")
     print(
         f"  Rejected: {layered['rejected_correct']} correct (FN), {layered['rejected_incorrect']} incorrect (TN)"

@@ -20,9 +20,17 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-from public_company_graph.entity_resolution.layered_validator import (
-    LayeredEntityValidator,
+# NOTE: This script is for analysis/evaluation only
+from public_company_graph.config import Settings
+from public_company_graph.entity_resolution.candidates import Candidate
+from public_company_graph.entity_resolution.embedding_scorer import (
+    EmbeddingSimilarityScorer,
 )
+from public_company_graph.entity_resolution.tiered_decision import (
+    Decision,
+    TieredDecisionSystem,
+)
+from public_company_graph.neo4j.connection import get_neo4j_driver
 
 DATA_DIR = Path(__file__).parent.parent / "data"
 
@@ -39,37 +47,77 @@ def load_split(split: str) -> list[dict]:
 
 def analyze_errors(records: list[dict], error_type: str | None = None):
     """Analyze false positives and false negatives."""
-    validator = LayeredEntityValidator(
-        embedding_threshold=0.30,
-        skip_embedding=False,
+    # Initialize TieredDecisionSystem with embedding support
+    settings = Settings()
+    driver = get_neo4j_driver()
+    embedding_scorer = EmbeddingSimilarityScorer(
+        threshold=0.30,
+        neo4j_driver=driver,
+        database=settings.neo4j_database,
+    )
+
+    decision_system = TieredDecisionSystem(
+        use_tier1=True,
+        use_tier2=True,
+        use_tier3=True,
+        use_tier4=False,  # Skip LLM for evaluation
     )
 
     false_positives = []  # Kept but incorrect
     false_negatives = []  # Rejected but correct
 
     for r in records:
-        result = validator.validate(
-            context=r.get("context", ""),
-            mention=r.get("raw_mention", ""),
-            ticker=r["target_ticker"],
-            company_name=r.get("target_name", ""),
-            relationship_type=r["relationship_type"],
+        # Create candidate from mention
+        mention = r.get("raw_mention", "")
+        context = r.get("context", "")
+        candidate = Candidate(
+            text=mention,
+            sentence=context,
+            start_pos=0,
+            end_pos=len(mention),
+            source_pattern="evaluation",
         )
+
+        # Get embedding similarity
+        embedding_similarity = None
+        try:
+            emb_result = embedding_scorer.score(
+                context=context,
+                ticker=r["target_ticker"],
+                company_name=r.get("target_name", ""),
+            )
+            embedding_similarity = emb_result.similarity
+        except Exception as e:
+            print(f"Warning: Embedding check failed for {r['target_ticker']}: {e}")
+
+        # Make decision
+        decision = decision_system.decide(
+            candidate=candidate,
+            context=context,
+            relationship_type=r["relationship_type"],
+            company_name=r.get("target_name", ""),
+            embedding_similarity=embedding_similarity,
+        )
+
+        # Convert Decision to accepted boolean for compatibility
+        accepted = decision.decision == Decision.ACCEPT
 
         is_correct = r["ai_label"] == "correct"
 
-        if result.accepted and not is_correct:
+        if accepted and not is_correct:
             false_positives.append(
                 {
                     "record": r,
-                    "result": result,
+                    "decision": decision,
+                    "embedding_similarity": embedding_similarity,
                 }
             )
-        elif not result.accepted and is_correct:
+        elif not accepted and is_correct:
             false_negatives.append(
                 {
                     "record": r,
-                    "result": result,
+                    "decision": decision,
+                    "embedding_similarity": embedding_similarity,
                 }
             )
 
@@ -94,18 +142,16 @@ def analyze_errors(records: list[dict], error_type: str | None = None):
         # Show examples
         for i, fp in enumerate(false_positives[:5], 1):
             r = fp["record"]
-            result = fp["result"]
+            decision = fp["decision"]
+            emb_sim = fp.get("embedding_similarity")
             print(
                 f"--- FP {i}: {r['source_ticker']} -> {r['target_ticker']} ({r['relationship_type']}) ---"
             )
             print(f"Mention: {r.get('raw_mention', 'N/A')}")
             print(f"Context: {r.get('context', 'N/A')[:200]}...")
             print(f"AI reason: {r.get('ai_business_logic', 'N/A')}")
-            print(
-                f"Embedding score: {result.embedding_similarity:.3f}"
-                if result.embedding_similarity
-                else "N/A"
-            )
+            print(f"Decision: {decision.decision.value} (tier: {decision.tier.value})")
+            print(f"Embedding score: {emb_sim:.3f}" if emb_sim is not None else "N/A")
             print()
 
     if error_type == "false-negatives" or error_type is None:
@@ -118,15 +164,11 @@ def analyze_errors(records: list[dict], error_type: str | None = None):
         # Group by rejection reason
         rejection_reasons = Counter()
         for fn in false_negatives:
-            result = fn["result"]
-            if not result.embedding_passed:
-                rejection_reasons["embedding_too_low"] += 1
-            elif not result.biographical_passed:
-                rejection_reasons["biographical_filter"] += 1
-            elif not result.relationship_passed:
-                rejection_reasons["relationship_verifier"] += 1
-            else:
-                rejection_reasons["unknown"] += 1
+            decision = fn["decision"]
+            # Use tier and reason to categorize
+            tier_name = decision.tier.value
+            reason = decision.reason
+            rejection_reasons[f"{tier_name}: {reason}"] += 1
 
         print("Rejection reasons:")
         for reason, count in rejection_reasons.items():
@@ -136,19 +178,16 @@ def analyze_errors(records: list[dict], error_type: str | None = None):
         # Show examples
         for i, fn in enumerate(false_negatives[:5], 1):
             r = fn["record"]
-            result = fn["result"]
+            decision = fn["decision"]
+            emb_sim = fn.get("embedding_similarity")
             print(
                 f"--- FN {i}: {r['source_ticker']} -> {r['target_ticker']} ({r['relationship_type']}) ---"
             )
             print(f"Mention: {r.get('raw_mention', 'N/A')}")
             print(f"Context: {r.get('context', 'N/A')[:200]}...")
-            print(
-                f"Embedding: {result.embedding_similarity:.3f} (passed={result.embedding_passed})"
-                if result.embedding_similarity
-                else "N/A"
-            )
-            print(f"Biographical: passed={result.biographical_passed}")
-            print(f"Relationship: passed={result.relationship_passed}")
+            print(f"Decision: {decision.decision.value} (tier: {decision.tier.value})")
+            print(f"Reason: {decision.reason}")
+            print(f"Embedding: {emb_sim:.3f}" if emb_sim is not None else "N/A")
             print()
 
     print("=" * 70)

@@ -8,6 +8,11 @@ This is the canonical script for creating Company-to-Company business
 relationships in the graph. Running with --clean --execute produces
 a reproducible, quality-controlled set of relationships.
 
+The extraction automatically applies a tiered confidence system:
+- HIGH confidence (≥high_threshold) → HAS_* facts (analytics-ready)
+- MEDIUM confidence (≥medium_threshold, <high_threshold) → CANDIDATE_* (with evidence)
+- LOW confidence (<medium_threshold) → Not created
+
 Approach:
 1. COMPETITOR/PARTNER: Embedding similarity thresholds (fast, ~85% precision)
 2. SUPPLIER/CUSTOMER: LLM verification (slower, ~95% precision)
@@ -16,6 +21,9 @@ Output:
 - HAS_* relationships: High confidence facts (analytics-ready)
 - CANDIDATE_* relationships: Medium confidence (with evidence for review)
 - LOW confidence: Not created (filtered out)
+
+Note: The pipeline automatically runs cleanup after extraction to ensure
+all edges meet quality thresholds (see run_all_pipelines.py).
 
 Usage:
     # Reproducible full extraction (recommended)
@@ -151,15 +159,27 @@ def extract_with_verification(
         if not business_desc and not risk_factors:
             continue
 
-        # Extract candidates with validation enabled
+        # Extract candidates with tiered decision system (replaces legacy layered validation)
+        # Initialize embedding scorer for tiered decision system
+        from public_company_graph.entity_resolution.embedding_scorer import (
+            EmbeddingSimilarityScorer,
+        )
+
+        embedding_scorer = EmbeddingSimilarityScorer(
+            threshold=embedding_threshold,
+            neo4j_driver=driver,
+            database=database,
+        )
+
         extracted = extract_all_relationships(
             business_description=business_desc,
             risk_factors=risk_factors,
             lookup=lookup,
             self_cik=cik,
             relationship_types=relationship_types,
-            use_layered_validation=True,
+            use_tiered_decision=True,  # Use new tiered decision system
             embedding_threshold=embedding_threshold,
+            embedding_scorer=embedding_scorer,
         )
 
         # Process each relationship type

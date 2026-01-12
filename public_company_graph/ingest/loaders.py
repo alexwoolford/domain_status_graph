@@ -39,6 +39,14 @@ def load_domains(
         for i in range(0, len(domains), batch_size):
             batch = domains[i : i + batch_size]
 
+            # Validate required field: final_domain (fail fast)
+            for idx, domain in enumerate(batch):
+                if "final_domain" not in domain or domain.get("final_domain") is None:
+                    raise ValueError(
+                        f"Domain at index {i + idx} missing required field 'final_domain'. "
+                        f"Got keys: {list(domain.keys())}"
+                    )
+
             # Clean empty strings and None values from properties
             # Neo4j doesn't store nulls; empty strings are semantically equivalent
             cleaned_batch = clean_properties_batch(batch)

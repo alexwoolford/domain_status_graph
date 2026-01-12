@@ -1,11 +1,14 @@
 #!/usr/bin/env python3
 """
-Evaluate the LayeredEntityValidator against ground truth.
+Evaluate the TieredDecisionSystem against ground truth.
+
+NOTE: This script is for evaluation only.
+For production extraction, use TieredDecisionSystem (see extract_with_llm_verification.py).
 
 Compares three approaches:
 1. No validation (baseline)
-2. Pattern-only (filters + relationship verifier)
-3. Layered (embeddings + filters + relationship verifier)
+2. Pattern-only (Tier 1 + Tier 2, no embeddings)
+3. Full tiered system (Tier 1 + Tier 2 + Tier 3 with embeddings)
 """
 
 import csv
@@ -15,14 +18,26 @@ from dotenv import load_dotenv
 
 load_dotenv(Path(__file__).parent.parent / ".env")
 
-from public_company_graph.entity_resolution.layered_validator import (
-    LayeredEntityValidator,
+from public_company_graph.config import Settings
+from public_company_graph.entity_resolution.candidates import Candidate
+from public_company_graph.entity_resolution.embedding_scorer import (
+    EmbeddingSimilarityScorer,
 )
+from public_company_graph.entity_resolution.tiered_decision import (
+    Decision,
+    TieredDecisionSystem,
+)
+from public_company_graph.neo4j.connection import get_neo4j_driver
 
 
 def evaluate_pattern_only(records: list[dict]) -> dict:
-    """Evaluate using only pattern-based filters (no embeddings)."""
-    validator = LayeredEntityValidator(skip_embedding=True)
+    """Evaluate using only pattern-based filters (Tier 1 + Tier 2, no embeddings)."""
+    decision_system = TieredDecisionSystem(
+        use_tier1=True,
+        use_tier2=True,
+        use_tier3=False,  # No embeddings
+        use_tier4=False,
+    )
 
     correct = [r for r in records if r.get("ai_label") == "correct"]
     incorrect = [r for r in records if r.get("ai_label") == "incorrect"]
@@ -33,18 +48,29 @@ def evaluate_pattern_only(records: list[dict]) -> dict:
     correct_rejections = []
 
     for r in correct:
-        result = validator.validate(
-            context=r.get("context", ""),
-            mention=r.get("raw_mention", ""),
-            ticker=r.get("target_ticker", ""),
-            company_name=r.get("target_name", ""),
-            relationship_type=r.get("relationship_type", ""),
+        mention = r.get("raw_mention", "")
+        context = r.get("context", "")
+        candidate = Candidate(
+            text=mention,
+            sentence=context,
+            start_pos=0,
+            end_pos=len(mention),
+            source_pattern="evaluation",
         )
-        if result.accepted:
+
+        decision = decision_system.decide(
+            candidate=candidate,
+            context=context,
+            relationship_type=r.get("relationship_type", ""),
+            company_name=r.get("target_name", ""),
+            embedding_similarity=None,  # No embeddings
+        )
+
+        if decision.decision == Decision.ACCEPT:
             correct_accepted += 1
         else:
             correct_rejected += 1
-            correct_rejections.append((r, result))
+            correct_rejections.append((r, decision))
 
     # Test on incorrect (should reject)
     incorrect_rejected = 0
@@ -52,22 +78,33 @@ def evaluate_pattern_only(records: list[dict]) -> dict:
     rejection_reasons = {}
 
     for r in incorrect:
-        result = validator.validate(
-            context=r.get("context", ""),
-            mention=r.get("raw_mention", ""),
-            ticker=r.get("target_ticker", ""),
-            company_name=r.get("target_name", ""),
-            relationship_type=r.get("relationship_type", ""),
+        mention = r.get("raw_mention", "")
+        context = r.get("context", "")
+        candidate = Candidate(
+            text=mention,
+            sentence=context,
+            start_pos=0,
+            end_pos=len(mention),
+            source_pattern="evaluation",
         )
-        if not result.accepted:
+
+        decision = decision_system.decide(
+            candidate=candidate,
+            context=context,
+            relationship_type=r.get("relationship_type", ""),
+            company_name=r.get("target_name", ""),
+            embedding_similarity=None,  # No embeddings
+        )
+
+        if decision.decision != Decision.ACCEPT:
             incorrect_rejected += 1
-            reason = result.rejection_reason.value
+            reason = f"{decision.tier.value}: {decision.reason}"
             rejection_reasons[reason] = rejection_reasons.get(reason, 0) + 1
         else:
             incorrect_accepted += 1
 
     return {
-        "approach": "Pattern-only",
+        "approach": "Pattern-only (Tier 1 + Tier 2)",
         "correct_accepted": correct_accepted,
         "correct_rejected": correct_rejected,
         "incorrect_rejected": incorrect_rejected,
@@ -82,10 +119,21 @@ def evaluate_pattern_only(records: list[dict]) -> dict:
 
 
 def evaluate_layered(records: list[dict], sample_size: int = 30) -> dict:
-    """Evaluate using full layered approach (with embeddings)."""
-    validator = LayeredEntityValidator(
-        embedding_threshold=0.30,
-        skip_embedding=False,
+    """Evaluate using full tiered approach (with embeddings)."""
+    # Initialize TieredDecisionSystem with embedding support
+    settings = Settings()
+    driver = get_neo4j_driver()
+    embedding_scorer = EmbeddingSimilarityScorer(
+        threshold=0.30,
+        neo4j_driver=driver,
+        database=settings.neo4j_database,
+    )
+
+    decision_system = TieredDecisionSystem(
+        use_tier1=True,
+        use_tier2=True,
+        use_tier3=True,
+        use_tier4=False,  # Skip LLM for evaluation
     )
 
     # Sample to reduce API costs
@@ -100,24 +148,47 @@ def evaluate_layered(records: list[dict], sample_size: int = 30) -> dict:
     correct_rejections = []
 
     for i, r in enumerate(correct):
-        result = validator.validate(
-            context=r.get("context", ""),
-            mention=r.get("raw_mention", ""),
-            ticker=r.get("target_ticker", ""),
-            company_name=r.get("target_name", ""),
-            relationship_type=r.get("relationship_type", ""),
+        mention = r.get("raw_mention", "")
+        context = r.get("context", "")
+        candidate = Candidate(
+            text=mention,
+            sentence=context,
+            start_pos=0,
+            end_pos=len(mention),
+            source_pattern="evaluation",
         )
-        status = "✓" if result.accepted else "✗"
-        sim = f"sim={result.embedding_similarity:.2f}" if result.embedding_similarity else "no-emb"
+
+        # Get embedding similarity
+        embedding_similarity = None
+        try:
+            emb_result = embedding_scorer.score(
+                context=context,
+                ticker=r.get("target_ticker", ""),
+                company_name=r.get("target_name", ""),
+            )
+            embedding_similarity = emb_result.similarity
+        except Exception:
+            pass
+
+        decision = decision_system.decide(
+            candidate=candidate,
+            context=context,
+            relationship_type=r.get("relationship_type", ""),
+            company_name=r.get("target_name", ""),
+            embedding_similarity=embedding_similarity,
+        )
+
+        status = "✓" if decision.decision == Decision.ACCEPT else "✗"
+        sim = f"sim={embedding_similarity:.2f}" if embedding_similarity is not None else "no-emb"
         print(
             f"  [{i + 1}/{len(correct)}] {status} {r['source_ticker']}→{r['target_ticker']} ({sim})"
         )
 
-        if result.accepted:
+        if decision.decision == Decision.ACCEPT:
             correct_accepted += 1
         else:
             correct_rejected += 1
-            correct_rejections.append((r, result))
+            correct_rejections.append((r, decision))
 
     # Test on incorrect (should reject)
     incorrect_rejected = 0
@@ -126,29 +197,56 @@ def evaluate_layered(records: list[dict], sample_size: int = 30) -> dict:
 
     print("\nTesting incorrect matches...")
     for i, r in enumerate(incorrect):
-        result = validator.validate(
-            context=r.get("context", ""),
-            mention=r.get("raw_mention", ""),
-            ticker=r.get("target_ticker", ""),
-            company_name=r.get("target_name", ""),
-            relationship_type=r.get("relationship_type", ""),
+        mention = r.get("raw_mention", "")
+        context = r.get("context", "")
+        candidate = Candidate(
+            text=mention,
+            sentence=context,
+            start_pos=0,
+            end_pos=len(mention),
+            source_pattern="evaluation",
         )
-        status = "✓" if not result.accepted else "✗"
-        sim = f"sim={result.embedding_similarity:.2f}" if result.embedding_similarity else "no-emb"
-        reason = result.rejection_reason.value if not result.accepted else "accepted"
+
+        # Get embedding similarity
+        embedding_similarity = None
+        try:
+            emb_result = embedding_scorer.score(
+                context=context,
+                ticker=r.get("target_ticker", ""),
+                company_name=r.get("target_name", ""),
+            )
+            embedding_similarity = emb_result.similarity
+        except Exception:
+            pass
+
+        decision = decision_system.decide(
+            candidate=candidate,
+            context=context,
+            relationship_type=r.get("relationship_type", ""),
+            company_name=r.get("target_name", ""),
+            embedding_similarity=embedding_similarity,
+        )
+
+        status = "✓" if decision.decision != Decision.ACCEPT else "✗"
+        sim = f"sim={embedding_similarity:.2f}" if embedding_similarity is not None else "no-emb"
+        reason = (
+            f"{decision.tier.value}: {decision.reason}"
+            if decision.decision != Decision.ACCEPT
+            else "accepted"
+        )
         print(
             f"  [{i + 1}/{len(incorrect)}] {status} {r['source_ticker']}→{r['target_ticker']} ({sim}) [{reason}]"
         )
 
-        if not result.accepted:
+        if decision.decision != Decision.ACCEPT:
             incorrect_rejected += 1
-            reason = result.rejection_reason.value
+            reason = f"{decision.tier.value}: {decision.reason}"
             rejection_reasons[reason] = rejection_reasons.get(reason, 0) + 1
         else:
             incorrect_accepted += 1
 
     return {
-        "approach": "Layered (embeddings + patterns)",
+        "approach": "Tiered System (Tier 1 + Tier 2 + Tier 3)",
         "correct_accepted": correct_accepted,
         "correct_rejected": correct_rejected,
         "incorrect_rejected": incorrect_rejected,
@@ -204,9 +302,9 @@ def main():
     pattern_results = evaluate_pattern_only(records)
     print_results(pattern_results)
 
-    # Layered evaluation (uses OpenAI API)
+    # Tiered evaluation (uses OpenAI API)
     print("\n" + "=" * 60)
-    print("Evaluating LAYERED approach (with embeddings)...")
+    print("Evaluating TIERED SYSTEM (with embeddings)...")
     print("=" * 60)
     layered_results = evaluate_layered(records, sample_size=25)
     print_results(layered_results)
@@ -219,11 +317,11 @@ def main():
     print("-" * 60)
     print(f"{'Baseline (no validation)':<35} {baseline_precision:>10.1%} {'-':>5} {'-':>5}")
     print(
-        f"{'Pattern-only':<35} {pattern_results['precision']:>10.1%} "
+        f"{'Pattern-only (Tier 1+2)':<35} {pattern_results['precision']:>10.1%} "
         f"{pattern_results['false_positives']:>5} {pattern_results['false_negatives']:>5}"
     )
     print(
-        f"{'Layered (embeddings + patterns)':<35} {layered_results['precision']:>10.1%} "
+        f"{'Tiered System (Tier 1+2+3)':<35} {layered_results['precision']:>10.1%} "
         f"{layered_results['false_positives']:>5} {layered_results['false_negatives']:>5}"
     )
 

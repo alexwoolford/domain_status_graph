@@ -40,7 +40,7 @@ python scripts/parse_10k_filings.py --execute --force
 **What it does**:
 - Skips cache lookup for all files
 - Re-parses every file
-- Overwrites existing cache entries with new results
+- Overwrites existing cache entries with updated results
 - **Does NOT delete tar files or HTML files** (only updates cache)
 
 ### Option 2: Clear Cache Namespace
@@ -112,7 +112,7 @@ python -c "from public_company_graph.cache import get_cache; c = get_cache(); c.
 
 ### Step 2: Parse with Force
 ```bash
-# Force re-parse all files with new parser logic
+# Force re-parse all files with updated parser logic
 python scripts/parse_10k_filings.py --execute --force
 ```
 

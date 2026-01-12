@@ -106,6 +106,7 @@ class RelationshipVerifier:
     ]
 
     # Patterns that indicate NOT a business relationship (should be filtered)
+    # These are stronger patterns that contradict business relationships
     NON_RELATIONSHIP_PATTERNS = [
         (r"\bv\.\s", "legal_case"),  # Legal case reference
         (r"\blisted\s+on\b", "exchange"),  # Stock exchange
@@ -114,6 +115,9 @@ class RelationshipVerifier:
         (r"\bprior\s+(?:to|employer)\b", "biographical"),  # Prior employer
         (r"\bboard\s+of\s+directors\b", "biographical"),  # Director relationship
         (r"\bserves?\s+as\s+(?:a\s+)?director\b", "biographical"),  # Director
+        (r"\bdirector\s+(?:of|for|at)\s+", "biographical"),  # "director of X" or "director for X"
+        (r"\bother\s+directorships?\b", "biographical"),  # Other directorships
+        (r"\bjoined\s+(?:the\s+)?(?:board|company)\b", "biographical"),  # Joined board
         (r'"[^"]*of\s+[^"]*"', "figurative_use"),  # Figurative use like "Starbucks of X"
     ]
 

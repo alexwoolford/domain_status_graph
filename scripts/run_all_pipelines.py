@@ -41,6 +41,7 @@ COMPUTE_COMPANY_SIMILARITY_VIA_DOMAINS_SCRIPT = (
     SCRIPT_DIR / "compute_company_similarity_via_domains.py"
 )
 EXTRACT_BUSINESS_RELATIONSHIPS_SCRIPT = SCRIPT_DIR / "extract_with_llm_verification.py"
+CLEANUP_EDGES_SCRIPT = SCRIPT_DIR / "cleanup_edges_systemic.py"
 CREATE_RISK_SIMILARITY_SCRIPT = SCRIPT_DIR / "create_risk_similarity_graph.py"
 
 
@@ -308,6 +309,18 @@ def main():
         logger=logger,
     ):
         logger.error("Failed at extract_with_llm_verification step")
+        return
+
+    # Cleanup edges to ensure quality (applies tiered confidence system)
+    # This ensures all fact edges meet high confidence thresholds
+    # Converts medium-confidence to candidates, deletes low-confidence
+    if not run_script(
+        CLEANUP_EDGES_SCRIPT,
+        execute=True,
+        description="Step 2.7a: Cleanup Edge Quality (Apply Tiered Confidence System)",
+        logger=logger,
+    ):
+        logger.error("Failed at cleanup_edges_systemic step")
         return
 
     # Create risk factor embeddings and SIMILAR_RISK relationships

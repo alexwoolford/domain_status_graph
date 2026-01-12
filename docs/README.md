@@ -25,6 +25,8 @@
 | [**10k_parsing.md**](./10k_parsing.md) | 10-K parsing pipeline details |
 | [**ADDING_PARSER.md**](./ADDING_PARSER.md) | How to add parsing capabilities |
 | [**research_enhancements.md**](./research_enhancements.md) | Research-backed enhancements roadmap |
+| [**entity_resolution_evaluation.md**](./entity_resolution_evaluation.md) | Entity resolution evaluation and testing |
+| [**EDGE_QUALITY_SYSTEM.md**](./EDGE_QUALITY_SYSTEM.md) | Edge quality system and tiered confidence |
 
 ## Quick Start
 

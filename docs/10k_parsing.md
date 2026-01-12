@@ -143,4 +143,4 @@ cache clear --namespace 10k_extracted
 
 - **Datamule Setup**: See `datamule_setup.md`
 - **Cache Management**: See `cache_management.md`
-- **Adding Parsers**: See `adding_new_parser.md`
+- **Adding Parsers**: See `adding_parser.md`

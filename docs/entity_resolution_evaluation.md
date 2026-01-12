@@ -123,4 +123,4 @@ On held-out test set (never used for tuning):
 | `data/er_ai_audit.csv` | Main AI-labeled dataset |
 | `data/er_spot_check.csv` | Human verification export |
 | `scripts/er_ai_audit.py` | Unified CLI tool |
-| `scripts/evaluate_layered_validator.py` | Layered validation evaluation |
+| `scripts/evaluate_layered_validator.py` | Tiered decision system evaluation (uses TieredDecisionSystem) |

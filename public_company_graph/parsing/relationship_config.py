@@ -110,7 +110,9 @@ def get_confidence_tier(
         return ConfidenceTier.LOW
 
     if embedding_similarity is None:
-        # No embedding available - default to medium
+        # No embedding available - default to medium (candidate)
+        # This allows relationships to be stored even if embedding computation fails
+        # During cleanup, edges without embeddings should be handled separately
         return ConfidenceTier.MEDIUM
 
     if embedding_similarity >= config.high_threshold:

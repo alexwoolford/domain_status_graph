@@ -248,7 +248,8 @@ class TestLoaderErrorHandling:
         create_domain_constraints(neo4j_driver, database=test_database)
 
         # Domain without final_domain should fail (required for MERGE)
-        with pytest.raises((KeyError, TypeError)):
+        # Should raise ValueError before sending to Neo4j (fail fast)
+        with pytest.raises(ValueError, match="missing required field 'final_domain'"):
             load_domains(neo4j_driver, [{"domain": "test.com"}], database=test_database)
 
     def test_load_technologies_handles_missing_domain(self, neo4j_driver, test_database):

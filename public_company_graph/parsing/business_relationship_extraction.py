@@ -654,8 +654,10 @@ def extract_and_resolve_relationships(
     lookup: CompanyLookup,
     relationship_type: RelationshipType,
     self_cik: str | None = None,
-    use_layered_validation: bool = False,
+    use_tiered_decision: bool = True,
     embedding_threshold: float = 0.30,
+    embedding_scorer=None,
+    llm_verifier=None,
 ) -> list[dict[str, Any]]:
     """
     Extract and resolve business relationships from 10-K text.
@@ -666,8 +668,10 @@ def extract_and_resolve_relationships(
         lookup: CompanyLookup table
         relationship_type: Type of relationship to extract
         self_cik: CIK of the company filing (to exclude self-references)
-        use_layered_validation: If True, apply embedding + pattern validation
+        use_tiered_decision: If True, apply TieredDecisionSystem (default: True)
         embedding_threshold: Minimum similarity for embedding check (default 0.30)
+        embedding_scorer: EmbeddingSimilarityScorer instance (required if use_tiered_decision=True)
+        llm_verifier: LLMRelationshipVerifier instance (optional, for Tier 4)
 
     Returns:
         List of dicts with: cik, ticker, name, confidence, raw_mention, context
@@ -675,14 +679,21 @@ def extract_and_resolve_relationships(
     results = []
     seen_ciks: set[str] = set()
 
-    # Initialize layered validator if requested
-    validator = None
-    if use_layered_validation:
-        from public_company_graph.entity_resolution.layered_validator import (
-            LayeredEntityValidator,
+    # Initialize tiered decision system (default, recommended)
+    # Only enable if embedding_scorer is provided (required for Tier 3)
+    decision_system = None
+    if use_tiered_decision and embedding_scorer is not None:
+        from public_company_graph.entity_resolution.candidates import Candidate
+        from public_company_graph.entity_resolution.tiered_decision import (
+            TieredDecisionSystem,
         )
 
-        validator = LayeredEntityValidator(embedding_threshold=embedding_threshold)
+        decision_system = TieredDecisionSystem(
+            use_tier1=True,
+            use_tier2=True,
+            use_tier3=True,
+            use_tier4=(llm_verifier is not None),
+        )
 
     # Combine texts
     texts = []
@@ -715,19 +726,57 @@ def extract_and_resolve_relationships(
                 resolved = _resolve_candidate(candidate, lookup, self_cik)
 
                 if resolved and resolved["cik"] not in seen_ciks:
-                    # Apply layered validation if enabled
-                    validation_result = None
-                    if validator:
-                        validation_result = validator.validate(
-                            context=sentence[:500],
-                            mention=candidate,
-                            ticker=resolved["ticker"],
-                            company_name=resolved["name"],
-                            relationship_type=relationship_type.value,
+                    # Apply tiered decision system (default, recommended)
+                    tiered_decision = None
+                    embedding_similarity = None
+
+                    if decision_system:
+                        from public_company_graph.entity_resolution.candidates import Candidate
+
+                        # Create candidate object
+                        candidate_obj = Candidate(
+                            text=candidate,
+                            sentence=sentence[:500],
+                            start_pos=0,
+                            end_pos=len(candidate),
+                            source_pattern="extraction",
                         )
-                        if not validation_result.accepted:
-                            # Skip this candidate - failed validation
+
+                        # Compute embedding similarity if scorer provided
+                        if embedding_scorer:
+                            try:
+                                embedding_result = embedding_scorer.score(
+                                    context=sentence[:500],
+                                    ticker=resolved["ticker"],
+                                    company_name=resolved["name"],
+                                )
+                                embedding_similarity = embedding_result.similarity
+                            except Exception as e:
+                                logger.warning(
+                                    f"Failed to compute embedding similarity for {candidate}: {e}"
+                                )
+
+                        # Make tiered decision (decision_system only exists if embedding_scorer provided)
+                        # Convert relationship_type to Neo4j format (e.g., "competitor" -> "HAS_COMPETITOR")
+                        neo4j_relationship_type = RELATIONSHIP_TYPE_TO_NEO4J.get(
+                            relationship_type, f"HAS_{relationship_type.name}"
+                        )
+                        tiered_decision = decision_system.decide(
+                            candidate=candidate_obj,
+                            context=sentence[:500],
+                            relationship_type=neo4j_relationship_type,
+                            company_name=resolved["name"],
+                            embedding_similarity=embedding_similarity,
+                            llm_verifier=llm_verifier,
+                        )
+
+                        # Handle decision
+                        if tiered_decision.decision.value == "reject":
+                            # Skip this candidate - rejected by tiered system
                             continue
+                        elif tiered_decision.decision.value == "candidate":
+                            # Store as candidate (medium confidence)
+                            pass  # Will be handled by caller based on confidence_tier
 
                     seen_ciks.add(resolved["cik"])
                     result_dict = {
@@ -740,10 +789,17 @@ def extract_and_resolve_relationships(
                         "relationship_type": relationship_type.value,
                     }
 
-                    # Add validation metadata if available
-                    if validation_result:
-                        result_dict["embedding_similarity"] = validation_result.embedding_similarity
-                        result_dict["validation_passed"] = True
+                    # Add tiered decision metadata if available
+                    if tiered_decision:
+                        result_dict["embedding_similarity"] = embedding_similarity
+                        result_dict["decision_tier"] = tiered_decision.tier.value
+                        result_dict["decision_reason"] = tiered_decision.reason
+                        result_dict["decision_confidence"] = tiered_decision.confidence
+                        # Map decision to confidence tier for compatibility
+                        if tiered_decision.decision.value == "accept":
+                            result_dict["confidence_tier"] = "high"
+                        elif tiered_decision.decision.value == "candidate":
+                            result_dict["confidence_tier"] = "medium"
 
                     results.append(result_dict)
 
@@ -850,8 +906,10 @@ def extract_all_relationships(
     lookup: CompanyLookup,
     self_cik: str | None = None,
     relationship_types: list[RelationshipType] | None = None,
-    use_layered_validation: bool = False,
+    use_tiered_decision: bool = True,
     embedding_threshold: float = 0.30,
+    embedding_scorer=None,
+    llm_verifier=None,
 ) -> dict[RelationshipType, list[dict[str, Any]]]:
     """
     Extract all business relationships from 10-K text.
@@ -864,8 +922,10 @@ def extract_all_relationships(
         lookup: CompanyLookup table
         self_cik: CIK of the company filing
         relationship_types: Types to extract (default: all)
-        use_layered_validation: If True, apply embedding + pattern validation
+        use_tiered_decision: If True, apply TieredDecisionSystem (default: True)
         embedding_threshold: Minimum similarity for embedding check
+        embedding_scorer: EmbeddingSimilarityScorer instance (required if use_tiered_decision=True)
+        llm_verifier: LLMRelationshipVerifier instance (optional)
 
     Returns:
         Dict mapping relationship type → list of extracted relationships
@@ -881,8 +941,10 @@ def extract_all_relationships(
             lookup=lookup,
             relationship_type=rel_type,
             self_cik=self_cik,
-            use_layered_validation=use_layered_validation,
+            use_tiered_decision=use_tiered_decision,
             embedding_threshold=embedding_threshold,
+            embedding_scorer=embedding_scorer,
+            llm_verifier=llm_verifier,
         )
 
     return results

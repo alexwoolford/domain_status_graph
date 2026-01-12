@@ -47,12 +47,6 @@ from public_company_graph.entity_resolution.filters import (
     FilterResult,
     filter_candidate,
 )
-from public_company_graph.entity_resolution.layered_validator import (
-    LayeredEntityValidator,
-    RejectionReason,
-    ValidationResult,
-    validate_entity,
-)
 from public_company_graph.entity_resolution.matchers import (
     CandidateMatcher,
     MatchResult,
@@ -71,6 +65,13 @@ from public_company_graph.entity_resolution.semantic import (
     SemanticScorer,
     cosine_similarity,
     score_semantic_similarity,
+)
+from public_company_graph.entity_resolution.tiered_decision import (
+    Decision,
+    DecisionTier,
+    TieredDecision,
+    TieredDecisionSystem,
+    TieredMetrics,
 )
 
 __all__ = [
@@ -112,9 +113,10 @@ __all__ = [
     "EmbeddingSimilarityScorer",
     "EmbeddingSimilarityResult",
     "score_embedding_similarity",
-    # Layered validation (combining all approaches)
-    "LayeredEntityValidator",
-    "ValidationResult",
-    "RejectionReason",
-    "validate_entity",
+    # Tiered decision system (cost-aware validation)
+    "TieredDecisionSystem",
+    "TieredDecision",
+    "Decision",
+    "DecisionTier",
+    "TieredMetrics",
 ]

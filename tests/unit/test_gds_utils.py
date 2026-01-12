@@ -2,7 +2,7 @@
 Unit tests for GDS utility functions.
 """
 
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import pandas as pd
 
@@ -116,43 +116,7 @@ class TestCleanupLeftoverGraphs:
 class TestGetGdsClient:
     """Tests for get_gds_client function."""
 
-    @patch("public_company_graph.config.get_neo4j_uri")
-    @patch("public_company_graph.config.get_neo4j_user")
-    @patch("public_company_graph.config.get_neo4j_password")
-    def test_creates_gds_client_with_correct_params(self, mock_password, mock_user, mock_uri):
-        """Test that GDS client is created with correct parameters."""
-        mock_uri.return_value = "bolt://localhost:7687"
-        mock_user.return_value = "neo4j"
-        mock_password.return_value = "password123"
-
-        # Import here to ensure patches are applied correctly
-        import importlib
-
-        import public_company_graph.gds.utils as utils_module
-
-        importlib.reload(utils_module)
-
-        with patch.object(utils_module, "GraphDataScience", create=True) as mock_gds_class:
-            mock_gds_instance = MagicMock()
-            mock_gds_class.return_value = mock_gds_instance
-
-            # Re-import the function after patches
-
-            # This test is complex due to the dynamic import inside get_gds_client
-            # Skip for now - we test behavior in integration tests
-            pass
-
-    def test_raises_import_error_when_gds_not_available(self):
-        """Test that ImportError is raised when graphdatascience not installed."""
-        # This test requires complex patching of the import system
-        # The function imports graphdatascience inside, making it hard to mock
-        # Skip for now - covered by integration tests
-        pass
-
-    @patch("public_company_graph.config.get_neo4j_uri")
-    @patch("public_company_graph.config.get_neo4j_user")
-    @patch("public_company_graph.config.get_neo4j_password")
-    def test_creates_gds_client_without_database(self, mock_password, mock_user, mock_uri):
-        """Test GDS client creation without explicit database."""
-        # Similar complexity - skip for unit tests, covered in integration
-        pass
+    # Note: Tests for get_gds_client are skipped because:
+    # - The function has dynamic imports that are hard to mock
+    # - Behavior is covered by integration tests
+    # - These tests would require complex patching with minimal value
