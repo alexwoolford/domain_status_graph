@@ -28,36 +28,7 @@ python scripts/chat_graphrag.py
 
 ---
 
-## Example 1: AI Chip Export Restrictions → Unexpected Industry Pairings
-
-**Event**: U.S. restrictions on AI chip exports to China (2023-2024)
-
-**Surprising Connection**: The graph reveals that cryptocurrency miners, data center operators, and enterprise network equipment manufacturers all share the same critical supplier (NVIDIA), creating unexpected exposure clusters across diverse industries.
-
-**Graph Query**:
-```cypher
-// Find companies that depend on NVIDIA as a supplier
-MATCH (c:Company)-[:HAS_SUPPLIER]->(nvda:Company {ticker: 'NVDA'})
-RETURN c.ticker, c.name, c.sector
-```
-
-**Impact Chain**:
-1. **Direct Impact**: NVIDIA faces export restrictions
-2. **First-Order Impact**: Companies that directly source GPUs from NVIDIA:
-   - **IREN Ltd** - Data center operator ("procured approximately 5.5k NVIDIA B200 GPUs")
-   - **Applied Digital (APLD)** - Data center operator using NVIDIA GPUs
-   - **Super Micro Computer (SMCI)** - Server manufacturer (also depends on Intel)
-   - **Bit Digital (BTBT)** - Cryptocurrency mining company
-3. **Second-Order Impact**: Companies similar to these (via `SIMILAR_DESCRIPTION` or `SIMILAR_TECHNOLOGY`):
-   - Other data center operators
-   - AI/ML infrastructure companies
-   - Companies using similar GPU-intensive workloads
-
-**Why It's Surprising**: While crypto miners using NVIDIA GPUs is known, the graph reveals **which specific companies are exposed** and shows they share suppliers with **data center operators and enterprise infrastructure companies**—creating unexpected cross-industry exposure clusters. The graph's value is in identifying the specific companies and revealing these non-obvious industry pairings.
-
----
-
-## Example 2: Red Sea Shipping Disruptions → E-commerce Companies
+## Example 1: Red Sea Shipping Disruptions → E-commerce Companies
 
 **Event**: Houthi attacks on Red Sea shipping routes (2024)
 
@@ -87,7 +58,7 @@ LIMIT 20
 
 ---
 
-## Example 3: Boeing Production Delays → Airlines & Defense Contractors
+## Example 2: Boeing Production Delays → Airlines & Defense Contractors
 
 **Event**: Boeing 737 MAX production issues and quality control problems (2024)
 
@@ -116,7 +87,7 @@ RETURN c.ticker, c.name, c.sector
 
 ---
 
-## Example 4: China Rare Earth Export Controls → EV Manufacturers
+## Example 3: China Rare Earth Export Controls → EV Manufacturers
 
 **Event**: Potential China restrictions on rare earth exports (2024-2025)
 
@@ -151,7 +122,7 @@ LIMIT 10
 
 ---
 
-## Example 5: Oracle Cloud Outage → Government Contractors
+## Example 4: Oracle Cloud Outage → Government Contractors
 
 **Event**: Hypothetical Oracle Cloud infrastructure failure
 
@@ -180,7 +151,7 @@ RETURN c.ticker, c.name, type(r) as relationship_type
 
 ---
 
-## Example 6: Helium Shortage → Medical Device Companies
+## Example 5: Helium Shortage → Medical Device Companies
 
 **Event**: Global helium supply shortages (2023-2024)
 
@@ -212,7 +183,7 @@ LIMIT 10
 
 ---
 
-## Example 7: Semiconductor Export Controls → Cross-Industry Exposure
+## Example 6: Semiconductor Export Controls → Cross-Industry Exposure
 
 **Event**: U.S. restrictions on advanced semiconductor exports (2023-2024)
 
@@ -245,7 +216,7 @@ ORDER BY s.ticker, c.name
 
 ---
 
-## Example 8: Middle East Conflict → Shipping & Logistics Companies
+## Example 7: Middle East Conflict → Shipping & Logistics Companies
 
 **Event**: Houthi attacks on Red Sea shipping, Panama Canal drought (2024)
 
@@ -307,7 +278,7 @@ RETURN c.ticker, c.name, c.sector, s.ticker, s.name
 
 ---
 
-## Example 10: Tariffs on Chinese Imports → Technology Companies
+## Example 9: Tariffs on Chinese Imports → Technology Companies
 
 **Event**: Increased tariffs on Chinese imports (2024-2025)
 

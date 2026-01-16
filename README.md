@@ -421,28 +421,31 @@ For 50+ more queries with verified results, see [docs/money_queries.md](docs/mon
 
 The graph excels at connecting **real-world events** (wars, tariffs, supply chain disruptions, political changes) to **potential impacts on publicly traded companies** through their disclosed relationships.
 
-### Example: AI Chip Export Restrictions
+### Example: Semiconductor Export Controls
 
-**Event**: U.S. restrictions on AI chip exports to China (2023-2024)
+**Event**: U.S. restrictions on advanced semiconductor exports (2023-2024)
 
-**Surprising Discovery**: Cryptocurrency mining companies are indirectly impacted through their NVIDIA GPU supply chains—a connection that's not obvious from company descriptions alone.
+**Surprising Discovery**: Enterprise network equipment manufacturers (Arista, Fortinet) share the same critical semiconductor suppliers (NVIDIA, Intel) as cryptocurrency miners and data center operators, creating unexpected cross-industry exposure clusters.
 
 **Query**:
 ```cypher
-// Find companies that depend on NVIDIA as a supplier
-MATCH (c:Company)-[:HAS_SUPPLIER]->(nvda:Company {ticker: 'NVDA'})
-RETURN c.ticker, c.name, c.sector
+// Find all companies that depend on NVIDIA or Intel as suppliers
+MATCH (c:Company)-[:HAS_SUPPLIER]->(s:Company)
+WHERE s.ticker IN ['NVDA', 'INTC', 'AMD']
+RETURN c.ticker, c.name, c.sector, s.ticker, s.name
+ORDER BY s.ticker, c.name
 ```
 
 **Impact Chain**:
-1. **Direct**: NVIDIA faces export restrictions
-2. **First-Order**: Companies directly sourcing GPUs:
-   - **IREN Ltd** - "procured approximately 5.5k NVIDIA B200 GPUs"
-   - **Applied Digital (APLD)** - Data center operator
-   - **Bit Digital (BTBT)** - Cryptocurrency mining
-3. **Second-Order**: Companies similar to these (via `SIMILAR_DESCRIPTION` or `SIMILAR_TECHNOLOGY`)
+1. **Direct**: Semiconductor export restrictions
+2. **First-Order**: Companies directly sourcing chips:
+   - **Arista Networks (ANET)** - Network equipment (Intel processors)
+   - **Fortinet (FTNT)** - Network security (Intel processors)
+   - **Bit Digital (BTBT)** - Cryptocurrency mining (NVIDIA GPUs)
+   - **IREN Ltd** - Data center operator (NVIDIA GPUs)
+3. **Second-Order**: Companies with similar technology stacks
 
-**Why It's Surprising**: Cryptocurrency miners aren't typically associated with AI chip restrictions, but the graph reveals they share the same critical supplier as AI companies.
+**Why It's Surprising**: Enterprise network equipment manufacturers (Arista, Fortinet) and cryptocurrency miners (Bit Digital) seem like completely different industries, but the graph reveals they share the same critical semiconductor suppliers.
 
 ### Example: Red Sea Shipping Disruptions
 
