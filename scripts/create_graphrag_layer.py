@@ -184,7 +184,18 @@ def main():
         sample_size = min(5, len(companies_with_files))
         total_chars_sample = 0
         for company in companies_with_files[:sample_size]:
-            text = extract_full_text_with_datamule(company["file_path"], company["cik"])
+            # Validate file path is within filings_dir to prevent path traversal
+            file_path = company["file_path"]
+            try:
+                resolved_path = file_path.resolve()
+                resolved_base = filings_dir.resolve()
+                resolved_path.relative_to(resolved_base)
+            except (ValueError, OSError):
+                script_logger.warning(
+                    f"Path traversal attempt detected: {file_path} (base: {filings_dir})"
+                )
+                continue
+            text = extract_full_text_with_datamule(file_path, company["cik"], base_dir=filings_dir)
             if text:
                 total_chars_sample += len(text)
 
@@ -278,8 +289,21 @@ def main():
 
                 # Extract full text from HTML file
                 file_path = company["file_path"]
+                # Validate file path is within filings_dir to prevent path traversal
+                try:
+                    resolved_path = file_path.resolve()
+                    resolved_base = filings_dir.resolve()
+                    resolved_path.relative_to(resolved_base)
+                except (ValueError, OSError):
+                    script_logger.warning(
+                        f"Path traversal attempt detected: {file_path} (base: {filings_dir})"
+                    )
+                    failed += 1
+                    continue
                 script_logger.debug(f"Extracting text from {file_path.name}...")
-                full_text = extract_full_text_with_datamule(file_path, company["cik"])
+                full_text = extract_full_text_with_datamule(
+                    file_path, company["cik"], base_dir=filings_dir
+                )
                 script_logger.debug(f"Extracted {len(full_text) if full_text else 0} chars")
 
                 if not full_text:

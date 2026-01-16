@@ -13,7 +13,7 @@ from bs4 import BeautifulSoup
 logger = logging.getLogger(__name__)
 
 
-def extract_full_text_from_html(file_path: Path) -> str | None:
+def extract_full_text_from_html(file_path: Path, base_dir: Path | None = None) -> str | None:
     """
     Extract full text content from a 10-K HTML file.
 
@@ -21,10 +21,22 @@ def extract_full_text_from_html(file_path: Path) -> str | None:
 
     Args:
         file_path: Path to 10-K HTML file
+        base_dir: Optional base directory to validate path is within (prevents path traversal)
 
     Returns:
         Full text content, or None if extraction fails
     """
+    # Validate path to prevent path traversal attacks
+    if base_dir:
+        try:
+            resolved_path = file_path.resolve()
+            resolved_base = base_dir.resolve()
+            # Ensure resolved path is within base_dir
+            resolved_path.relative_to(resolved_base)
+        except (ValueError, OSError):
+            logger.warning(f"Path traversal attempt detected: {file_path} (base: {base_dir})")
+            return None
+
     try:
         with open(file_path, encoding="utf-8", errors="ignore") as f:
             content = f.read()
@@ -62,7 +74,9 @@ def extract_full_text_from_html(file_path: Path) -> str | None:
         return None
 
 
-def extract_full_text_with_datamule(file_path: Path, cik: str | None = None) -> str | None:
+def extract_full_text_with_datamule(
+    file_path: Path, cik: str | None = None, base_dir: Path | None = None
+) -> str | None:
     """
     Extract full text from 10-K HTML file.
 
@@ -72,13 +86,14 @@ def extract_full_text_with_datamule(file_path: Path, cik: str | None = None) -> 
     Args:
         file_path: Path to 10-K HTML file
         cik: Company CIK (unused for now, kept for future datamule support)
+        base_dir: Optional base directory to validate path is within (prevents path traversal)
 
     Returns:
         Full text content, or None if extraction fails
     """
     # Use HTML extraction (fast, reliable, always works)
     # Note: datamule support can be added if needed for enhanced parsing
-    return extract_full_text_from_html(file_path)
+    return extract_full_text_from_html(file_path, base_dir=base_dir)
 
 
 def find_10k_file_for_company(cik: str, filings_dir: Path) -> Path | None:

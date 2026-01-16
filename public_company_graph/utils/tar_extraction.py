@@ -130,16 +130,27 @@ def extract_from_tar(
                     member_path = Path(member.name)
                     # Remove any leading slashes or parent directory references
                     safe_name = member_path.name  # Get just the filename, no path
-                    if ".." in safe_name or safe_name.startswith("/"):
+
+                    # Enhanced validation: check for path traversal attempts
+                    if ".." in safe_name or safe_name.startswith("/") or member_path.is_absolute():
                         logger.warning(f"  ⚠️  Skipping suspicious tar member: {member.name}")
+                        continue
+
+                    # Additional check: ensure safe_name doesn't contain path separators
+                    if "/" in safe_name or "\\" in safe_name:
+                        logger.warning(
+                            f"  ⚠️  Skipping tar member with path separators: {member.name}"
+                        )
                         continue
 
                     # Extract to a safe path within extract_dir
                     safe_extract_path = extract_dir / safe_name
                     # Double-check: ensure resolved path is within extract_dir
                     try:
-                        safe_extract_path.resolve().relative_to(extract_dir.resolve())
-                    except ValueError:
+                        resolved_path = safe_extract_path.resolve()
+                        resolved_base = extract_dir.resolve()
+                        resolved_path.relative_to(resolved_base)
+                    except (ValueError, OSError):
                         logger.warning(f"  ⚠️  Path traversal attempt detected: {member.name}")
                         continue
 
@@ -165,13 +176,23 @@ def extract_from_tar(
             # If no specific match, extract the largest HTML file
             if not main_10k and html_members:
                 member = html_members[0]
-                # Apply same Tar Slip protection
+                # Apply same Tar Slip protection with enhanced validation
                 member_path = Path(member.name)
                 safe_name = member_path.name
-                if ".." not in safe_name and not safe_name.startswith("/"):
+
+                # Enhanced validation: check for path traversal attempts
+                if (
+                    ".." not in safe_name
+                    and not safe_name.startswith("/")
+                    and not member_path.is_absolute()
+                    and "/" not in safe_name
+                    and "\\" not in safe_name
+                ):
                     safe_extract_path = extract_dir / safe_name
                     try:
-                        safe_extract_path.resolve().relative_to(extract_dir.resolve())
+                        resolved_path = safe_extract_path.resolve()
+                        resolved_base = extract_dir.resolve()
+                        resolved_path.relative_to(resolved_base)
                         # Modify member name to use safe_name before extraction
                         original_name = member.name
                         member.name = safe_name
@@ -186,8 +207,10 @@ def extract_from_tar(
                         extracted_file = extract_dir / safe_name
                         if extracted_file.exists():
                             main_10k = extracted_file
-                    except ValueError:
+                    except (ValueError, OSError):
                         logger.warning(f"  ⚠️  Path traversal attempt detected: {member.name}")
+                else:
+                    logger.warning(f"  ⚠️  Skipping suspicious tar member: {member.name}")
         finally:
             tar.close()
 

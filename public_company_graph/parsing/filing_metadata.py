@@ -125,6 +125,22 @@ class FilingMetadataParser(TenKParser):
                 # Find metadata.json in the archive
                 for member in tar.getmembers():
                     if member.name.endswith("metadata.json"):
+                        # Prevent Tar Slip: Validate member path before extraction
+                        from pathlib import Path
+
+                        member_path = Path(member.name)
+                        # Check for path traversal attempts
+                        if ".." in member.name or member_path.is_absolute():
+                            logger.warning(f"Path traversal attempt in tar: {member.name}")
+                            continue
+                        # Only allow simple filenames or paths within expected structure
+                        # SEC metadata.json files are typically in subdirectories like "company-cik-12345/metadata.json"
+                        # Allow this but reject anything with suspicious patterns
+                        if member.name.count("/") > 10:  # Reject deeply nested paths
+                            logger.warning(f"Suspicious deeply nested path in tar: {member.name}")
+                            continue
+                        # Note: tar.extractfile() only reads from the archive, it doesn't write files
+                        # This is safe from Tar Slip perspective, but we validate the path anyway for defense in depth
                         f = tar.extractfile(member)
                         if f:
                             metadata = json.loads(f.read().decode("utf-8"))

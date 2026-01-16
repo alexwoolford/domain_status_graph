@@ -9,6 +9,20 @@ import subprocess
 import sys
 from pathlib import Path
 
+# Allowlist of valid script names to prevent command injection
+_ALLOWED_SCRIPTS = {
+    "bootstrap_graph",
+    "compute_gds_features",
+    "health_check",
+    "run_all_pipelines",
+    "enrich_company_properties",
+    "compute_company_similarity",
+    "validate_ranking_quality",
+    "validate_famous_pairs",
+    "compute_company_similarity_via_domains",
+    "optimize_similarity_weights",
+}
+
 
 def _run_script(script_name: str):
     """
@@ -16,10 +30,35 @@ def _run_script(script_name: str):
 
     Args:
         script_name: Name of script file (without .py extension)
+
+    Raises:
+        ValueError: If script_name is not in the allowlist
+        FileNotFoundError: If script file doesn't exist
     """
+    # Validate script name against allowlist to prevent command injection
+    if script_name not in _ALLOWED_SCRIPTS:
+        raise ValueError(
+            f"Invalid script name: {script_name}. Must be one of: {sorted(_ALLOWED_SCRIPTS)}"
+        )
+
     script = Path(__file__).parent.parent.parent / "scripts" / f"{script_name}.py"
-    # Safe: sys.argv[1:] passed as list (not shell=True), arguments validated by argparse
-    subprocess.run([sys.executable, str(script)] + sys.argv[1:], check=False)
+
+    # Verify script file exists
+    if not script.exists():
+        raise FileNotFoundError(f"Script not found: {script}")
+
+    # Sanitize arguments: reject any that contain shell metacharacters
+    # This prevents command injection even though we're using a list (not shell=True)
+    safe_args = [sys.executable, str(script)]
+    dangerous_chars = [";", "&", "|", "`", "$", "(", ")", "<", ">", "\n", "\r"]
+    for arg in sys.argv[1:]:
+        # Check for dangerous characters that could be used for injection
+        if any(char in arg for char in dangerous_chars):
+            raise ValueError(f"Invalid argument contains dangerous characters: {repr(arg)}")
+        safe_args.append(arg)
+
+    # Safe: using list (not shell=True) and arguments are validated
+    subprocess.run(safe_args, check=False)
 
 
 def run_bootstrap():
