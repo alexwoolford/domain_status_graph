@@ -233,6 +233,33 @@ After restore, connect to Neo4j and start exploring with the [example queries](#
 
 > **Note**: The dump is stored in Git LFS (~6MB compressed, ~34MB uncompressed). The full pipeline with all data sources requires running the steps in [Running the Pipeline](#running-the-pipeline).
 
+### Ask Questions with GraphRAG Chat
+
+The easiest way to explore the graph is through the interactive chat interface. After restoring the dump, you can ask natural language questions:
+
+```bash
+# Start the chat interface (requires OpenAI API key for answer synthesis)
+python scripts/chat_graphrag.py
+```
+
+**Example questions you can ask:**
+- "Which companies would be impacted by a shortage of helium?"
+- "If Oracle went out of business, which companies would be affected?"
+- "What companies depend on NVIDIA as a supplier?"
+- "Which companies are similar to Tesla?"
+- "How would China rare earth export controls affect EV manufacturers?"
+
+The chatbot uses GraphRAG to:
+1. Search 10-K filing text via vector search
+2. Traverse graph relationships (competitors, suppliers, partners)
+3. Synthesize comprehensive answers with citations
+
+**Requirements**:
+- Neo4j running with the graph loaded (from dump or pipeline)
+- OpenAI API key in `.env` (for answer synthesis)
+
+> **Tip**: You can also explore via Cypher queries in Neo4j Browser, but the chat interface is the fastest way to get insights without writing queries.
+
 ---
 
 ## Running the Pipeline
@@ -464,13 +491,11 @@ For additional examples connecting current events to company impacts, see [docs/
 
 **Try it yourself**:
 ```bash
-# Use the GraphRAG chat interface
+# Use the GraphRAG chat interface (see Quick Start section above)
 python scripts/chat_graphrag.py
-
-# Ask questions like:
-# "Which companies would be impacted by a shortage of [commodity]?"
-# "If [company] went out of business, which companies would be affected?"
 ```
+
+For more details, see the [GraphRAG documentation](docs/graphrag.md).
 
 ---
 
