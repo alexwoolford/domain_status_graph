@@ -89,6 +89,31 @@ For complete schema documentation, see [docs/graph_schema.md](docs/graph_schema.
 
 ---
 
+## Data Coverage
+
+| Data Type | Coverage | Notes |
+|-----------|----------|-------|
+| Companies | 100% (5,398) | All U.S. public companies with 10-K filings |
+| Business Descriptions | 99.85% | From 10-K Item 1 |
+| Competitor Relationships | ~60% | 3,249 relationships (self-declared in 10-Ks) |
+| Supply Chain | ~2.4% | 130 relationships (SEC doesn't require disclosure) |
+| Sector/Industry | ~18% | Yahoo Finance (actively traded stocks only) |
+| Technology Stack | ~69% | 3,745 companies with detected web technologies |
+
+**Note**: Supply chain data is sparse because SEC filings don't require supplier disclosure. The relationships that exist are high-quality (LLM-verified, ~95% precision).
+
+---
+
+## Known Limitations
+
+- **Technology Detection**: Only web technologies (JavaScript, CMS, CDN). Backend infrastructure (Kubernetes, Docker) not detected (requires different approach).
+- **Time Series**: Single snapshot - no historical relationship tracking (future enhancement).
+- **Supply Chain**: Sparse coverage (~2.4%) - SEC doesn't require supplier disclosure.
+- **Market Data**: Sector/industry data only for ~18% of companies (Yahoo Finance limitation).
+- **Large Tech Companies**: Often use generic language, missing specific relationships.
+
+---
+
 ## Prerequisites
 
 ### Required Software
