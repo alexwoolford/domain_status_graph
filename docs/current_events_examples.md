@@ -28,11 +28,11 @@ python scripts/chat_graphrag.py
 
 ---
 
-## Example 1: AI Chip Export Restrictions → Cryptocurrency Miners
+## Example 1: AI Chip Export Restrictions → Unexpected Industry Pairings
 
 **Event**: U.S. restrictions on AI chip exports to China (2023-2024)
 
-**Surprising Connection**: Cryptocurrency mining companies are indirectly impacted through their NVIDIA GPU supply chains.
+**Surprising Connection**: The graph reveals that cryptocurrency miners, data center operators, and enterprise network equipment manufacturers all share the same critical supplier (NVIDIA), creating unexpected exposure clusters across diverse industries.
 
 **Graph Query**:
 ```cypher
@@ -44,16 +44,16 @@ RETURN c.ticker, c.name, c.sector
 **Impact Chain**:
 1. **Direct Impact**: NVIDIA faces export restrictions
 2. **First-Order Impact**: Companies that directly source GPUs from NVIDIA:
-   - **IREN Ltd** - "procured approximately 5.5k NVIDIA B200 GPUs"
+   - **IREN Ltd** - Data center operator ("procured approximately 5.5k NVIDIA B200 GPUs")
    - **Applied Digital (APLD)** - Data center operator using NVIDIA GPUs
-   - **Super Micro Computer (SMCI)** - Server manufacturer
+   - **Super Micro Computer (SMCI)** - Server manufacturer (also depends on Intel)
    - **Bit Digital (BTBT)** - Cryptocurrency mining company
 3. **Second-Order Impact**: Companies similar to these (via `SIMILAR_DESCRIPTION` or `SIMILAR_TECHNOLOGY`):
    - Other data center operators
    - AI/ML infrastructure companies
    - Companies using similar GPU-intensive workloads
 
-**Why It's Surprising**: Cryptocurrency miners aren't typically associated with AI chip restrictions, but the graph reveals they share the same critical supplier (NVIDIA) as AI companies.
+**Why It's Surprising**: While crypto miners using NVIDIA GPUs is known, the graph reveals **which specific companies are exposed** and shows they share suppliers with **data center operators and enterprise infrastructure companies**—creating unexpected cross-industry exposure clusters. The graph's value is in identifying the specific companies and revealing these non-obvious industry pairings.
 
 ---
 
@@ -61,7 +61,7 @@ RETURN c.ticker, c.name, c.sector
 
 **Event**: Houthi attacks on Red Sea shipping routes (2024)
 
-**Surprising Connection**: E-commerce companies using Shopify are indirectly exposed through global supply chain dependencies.
+**Surprising Connection**: The graph identifies e-commerce companies through their technology stack (Shopify), revealing which specific companies have global supply chain dependencies that aren't obvious from company descriptions alone.
 
 **Graph Query**:
 ```cypher
@@ -83,7 +83,7 @@ LIMIT 20
    - Companies with similar supply chain structures
    - Retailers dependent on global shipping
 
-**Why It's Surprising**: E-commerce technology choices (Shopify) reveal supply chain dependencies that aren't obvious from company descriptions alone.
+**Why It's Surprising**: The graph's value is in **identifying which specific e-commerce companies are exposed** through their technology stack, even when their global supply chain dependencies aren't explicitly mentioned in company descriptions. Technology choices (Shopify) serve as a signal for companies with global shipping needs.
 
 ---
 
@@ -212,11 +212,11 @@ LIMIT 10
 
 ---
 
-## Example 7: Semiconductor Export Controls → Data Center Operators
+## Example 7: Semiconductor Export Controls → Cross-Industry Exposure
 
 **Event**: U.S. restrictions on advanced semiconductor exports (2023-2024)
 
-**Surprising Connection**: Data center operators and cryptocurrency miners share the same critical suppliers (NVIDIA, Intel).
+**Surprising Connection**: Enterprise network equipment manufacturers (Arista, Fortinet) share the same critical semiconductor suppliers (NVIDIA, Intel) as cryptocurrency miners and data center operators, creating unexpected cross-industry exposure clusters.
 
 **Graph Query**:
 ```cypher
@@ -241,7 +241,7 @@ ORDER BY s.ticker, c.name
    - Via `SIMILAR_TECHNOLOGY` relationships
    - Companies using similar infrastructure
 
-**Why It's Surprising**: Cryptocurrency miners (Bit Digital) and enterprise network equipment manufacturers (Arista, Fortinet) share the same critical semiconductor suppliers, creating unexpected exposure clusters.
+**Why It's Surprising**: Enterprise network equipment manufacturers (Arista, Fortinet) and cryptocurrency miners (Bit Digital) seem like completely different industries, but the graph reveals they share the same critical semiconductor suppliers. This creates unexpected exposure clusters—semiconductor restrictions impact both enterprise infrastructure and crypto mining operations.
 
 ---
 
@@ -249,7 +249,7 @@ ORDER BY s.ticker, c.name
 
 **Event**: Houthi attacks on Red Sea shipping, Panama Canal drought (2024)
 
-**Surprising Connection**: E-commerce companies and consumer goods manufacturers are exposed through shipping route dependencies.
+**Surprising Connection**: The graph identifies e-commerce and consumer goods companies through their technology stack, revealing which specific companies have global shipping dependencies that may not be obvious from company descriptions.
 
 **Graph Query**:
 ```cypher
@@ -273,7 +273,7 @@ LIMIT 15
    - D2C brands with similar supply chain structures
    - Consumer goods companies with global manufacturing
 
-**Why It's Surprising**: Technology stack choices (Shopify) reveal supply chain dependencies that aren't obvious from company descriptions. The graph connects e-commerce technology to shipping risk exposure.
+**Why It's Surprising**: The graph's value is in **identifying which specific companies are exposed** through technology stack analysis, even when global shipping dependencies aren't explicitly mentioned. Technology choices (Shopify) serve as a signal for companies with global supply chain needs.
 
 ---
 
@@ -311,33 +311,42 @@ RETURN c.ticker, c.name, c.sector, s.ticker, s.name
 
 **Event**: Increased tariffs on Chinese imports (2024-2025)
 
-**Surprising Connection**: Technology companies are exposed through multi-hop supply chains involving Chinese manufacturers.
+**Surprising Connection**: Technology companies with similar technology stacks may share similar supply chain structures, revealing indirect exposure to Chinese import tariffs even when direct supplier relationships aren't disclosed.
 
 **Graph Query**:
 ```cypher
-// Find companies with suppliers, then find their suppliers (2-hop supply chain)
-MATCH (c:Company)-[:HAS_SUPPLIER]->(s1:Company)-[:HAS_SUPPLIER]->(s2:Company)
-WHERE s2.name CONTAINS 'China' OR s2.headquarters_country = 'China'
-RETURN c.ticker, c.name, s1.ticker, s1.name, s2.name
+// Find companies with similar technology stacks (may indicate similar supply chains)
+MATCH (c1:Company)-[:HAS_DOMAIN]->(d1:Domain)-[:USES]->(t:Technology)
+WITH c1, collect(DISTINCT t.name) as tech_stack
+MATCH (c2:Company)-[:HAS_DOMAIN]->(d2:Domain)-[:USES]->(t)
+WITH c1, c2, tech_stack, collect(DISTINCT t.name) as tech_stack2
+WHERE c1 <> c2 AND size(apoc.coll.intersection(tech_stack, tech_stack2)) > 5
+RETURN c1.ticker, c1.name, c2.ticker, c2.name,
+       size(apoc.coll.intersection(tech_stack, tech_stack2)) as shared_tech
 LIMIT 10
 ```
 
-**Note**: This query structure would work if Chinese companies were in the graph. In practice, you'd search for:
-- Companies with suppliers that have Chinese operations
-- Companies with similar supply chain structures to those known to source from China
-- Technology companies using similar components (via `SIMILAR_TECHNOLOGY`)
+**Alternative Approach** (using similarity relationships):
+```cypher
+// Find companies with similar technology stacks
+MATCH (c1:Company)-[r:SIMILAR_TECHNOLOGY]->(c2:Company)
+WHERE r.score > 0.60
+RETURN c1.ticker, c1.name, c2.ticker, c2.name, r.score
+ORDER BY r.score DESC
+LIMIT 10
+```
 
 **Impact Chain**:
 1. **Direct Impact**: Tariffs on Chinese imports
 2. **First-Order Impact**: Companies directly sourcing from China (if disclosed in 10-Ks)
 3. **Second-Order Impact**: Companies with similar technology stacks:
    - Via `SIMILAR_TECHNOLOGY` relationships
-   - Companies using similar components or manufacturing processes
+   - Companies using similar components may have similar supply chains
 4. **Third-Order Impact**: Companies competing with tariff-exposed firms:
    - Via `HAS_COMPETITOR` relationships
    - Competitive advantage shifts
 
-**Why It's Surprising**: The graph can reveal indirect exposure through technology stack similarities, even when direct supplier relationships aren't disclosed.
+**Why It's Surprising**: The graph can reveal indirect exposure through technology stack similarities, even when direct supplier relationships aren't disclosed. Companies with similar technology stacks often share similar supply chain structures, creating exposure clusters that aren't obvious from individual company disclosures.
 
 ---
 
