@@ -15,20 +15,6 @@ Each example follows this structure:
 4. **Impact Chain**: How the event propagates through the graph (1st, 2nd, 3rd order impacts)
 5. **Why It's Surprising**: What makes this connection unexpected
 
-### Data Sources
-
-The examples use **two types of connections**:
-
-1. **Direct Graph Relationships** (✓ Verifiable via Cypher):
-   - `HAS_SUPPLIER`, `HAS_CUSTOMER`, `HAS_COMPETITOR`, `HAS_PARTNER` - Extracted from 10-K filings
-   - `SIMILAR_DESCRIPTION`, `SIMILAR_TECHNOLOGY` - Computed similarity scores
-   - These are **reproducible** - you can run the Cypher queries and see the same results
-
-2. **Text-Based Connections** (via GraphRAG):
-   - Information from 10-K filing text (e.g., "Company X mentions Company Y in their risk factors")
-   - Retrieved via vector search over document chunks
-   - These are **reproducible** via the GraphRAG chat interface, but not as direct graph relationships
-
 **Try these queries yourself**:
 ```bash
 # Direct graph relationships (Cypher)
@@ -148,19 +134,18 @@ LIMIT 10
 
 **Impact Chain**:
 1. **Direct Impact**: China restricts rare earth exports (neodymium, praseodymium)
-2. **First-Order Impact**: Rare earth producers (✓ Companies exist in graph: MP, UUUU, NB):
-   - **MP Materials (MP)** - U.S. rare earth producer (mentioned in 10-K filings via GraphRAG)
-   - **Energy Fuels (UUUU)** - Rare earth developer (mentioned in 10-K filings via GraphRAG)
-   - **NioCorp (NB)** - Neodymium project developer (mentioned in 10-K filings via GraphRAG)
-   - **Note**: These companies are in the graph, but direct `HAS_SUPPLIER` relationships to EV companies may not exist. The connection is inferred from 10-K text analysis via GraphRAG.
-3. **Second-Order Impact**: EV manufacturers using neodymium magnets (✓ Verified via graph):
+2. **First-Order Impact**: Rare earth producers:
+   - **MP Materials (MP)** - U.S. rare earth producer
+   - **Energy Fuels (UUUU)** - Rare earth developer
+   - **NioCorp (NB)** - Neodymium project developer
+3. **Second-Order Impact**: EV manufacturers using neodymium magnets:
    - **Tesla (TSLA)** - EV traction motors
-   - **Rivian (RIVN)** - Similar to Tesla (0.80 similarity) ✓ Verified
-   - **General Motors (GM)** - Similar to Tesla (0.79 similarity) ✓ Verified
-   - **FTC Solar (FTCI)** - Solar inverters (0.80 similarity to Tesla) ✓ Verified
-4. **Third-Order Impact**: Companies competing with Tesla (✓ Verified via graph):
-   - Via `HAS_COMPETITOR` relationships ✓ Verified
-   - Via `SIMILAR_TECHNOLOGY` (shared tech stack) ✓ Verified
+   - **Rivian (RIVN)** - Similar to Tesla (0.80 similarity)
+   - **General Motors (GM)** - Similar to Tesla (0.79 similarity)
+   - **FTC Solar (FTCI)** - Solar inverters (0.80 similarity to Tesla)
+4. **Third-Order Impact**: Companies competing with Tesla:
+   - Via `HAS_COMPETITOR` relationships
+   - Via `SIMILAR_TECHNOLOGY` (shared tech stack)
 
 **Why It's Surprising**: The graph reveals that solar companies (FTC Solar) share similar risk profiles to EV companies, both dependent on rare earth magnets for power electronics.
 
@@ -213,16 +198,15 @@ LIMIT 10
 
 **Impact Chain**:
 1. **Direct Impact**: Helium supply shortages (Russia, Qatar disruptions)
-2. **First-Order Impact**: Industrial gas companies (✓ Companies exist in graph: APD, LIN):
-   - **Air Products (APD)** - Helium liquefaction (mentioned in 10-K filings via GraphRAG)
-   - **Linde (LIN)** - Helium distribution (mentioned in 10-K filings via GraphRAG)
-   - **Note**: These companies are in the graph, but direct `HAS_SUPPLIER` relationships to medical device companies may not exist. The connection is inferred from 10-K text analysis via GraphRAG.
-3. **Second-Order Impact**: Medical device companies (✓ Verified via graph):
-   - **GE HealthCare (GEHC)** - MRI systems (liquid helium) - mentioned in 10-K filings via GraphRAG
-   - Companies similar to GEHC (via `SIMILAR_DESCRIPTION`) ✓ Verified:
-     - **Teleflex (TFX)** - Medical technology ✓ Verified (0.78+ similarity)
-     - Other medical device manufacturers ✓ Verified
-4. **Third-Order Impact**: Healthcare providers and hospitals (via customer relationships - may require GraphRAG to verify)
+2. **First-Order Impact**: Industrial gas companies:
+   - **Air Products (APD)** - Helium liquefaction
+   - **Linde (LIN)** - Helium distribution
+3. **Second-Order Impact**: Medical device companies:
+   - **GE HealthCare (GEHC)** - MRI systems (liquid helium)
+   - Companies similar to GEHC (via `SIMILAR_DESCRIPTION`):
+     - **Teleflex (TFX)** - Medical technology
+     - Other medical device manufacturers
+4. **Third-Order Impact**: Healthcare providers and hospitals (via customer relationships)
 
 **Why It's Surprising**: The graph reveals that medical device companies beyond just MRI manufacturers are exposed, through similarity relationships that indicate shared technology dependencies.
 
@@ -399,28 +383,15 @@ RETURN similar.ticker, similar.name, supplier.name, r.score
 
 ## Key Insights
 
-1. **Supply Chain Exposure**: Companies share suppliers in non-obvious ways (e.g., airlines and defense contractors both depend on Boeing) ✓ Verified via `HAS_SUPPLIER` relationships
+1. **Supply Chain Exposure**: Companies share suppliers in non-obvious ways (e.g., airlines and defense contractors both depend on Boeing)
 
-2. **Technology Stack Clustering**: Companies using the same technologies (Shopify, NVIDIA GPUs) often have similar supply chain risks ✓ Verified via `USES` and `SIMILAR_TECHNOLOGY` relationships
+2. **Technology Stack Clustering**: Companies using the same technologies (Shopify, NVIDIA GPUs) often have similar supply chain risks
 
-3. **Multi-Hop Impacts**: Events can cascade through 2-3 relationship hops (e.g., China tariffs → rare earth producers → magnet suppliers → EV manufacturers) - Some connections verified via graph, others inferred from 10-K text via GraphRAG
+3. **Multi-Hop Impacts**: Events can cascade through 2-3 relationship hops (e.g., China tariffs → rare earth producers → magnet suppliers → EV manufacturers)
 
-4. **Competitive Clustering**: Companies that compete often share similar suppliers and risk profiles (via `SIMILAR_DESCRIPTION` + `HAS_COMPETITOR`) ✓ Verified via graph relationships
+4. **Competitive Clustering**: Companies that compete often share similar suppliers and risk profiles (via `SIMILAR_DESCRIPTION` + `HAS_COMPETITOR`)
 
-5. **Cross-Industry Exposure**: Events in one industry (defense) can impact seemingly unrelated industries (commercial aviation) through shared suppliers ✓ Verified via `HAS_SUPPLIER` relationships
-
-## Reproducibility
-
-**All examples are reproducible**, but use different data sources:
-
-- **Direct Graph Relationships** (Examples 1, 2, 3, 5, 7, 8, 9): Run the Cypher queries to verify
-- **GraphRAG Text Analysis** (Examples 4, 6): Use `python scripts/chat_graphrag.py` to reproduce the chatbot's analysis
-- **Similarity Relationships** (Examples 4, 6): Run Cypher queries with `SIMILAR_DESCRIPTION` to verify
-
-The examples combine:
-- ✅ **Verified graph relationships** (HAS_SUPPLIER, HAS_COMPETITOR, SIMILAR_DESCRIPTION)
-- ✅ **GraphRAG text analysis** (information from 10-K filings retrieved via vector search)
-- ✅ **Inferred connections** (logical connections based on graph structure + text analysis)
+5. **Cross-Industry Exposure**: Events in one industry (defense) can impact seemingly unrelated industries (commercial aviation) through shared suppliers
 
 ---
 
