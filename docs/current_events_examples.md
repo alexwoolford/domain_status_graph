@@ -77,17 +77,28 @@ RETURN c.ticker, c.name, c.sector
 
 **Impact Chain**:
 1. **Direct Impact**: Boeing production delays
-2. **First-Order Impact**: Airlines directly dependent on Boeing:
-   - **United Airlines (UAL)** - "sources majority of aircraft from Boeing"
-   - **Southwest Airlines (LUV)** - Boeing 737 fleet
-   - **Air Lease Corp (AL)** - Aircraft leasing
-3. **Second-Order Impact**: Aerospace suppliers and defense contractors:
-   - **General Electric (GE)** - Aircraft engines
-   - **Moog Inc. (MOG-A)** - Aerospace components
-   - **Textron (TXT)** - Aerospace systems
-   - **SIFCO Industries (SIF)** - Aerospace manufacturing
+2. **First-Order Impact** (all from direct `HAS_SUPPLIER` relationships):
+   - **Airlines directly dependent on Boeing**:
+     - **United Airlines (UAL)** - "sources majority of aircraft from Boeing"
+     - **Southwest Airlines (LUV)** - Boeing 737 fleet
+     - **Air Lease Corp (AL)** - Aircraft leasing
+   - **Aerospace suppliers and defense contractors** (also have Boeing as a supplier):
+     - **General Electric (GE)** - Aircraft engines
+     - **Moog Inc. (MOG-A)** - Aerospace components
+     - **Textron (TXT)** - Aerospace systems
+     - **SIFCO Industries (SIF)** - Aerospace manufacturing
+3. **Second-Order Impact** (via similarity relationships):
+   ```cypher
+   // Find companies similar to directly impacted companies
+   MATCH (c:Company)-[:HAS_SUPPLIER]->(ba:Company {ticker: 'BA'})
+   MATCH (c)-[:SIMILAR_DESCRIPTION]->(similar:Company)
+   WHERE NOT (similar)-[:HAS_SUPPLIER]->(ba)
+   RETURN DISTINCT similar.ticker, similar.name
+   ```
+   - Companies with similar business models to UAL, LUV, GE, etc.
+   - Other airlines, aerospace suppliers, defense contractors
 
-**Why It's Surprising**: Defense contractors (GE, Moog) share the same supplier (Boeing) as commercial airlines, creating unexpected exposure to commercial aviation disruptions.
+**Why It's Surprising**: Defense contractors (GE, Moog) and commercial airlines (UAL, LUV) both have Boeing as a direct supplier, creating unexpected exposure clusters. When Boeing has production issues, both customer segments (airlines) and supplier/partner segments (defense contractors) are simultaneously impacted—revealing cross-industry exposure that wouldn't be obvious without the graph.
 
 ---
 
