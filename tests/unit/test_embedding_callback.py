@@ -240,12 +240,11 @@ class TestEmbeddingCallbackMechanism:
         # The code uses async embeddings, so we need to mock the async function
         # Note: neo4j_batch_size is a local variable (50K), so we can't patch it easily.
         # The test verifies that writes happen via callback, which is the important behavior.
-        with (
-            patch("public_company_graph.embeddings.create.BATCH_SIZE_SMALL", 100),
-            patch(
-                "public_company_graph.embeddings.openai_client_async.create_embeddings_batch_async",
-                side_effect=mock_async_embedding_function(mock_client),
-            ),
+        # Note: BATCH_SIZE_SMALL is not used in create.py (removed unused patch)
+        # The code uses local variable neo4j_batch_size which can't be patched
+        with patch(
+            "public_company_graph.embeddings.openai_client_async.create_embeddings_batch_async",
+            side_effect=mock_async_embedding_function(mock_client),
         ):
             create_embeddings_for_nodes(
                 driver=mock_driver,

@@ -311,12 +311,9 @@ class TestEmbeddingCacheHitMiss:
                 kwargs.pop("max_concurrent", None)
                 return create_embeddings_batch(mock_client, texts, model, **kwargs)
 
-            with (
-                patch("public_company_graph.embeddings.create.BATCH_SIZE_SMALL", 100),
-                patch(
-                    "public_company_graph.embeddings.openai_client_async.create_embeddings_batch_async",
-                    side_effect=mock_async_embed,
-                ),
+            with patch(
+                "public_company_graph.embeddings.openai_client_async.create_embeddings_batch_async",
+                side_effect=mock_async_embed,
             ):
                 processed, created, cached_count, failed = create_embeddings_for_nodes(
                     driver=driver,
@@ -359,12 +356,9 @@ class TestEmbeddingCacheHitMiss:
 
             # Run embedding creation
             # The code uses async embeddings, so we need to mock the async function
-            with (
-                patch("public_company_graph.embeddings.create.BATCH_SIZE_SMALL", 100),
-                patch(
-                    "public_company_graph.embeddings.openai_client_async.create_embeddings_batch_async",
-                    side_effect=mock_async_embedding_function(mock_client),
-                ),
+            with patch(
+                "public_company_graph.embeddings.openai_client_async.create_embeddings_batch_async",
+                side_effect=mock_async_embedding_function(mock_client),
             ):
                 processed, created, cached_count, failed = create_embeddings_for_nodes(
                     driver=driver,
@@ -419,12 +413,9 @@ class TestEmbeddingCacheHitMiss:
 
             # Run embedding creation
             # The code uses async embeddings, so we need to mock the async function
-            with (
-                patch("public_company_graph.embeddings.create.BATCH_SIZE_SMALL", 100),
-                patch(
-                    "public_company_graph.embeddings.openai_client_async.create_embeddings_batch_async",
-                    side_effect=mock_async_embedding_function(mock_client),
-                ),
+            with patch(
+                "public_company_graph.embeddings.openai_client_async.create_embeddings_batch_async",
+                side_effect=mock_async_embedding_function(mock_client),
             ):
                 processed, created, cached_count, failed = create_embeddings_for_nodes(
                     driver=driver,
@@ -475,12 +466,9 @@ class TestEmbeddingCacheValidation:
             driver = MockDriver(nodes)
             mock_client = create_mock_openai_client({})
 
-            with (
-                patch("public_company_graph.embeddings.create.BATCH_SIZE_SMALL", 100),
-                patch(
-                    "public_company_graph.embeddings.openai_client_async.create_embeddings_batch_async",
-                    side_effect=mock_async_embedding_function(mock_client),
-                ),
+            with patch(
+                "public_company_graph.embeddings.openai_client_async.create_embeddings_batch_async",
+                side_effect=mock_async_embedding_function(mock_client),
             ):
                 processed, created, cached_count, failed = create_embeddings_for_nodes(
                     driver=driver,
@@ -523,12 +511,9 @@ class TestEmbeddingCacheValidation:
             driver = MockDriver(nodes)
             mock_client = create_mock_openai_client({})
 
-            with (
-                patch("public_company_graph.embeddings.create.BATCH_SIZE_SMALL", 100),
-                patch(
-                    "public_company_graph.embeddings.openai_client_async.create_embeddings_batch_async",
-                    side_effect=mock_async_embedding_function(mock_client),
-                ),
+            with patch(
+                "public_company_graph.embeddings.openai_client_async.create_embeddings_batch_async",
+                side_effect=mock_async_embedding_function(mock_client),
             ):
                 processed, created, cached_count, failed = create_embeddings_for_nodes(
                     driver=driver,
@@ -569,12 +554,9 @@ class TestEmbeddingCacheValidation:
             driver = MockDriver(nodes)
             mock_client = create_mock_openai_client({})
 
-            with (
-                patch("public_company_graph.embeddings.create.BATCH_SIZE_SMALL", 100),
-                patch(
-                    "public_company_graph.embeddings.openai_client_async.create_embeddings_batch_async",
-                    side_effect=mock_async_embedding_function(mock_client),
-                ),
+            with patch(
+                "public_company_graph.embeddings.openai_client_async.create_embeddings_batch_async",
+                side_effect=mock_async_embedding_function(mock_client),
             ):
                 processed, created, cached_count, failed = create_embeddings_for_nodes(
                     driver=driver,
@@ -622,12 +604,9 @@ class TestEmbeddingCacheIdempotency:
 
             # First run - should call API for all
             # The code uses async embeddings, so we need to mock the async function
-            with (
-                patch("public_company_graph.embeddings.create.BATCH_SIZE_SMALL", 100),
-                patch(
-                    "public_company_graph.embeddings.openai_client_async.create_embeddings_batch_async",
-                    side_effect=mock_async_embedding_function(mock_client),
-                ),
+            with patch(
+                "public_company_graph.embeddings.openai_client_async.create_embeddings_batch_async",
+                side_effect=mock_async_embedding_function(mock_client),
             ):
                 proc1, created1, cached1, failed1 = create_embeddings_for_nodes(
                     driver=driver,
@@ -651,12 +630,9 @@ class TestEmbeddingCacheIdempotency:
 
             # Second run - should use cache for all
             # The code uses async embeddings, so we need to mock the async function
-            with (
-                patch("public_company_graph.embeddings.create.BATCH_SIZE_SMALL", 100),
-                patch(
-                    "public_company_graph.embeddings.openai_client_async.create_embeddings_batch_async",
-                    side_effect=mock_async_embedding_function(mock_client),
-                ),
+            with patch(
+                "public_company_graph.embeddings.openai_client_async.create_embeddings_batch_async",
+                side_effect=mock_async_embedding_function(mock_client),
             ):
                 proc2, created2, cached2, failed2 = create_embeddings_for_nodes(
                     driver=driver2,
@@ -722,16 +698,16 @@ class TestEmbeddingCacheEdgeCases:
             driver = MockDriver(nodes)
             mock_client = create_mock_openai_client({})
 
-            with patch("public_company_graph.embeddings.create.BATCH_SIZE_SMALL", 100):
-                processed, created, cached_count, failed = create_embeddings_for_nodes(
-                    driver=driver,
-                    cache=cache,
-                    node_label="Domain",
-                    text_property="description",
-                    key_property="key",
-                    openai_client=mock_client,
-                    execute=True,
-                )
+            # Note: BATCH_SIZE_SMALL is not used in create.py (removed unused patch)
+            processed, created, cached_count, failed = create_embeddings_for_nodes(
+                driver=driver,
+                cache=cache,
+                node_label="Domain",
+                text_property="description",
+                key_property="key",
+                openai_client=mock_client,
+                execute=True,
+            )
 
             # Empty/whitespace texts should be filtered out
             assert processed == 0, "Empty texts should not be processed"
@@ -748,16 +724,16 @@ class TestEmbeddingCacheEdgeCases:
             driver = MockDriver(nodes)
             mock_client = create_mock_openai_client({})
 
-            with patch("public_company_graph.embeddings.create.BATCH_SIZE_SMALL", 100):
-                processed, created, cached_count, failed = create_embeddings_for_nodes(
-                    driver=driver,
-                    cache=cache,
-                    node_label="Domain",
-                    text_property="description",
-                    key_property="key",
-                    openai_client=mock_client,
-                    execute=False,  # Dry run!
-                )
+            # Note: BATCH_SIZE_SMALL is not used in create.py (removed unused patch)
+            processed, created, cached_count, failed = create_embeddings_for_nodes(
+                driver=driver,
+                cache=cache,
+                node_label="Domain",
+                text_property="description",
+                key_property="key",
+                openai_client=mock_client,
+                execute=False,  # Dry run!
+            )
 
             # Dry run should not cache anything
             assert processed == 0
@@ -801,16 +777,16 @@ class TestEmbeddingCacheKeyDerivation:
             driver = MockDriver(nodes)
             mock_client = create_mock_openai_client({})
 
-            with patch("public_company_graph.embeddings.create.BATCH_SIZE_SMALL", 100):
-                create_embeddings_for_nodes(
-                    driver=driver,
-                    cache=cache,
-                    node_label="Domain",
-                    text_property="description",
-                    key_property="key",
-                    openai_client=mock_client,
-                    execute=True,
-                )
+            # Note: BATCH_SIZE_SMALL is not used in create.py (removed unused patch)
+            create_embeddings_for_nodes(
+                driver=driver,
+                cache=cache,
+                node_label="Domain",
+                text_property="description",
+                key_property="key",
+                openai_client=mock_client,
+                execute=True,
+            )
 
             # Verify the cache key format
             cached = cache.get("embeddings", expected_key)
@@ -830,12 +806,9 @@ class TestEmbeddingCacheKeyDerivation:
             driver = MockDriver(nodes)
             mock_client = create_mock_openai_client({})
 
-            with (
-                patch("public_company_graph.embeddings.create.BATCH_SIZE_SMALL", 100),
-                patch(
-                    "public_company_graph.embeddings.openai_client_async.create_embeddings_batch_async",
-                    side_effect=mock_async_embedding_function(mock_client),
-                ),
+            with patch(
+                "public_company_graph.embeddings.openai_client_async.create_embeddings_batch_async",
+                side_effect=mock_async_embedding_function(mock_client),
             ):
                 create_embeddings_for_nodes(
                     driver=driver,

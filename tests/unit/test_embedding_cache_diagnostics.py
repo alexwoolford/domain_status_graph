@@ -228,12 +228,9 @@ class TestLongTextChunkingBehavior:
             driver = MockDriver(nodes)
             client = create_mock_client()
 
-            with (
-                patch("public_company_graph.embeddings.create.BATCH_SIZE_SMALL", 100),
-                patch(
-                    "public_company_graph.embeddings.openai_client_async.create_embeddings_batch_async",
-                    side_effect=mock_async_embedding_function(client),
-                ),
+            with patch(
+                "public_company_graph.embeddings.openai_client_async.create_embeddings_batch_async",
+                side_effect=mock_async_embedding_function(client),
             ):
                 create_embeddings_for_nodes(
                     driver=driver,
@@ -273,12 +270,9 @@ class TestLongTextChunkingBehavior:
             driver = MockDriver(nodes)
             client = create_mock_client()
 
-            with (
-                patch("public_company_graph.embeddings.create.BATCH_SIZE_SMALL", 100),
-                patch(
-                    "public_company_graph.embeddings.openai_client_async.create_embeddings_batch_async",
-                    side_effect=mock_async_embedding_function(client),
-                ),
+            with patch(
+                "public_company_graph.embeddings.openai_client_async.create_embeddings_batch_async",
+                side_effect=mock_async_embedding_function(client),
             ):
                 create_embeddings_for_nodes(
                     driver=driver,
@@ -324,16 +318,16 @@ class TestLongTextChunkingBehavior:
             driver = MockDriver(nodes)
             client = create_mock_client()
 
-            with patch("public_company_graph.embeddings.create.BATCH_SIZE_SMALL", 100):
-                processed, created, cached_count, failed = create_embeddings_for_nodes(
-                    driver=driver,
-                    cache=cache,
-                    node_label="Domain",
-                    text_property="description",
-                    key_property="key",
-                    openai_client=client,
-                    execute=True,
-                )
+            # Note: BATCH_SIZE_SMALL is not used in create.py (removed unused patch)
+            processed, created, cached_count, failed = create_embeddings_for_nodes(
+                driver=driver,
+                cache=cache,
+                node_label="Domain",
+                text_property="description",
+                key_property="key",
+                openai_client=client,
+                execute=True,
+            )
 
             # Should use cache, NO API calls
             assert client._call_log["total_texts"] == 0, "Cached embedding should not trigger API"
@@ -374,12 +368,9 @@ class TestCacheHitRateCalculation:
             driver = MockDriver(nodes)
             client = create_mock_client()
 
-            with (
-                patch("public_company_graph.embeddings.create.BATCH_SIZE_SMALL", 100),
-                patch(
-                    "public_company_graph.embeddings.openai_client_async.create_embeddings_batch_async",
-                    side_effect=mock_async_embedding_function(client),
-                ),
+            with patch(
+                "public_company_graph.embeddings.openai_client_async.create_embeddings_batch_async",
+                side_effect=mock_async_embedding_function(client),
             ):
                 processed, created, cached_count, failed = create_embeddings_for_nodes(
                     driver=driver,
