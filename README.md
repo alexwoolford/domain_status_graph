@@ -13,6 +13,9 @@ This project builds a **knowledge graph** that captures these relationships, ena
 - *"Find companies similar to Apple by business model AND technology stack AND competitive position"*
 - *"Map NVIDIA's supply chain and find companies 2 hops away"*
 - *"Which technologies commonly co-occur with Kubernetes adoption?"*
+- *"Which companies would be impacted by a helium shortage?"* → Reveals medical device companies, industrial gas distributors, and electronics manufacturers through supply chain relationships
+- *"If Oracle went out of business, who would be affected?"* → Traces impacts to government contractors, e-commerce platforms, and enterprise software competitors
+- *"How would China rare earth export controls affect EV manufacturers?"* → Connects rare earth producers → magnet suppliers → EV companies through multi-hop supply chains
 
 ### Related Research
 
@@ -347,6 +350,102 @@ ORDER BY r.score DESC LIMIT 10
 **Result**: FTC Solar (0.80), Sunrun (0.80), Rivian (0.80), GM (0.79), Enphase Energy (0.79)
 
 For 50+ more queries with verified results, see [docs/money_queries.md](docs/money_queries.md).
+
+---
+
+## Real-World Impact Analysis: Connecting Current Events to Companies
+
+The graph excels at connecting **real-world events** (wars, tariffs, supply chain disruptions, political changes) to **potential impacts on publicly traded companies** through their disclosed relationships.
+
+### Example: AI Chip Export Restrictions
+
+**Event**: U.S. restrictions on AI chip exports to China (2023-2024)
+
+**Surprising Discovery**: Cryptocurrency mining companies are indirectly impacted through their NVIDIA GPU supply chains—a connection that's not obvious from company descriptions alone.
+
+**Query**:
+```cypher
+// Find companies that depend on NVIDIA as a supplier
+MATCH (c:Company)-[:HAS_SUPPLIER]->(nvda:Company {ticker: 'NVDA'})
+RETURN c.ticker, c.name, c.sector
+```
+
+**Impact Chain**:
+1. **Direct**: NVIDIA faces export restrictions
+2. **First-Order**: Companies directly sourcing GPUs:
+   - **IREN Ltd** - "procured approximately 5.5k NVIDIA B200 GPUs"
+   - **Applied Digital (APLD)** - Data center operator
+   - **Bit Digital (BTBT)** - Cryptocurrency mining
+3. **Second-Order**: Companies similar to these (via `SIMILAR_DESCRIPTION` or `SIMILAR_TECHNOLOGY`)
+
+**Why It's Surprising**: Cryptocurrency miners aren't typically associated with AI chip restrictions, but the graph reveals they share the same critical supplier as AI companies.
+
+### Example: Red Sea Shipping Disruptions
+
+**Event**: Houthi attacks on Red Sea shipping routes (2024)
+
+**Surprising Discovery**: E-commerce companies using Shopify are exposed through global supply chain dependencies revealed by their technology stack.
+
+**Query**:
+```cypher
+// Find companies using Shopify (e-commerce platform)
+MATCH (c:Company)-[:HAS_DOMAIN]->(d:Domain)-[:USES]->(t:Technology {name: 'Shopify'})
+RETURN c.ticker, c.name, c.sector
+```
+
+**Impact Chain**:
+1. **Direct**: Shipping disruptions affect global logistics
+2. **First-Order**: E-commerce companies using Shopify:
+   - **Allbirds (BIRD)** - Direct-to-consumer footwear
+   - **Arhaus (ARHS)** - Furniture retailer
+   - **Constellation Brands (STZ)** - Consumer goods
+3. **Second-Order**: Companies with similar business models (via `SIMILAR_DESCRIPTION`)
+
+**Why It's Surprising**: Technology choices (Shopify) reveal supply chain dependencies that aren't obvious from company descriptions alone.
+
+### Example: Boeing Production Delays
+
+**Event**: Boeing 737 MAX production issues (2024)
+
+**Surprising Discovery**: Defense contractors and commercial airlines share the same supplier (Boeing), creating unexpected exposure clusters.
+
+**Query**:
+```cypher
+// Find companies that depend on Boeing as a supplier
+MATCH (c:Company)-[:HAS_SUPPLIER]->(ba:Company {ticker: 'BA'})
+RETURN c.ticker, c.name, c.sector
+```
+
+**Impact Chain**:
+1. **Direct**: Boeing production delays
+2. **First-Order**: Airlines directly dependent on Boeing:
+   - **United Airlines (UAL)** - "sources majority of aircraft from Boeing"
+   - **Southwest Airlines (LUV)** - Boeing 737 fleet
+3. **Second-Order**: Aerospace suppliers:
+   - **General Electric (GE)** - Aircraft engines
+   - **Moog Inc. (MOG-A)** - Aerospace components
+   - **Textron (TXT)** - Aerospace systems
+
+**Why It's Surprising**: Defense contractors (GE, Moog) share the same supplier as commercial airlines, creating unexpected exposure to commercial aviation disruptions.
+
+### More Examples
+
+For additional examples connecting current events to company impacts, see [docs/current_events_examples.md](docs/current_events_examples.md), including:
+- China rare earth export controls → EV manufacturers
+- Oracle Cloud outage → Government contractors
+- Helium shortage → Medical device companies
+- Semiconductor export controls → Data center operators
+- Defense budget changes → Commercial aerospace
+
+**Try it yourself**:
+```bash
+# Use the GraphRAG chat interface
+python scripts/chat_graphrag.py
+
+# Ask questions like:
+# "Which companies would be impacted by a shortage of [commodity]?"
+# "If [company] went out of business, which companies would be affected?"
+```
 
 ---
 

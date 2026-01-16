@@ -30,6 +30,7 @@
 | [**graphrag.md**](./graphrag.md) | GraphRAG layer architecture and usage |
 | [**graphrag_testing.md**](./graphrag_testing.md) | GraphRAG testing guide and strategies |
 | [**monitoring_graphrag.md**](./monitoring_graphrag.md) | GraphRAG monitoring and troubleshooting |
+| [**current_events_examples.md**](./current_events_examples.md) | Real-world examples: connecting current events to company impacts |
 
 ## Quick Start
 

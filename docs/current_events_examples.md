@@ -1,0 +1,384 @@
+# Current Events Impact Analysis Examples
+
+This document demonstrates how the Public Company Graph can connect **real-world events** (wars, political changes, tariffs, supply chain disruptions) to **potential impacts on publicly traded companies** through their disclosed relationships, supply chains, and competitive positions.
+
+---
+
+## Example 1: AI Chip Export Restrictions → Cryptocurrency Miners
+
+**Event**: U.S. restrictions on AI chip exports to China (2023-2024)
+
+**Surprising Connection**: Cryptocurrency mining companies are indirectly impacted through their NVIDIA GPU supply chains.
+
+**Graph Query**:
+```cypher
+// Find companies that depend on NVIDIA as a supplier
+MATCH (c:Company)-[:HAS_SUPPLIER]->(nvda:Company {ticker: 'NVDA'})
+RETURN c.ticker, c.name, c.sector
+```
+
+**Impact Chain**:
+1. **Direct Impact**: NVIDIA faces export restrictions
+2. **First-Order Impact**: Companies that directly source GPUs from NVIDIA:
+   - **IREN Ltd** - "procured approximately 5.5k NVIDIA B200 GPUs"
+   - **Applied Digital (APLD)** - Data center operator using NVIDIA GPUs
+   - **Super Micro Computer (SMCI)** - Server manufacturer
+   - **Bit Digital (BTBT)** - Cryptocurrency mining company
+3. **Second-Order Impact**: Companies similar to these (via `SIMILAR_DESCRIPTION` or `SIMILAR_TECHNOLOGY`):
+   - Other data center operators
+   - AI/ML infrastructure companies
+   - Companies using similar GPU-intensive workloads
+
+**Why It's Surprising**: Cryptocurrency miners aren't typically associated with AI chip restrictions, but the graph reveals they share the same critical supplier (NVIDIA) as AI companies.
+
+---
+
+## Example 2: Red Sea Shipping Disruptions → E-commerce Companies
+
+**Event**: Houthi attacks on Red Sea shipping routes (2024)
+
+**Surprising Connection**: E-commerce companies using Shopify are indirectly exposed through global supply chain dependencies.
+
+**Graph Query**:
+```cypher
+// Find companies using Shopify (e-commerce platform)
+MATCH (c:Company)-[:HAS_DOMAIN]->(d:Domain)-[:USES]->(t:Technology {name: 'Shopify'})
+RETURN c.ticker, c.name, c.sector
+LIMIT 20
+```
+
+**Impact Chain**:
+1. **Direct Impact**: Shipping disruptions affect global logistics
+2. **First-Order Impact**: E-commerce companies using Shopify:
+   - **Allbirds (BIRD)** - Direct-to-consumer footwear
+   - **Arhaus (ARHS)** - Furniture retailer
+   - **Constellation Brands (STZ)** - Consumer goods
+   - **Edgewell Personal Care (EPC)** - Consumer products
+3. **Second-Order Impact**: Companies with similar business models (via `SIMILAR_DESCRIPTION`):
+   - Other D2C brands
+   - Companies with similar supply chain structures
+   - Retailers dependent on global shipping
+
+**Why It's Surprising**: E-commerce technology choices (Shopify) reveal supply chain dependencies that aren't obvious from company descriptions alone.
+
+---
+
+## Example 3: Boeing Production Delays → Airlines & Defense Contractors
+
+**Event**: Boeing 737 MAX production issues and quality control problems (2024)
+
+**Surprising Connection**: Defense contractors and aerospace suppliers are impacted through shared supply chains.
+
+**Graph Query**:
+```cypher
+// Find companies that depend on Boeing as a supplier
+MATCH (c:Company)-[:HAS_SUPPLIER]->(ba:Company {ticker: 'BA'})
+RETURN c.ticker, c.name, c.sector
+```
+
+**Impact Chain**:
+1. **Direct Impact**: Boeing production delays
+2. **First-Order Impact**: Airlines directly dependent on Boeing:
+   - **United Airlines (UAL)** - "sources majority of aircraft from Boeing"
+   - **Southwest Airlines (LUV)** - Boeing 737 fleet
+   - **Air Lease Corp (AL)** - Aircraft leasing
+3. **Second-Order Impact**: Aerospace suppliers and defense contractors:
+   - **General Electric (GE)** - Aircraft engines
+   - **Moog Inc. (MOG-A)** - Aerospace components
+   - **Textron (TXT)** - Aerospace systems
+   - **SIFCO Industries (SIF)** - Aerospace manufacturing
+
+**Why It's Surprising**: Defense contractors (GE, Moog) share the same supplier (Boeing) as commercial airlines, creating unexpected exposure to commercial aviation disruptions.
+
+---
+
+## Example 4: China Rare Earth Export Controls → EV Manufacturers
+
+**Event**: Potential China restrictions on rare earth exports (2024-2025)
+
+**Surprising Connection**: EV manufacturers are exposed through multi-hop supply chains involving rare earth producers and magnet suppliers.
+
+**Graph Query**:
+```cypher
+// Find companies similar to Tesla (EV manufacturers)
+MATCH (tsla:Company {ticker: 'TSLA'})-[r:SIMILAR_DESCRIPTION]->(similar:Company)
+WHERE r.score > 0.75
+RETURN similar.ticker, similar.name, r.score
+ORDER BY r.score DESC
+LIMIT 10
+```
+
+**Impact Chain**:
+1. **Direct Impact**: China restricts rare earth exports (neodymium, praseodymium)
+2. **First-Order Impact**: Rare earth producers (from chatbot example):
+   - **MP Materials (MP)** - U.S. rare earth producer
+   - **Energy Fuels (UUUU)** - Rare earth developer
+   - **NioCorp (NB)** - Neodymium project developer
+3. **Second-Order Impact**: EV manufacturers using neodymium magnets:
+   - **Tesla (TSLA)** - EV traction motors
+   - **Rivian (RIVN)** - Similar to Tesla (0.80 similarity)
+   - **General Motors (GM)** - Similar to Tesla (0.79 similarity)
+   - **FTC Solar (FTCI)** - Solar inverters (0.80 similarity to Tesla)
+4. **Third-Order Impact**: Companies competing with Tesla:
+   - Via `HAS_COMPETITOR` relationships
+   - Via `SIMILAR_TECHNOLOGY` (shared tech stack)
+
+**Why It's Surprising**: The graph reveals that solar companies (FTC Solar) share similar risk profiles to EV companies, both dependent on rare earth magnets for power electronics.
+
+---
+
+## Example 5: Oracle Cloud Outage → Government Contractors
+
+**Event**: Hypothetical Oracle Cloud infrastructure failure
+
+**Surprising Connection**: Government contractors and defense companies are exposed through enterprise software dependencies.
+
+**Graph Query**:
+```cypher
+// Find companies that depend on Oracle (customers, suppliers, partners)
+MATCH (c:Company)-[r:HAS_CUSTOMER|HAS_SUPPLIER|HAS_PARTNER]->(orcl:Company {ticker: 'ORCL'})
+RETURN c.ticker, c.name, type(r) as relationship_type
+```
+
+**Impact Chain**:
+1. **Direct Impact**: Oracle Cloud outage
+2. **First-Order Impact**: Companies directly dependent on Oracle:
+   - **Telos Corp (TLS)** - Cybersecurity, government contracts
+   - **Calix (CALX)** - Network infrastructure
+   - **Inuvo (INUV)** - Marketing technology
+   - **Brilliant Earth (BRLT)** - E-commerce (Oracle cloud infrastructure)
+3. **Second-Order Impact**: Government and defense contractors:
+   - Via `SIMILAR_DESCRIPTION` to Telos (cybersecurity companies)
+   - Companies with similar government contract exposure
+   - Defense contractors using Oracle for enterprise systems
+
+**Why It's Surprising**: E-commerce companies (Brilliant Earth) and government contractors (Telos) share the same critical infrastructure dependency (Oracle), creating unexpected systemic risk.
+
+---
+
+## Example 6: Helium Shortage → Medical Device Companies
+
+**Event**: Global helium supply shortages (2023-2024)
+
+**Surprising Connection**: Medical device companies are impacted through industrial gas supply chains, not just MRI manufacturers.
+
+**Graph Query**:
+```cypher
+// Find companies similar to GE HealthCare (medical imaging)
+MATCH (gehc:Company {ticker: 'GEHC'})-[r:SIMILAR_DESCRIPTION]->(similar:Company)
+WHERE r.score > 0.70
+RETURN similar.ticker, similar.name, r.score
+ORDER BY r.score DESC
+LIMIT 10
+```
+
+**Impact Chain**:
+1. **Direct Impact**: Helium supply shortages (Russia, Qatar disruptions)
+2. **First-Order Impact**: Industrial gas companies:
+   - **Air Products (APD)** - Helium liquefaction
+   - **Linde (LIN)** - Helium distribution
+3. **Second-Order Impact**: Medical device companies:
+   - **GE HealthCare (GEHC)** - MRI systems (liquid helium)
+   - Companies similar to GEHC (via `SIMILAR_DESCRIPTION`):
+     - **Teleflex (TFX)** - Medical technology
+     - Other medical device manufacturers
+4. **Third-Order Impact**: Healthcare providers and hospitals (via customer relationships)
+
+**Why It's Surprising**: The graph reveals that medical device companies beyond just MRI manufacturers are exposed, through similarity relationships that indicate shared technology dependencies.
+
+---
+
+## Example 7: Semiconductor Export Controls → Data Center Operators
+
+**Event**: U.S. restrictions on advanced semiconductor exports (2023-2024)
+
+**Surprising Connection**: Data center operators and cryptocurrency miners share the same critical suppliers (NVIDIA, Intel).
+
+**Graph Query**:
+```cypher
+// Find all companies that depend on NVIDIA or Intel as suppliers
+MATCH (c:Company)-[:HAS_SUPPLIER]->(s:Company)
+WHERE s.ticker IN ['NVDA', 'INTC', 'AMD']
+RETURN c.ticker, c.name, c.sector, s.ticker, s.name
+ORDER BY s.ticker, c.name
+```
+
+**Impact Chain**:
+1. **Direct Impact**: Semiconductor export restrictions
+2. **First-Order Impact**: Companies directly sourcing chips:
+   - **IREN Ltd** - Data center operator (NVIDIA GPUs)
+   - **Applied Digital (APLD)** - Data center operator (NVIDIA GPUs)
+   - **Super Micro Computer (SMCI)** - Server manufacturer (NVIDIA, Intel)
+   - **Bit Digital (BTBT)** - Cryptocurrency mining (NVIDIA GPUs)
+   - **HP Inc (HPQ)** - PC manufacturer (Intel processors)
+   - **Fortinet (FTNT)** - Network security (Intel processors)
+   - **Arista Networks (ANET)** - Network equipment (Intel processors)
+3. **Second-Order Impact**: Companies with similar technology stacks:
+   - Via `SIMILAR_TECHNOLOGY` relationships
+   - Companies using similar infrastructure
+
+**Why It's Surprising**: Cryptocurrency miners (Bit Digital) and enterprise network equipment manufacturers (Arista, Fortinet) share the same critical semiconductor suppliers, creating unexpected exposure clusters.
+
+---
+
+## Example 8: Middle East Conflict → Shipping & Logistics Companies
+
+**Event**: Houthi attacks on Red Sea shipping, Panama Canal drought (2024)
+
+**Surprising Connection**: E-commerce companies and consumer goods manufacturers are exposed through shipping route dependencies.
+
+**Graph Query**:
+```cypher
+// Find companies using Shopify (indicating e-commerce, global shipping needs)
+MATCH (c:Company)-[:HAS_DOMAIN]->(d:Domain)-[:USES]->(t:Technology {name: 'Shopify'})
+WITH c
+MATCH (c)-[r:SIMILAR_DESCRIPTION]->(similar:Company)
+WHERE r.score > 0.70
+RETURN DISTINCT similar.ticker, similar.name, similar.sector
+LIMIT 15
+```
+
+**Impact Chain**:
+1. **Direct Impact**: Red Sea shipping disruptions, Panama Canal restrictions
+2. **First-Order Impact**: E-commerce companies using Shopify:
+   - **Allbirds (BIRD)** - Global footwear supply chain
+   - **Arhaus (ARHS)** - Furniture (heavy shipping)
+   - **Constellation Brands (STZ)** - Consumer goods
+3. **Second-Order Impact**: Companies with similar business models:
+   - Via `SIMILAR_DESCRIPTION` relationships
+   - D2C brands with similar supply chain structures
+   - Consumer goods companies with global manufacturing
+
+**Why It's Surprising**: Technology stack choices (Shopify) reveal supply chain dependencies that aren't obvious from company descriptions. The graph connects e-commerce technology to shipping risk exposure.
+
+---
+
+## Example 9: Defense Budget Changes → Commercial Aerospace
+
+**Event**: U.S. defense budget shifts or procurement changes
+
+**Surprising Connection**: Commercial airlines and defense contractors share suppliers (Boeing, Lockheed Martin).
+
+**Graph Query**:
+```cypher
+// Find companies that depend on defense contractors as suppliers
+MATCH (c:Company)-[:HAS_SUPPLIER]->(s:Company)
+WHERE s.ticker IN ['BA', 'LMT', 'RTX', 'NOC']
+RETURN c.ticker, c.name, c.sector, s.ticker, s.name
+```
+
+**Impact Chain**:
+1. **Direct Impact**: Defense budget changes affect Lockheed Martin, Raytheon, Northrop Grumman
+2. **First-Order Impact**: Defense contractors:
+   - **Lockheed Martin (LMT)** - Defense systems
+   - **Boeing (BA)** - Both commercial and defense
+3. **Second-Order Impact**: Companies dependent on these suppliers:
+   - **United Airlines (UAL)** - Boeing commercial aircraft
+   - **Southwest Airlines (LUV)** - Boeing 737 fleet
+   - **Sidus Space (SIDU)** - Space systems (Lockheed supplier)
+   - **Griffon Corp (GFF)** - Aerospace components
+   - **Bruker Corp (BRKR)** - Scientific instruments (defense applications)
+
+**Why It's Surprising**: Commercial airlines (United, Southwest) share the same supplier (Boeing) as defense contractors, creating unexpected exposure to defense budget changes through production capacity constraints.
+
+---
+
+## Example 10: Tariffs on Chinese Imports → Technology Companies
+
+**Event**: Increased tariffs on Chinese imports (2024-2025)
+
+**Surprising Connection**: Technology companies are exposed through multi-hop supply chains involving Chinese manufacturers.
+
+**Graph Query**:
+```cypher
+// Find companies with suppliers, then find their suppliers (2-hop supply chain)
+MATCH (c:Company)-[:HAS_SUPPLIER]->(s1:Company)-[:HAS_SUPPLIER]->(s2:Company)
+WHERE s2.name CONTAINS 'China' OR s2.headquarters_country = 'China'
+RETURN c.ticker, c.name, s1.ticker, s1.name, s2.name
+LIMIT 10
+```
+
+**Note**: This query structure would work if Chinese companies were in the graph. In practice, you'd search for:
+- Companies with suppliers that have Chinese operations
+- Companies with similar supply chain structures to those known to source from China
+- Technology companies using similar components (via `SIMILAR_TECHNOLOGY`)
+
+**Impact Chain**:
+1. **Direct Impact**: Tariffs on Chinese imports
+2. **First-Order Impact**: Companies directly sourcing from China (if disclosed in 10-Ks)
+3. **Second-Order Impact**: Companies with similar technology stacks:
+   - Via `SIMILAR_TECHNOLOGY` relationships
+   - Companies using similar components or manufacturing processes
+4. **Third-Order Impact**: Companies competing with tariff-exposed firms:
+   - Via `HAS_COMPETITOR` relationships
+   - Competitive advantage shifts
+
+**Why It's Surprising**: The graph can reveal indirect exposure through technology stack similarities, even when direct supplier relationships aren't disclosed.
+
+---
+
+## How to Use These Examples
+
+### 1. **Query the Graph Directly**
+
+Use the GraphRAG chat interface to ask natural language questions:
+
+```bash
+python scripts/chat_graphrag.py
+```
+
+Example questions:
+- "Which companies would be impacted by a shortage of [commodity]?"
+- "If [company] went out of business, which companies would be affected?"
+- "What companies depend on [supplier] as a critical supplier?"
+
+### 2. **Explore Multi-Hop Relationships**
+
+Use Cypher queries to traverse the graph:
+
+```cypher
+// Find 2-hop supply chain exposure
+MATCH path = (c:Company)-[:HAS_SUPPLIER*1..2]->(critical:Company {ticker: 'NVDA'})
+RETURN c.ticker, c.name, length(path) as hops, critical.name
+ORDER BY hops, c.name
+```
+
+### 3. **Combine Similarity + Relationships**
+
+Find companies with similar risk profiles that share suppliers:
+
+```cypher
+// Find companies similar to Tesla that also depend on rare earth suppliers
+MATCH (tsla:Company {ticker: 'TSLA'})-[r:SIMILAR_DESCRIPTION]->(similar:Company)
+MATCH (similar)-[:HAS_SUPPLIER]->(supplier:Company)
+WHERE supplier.name CONTAINS 'Rare' OR supplier.name CONTAINS 'MP Materials'
+RETURN similar.ticker, similar.name, supplier.name, r.score
+```
+
+---
+
+## Key Insights
+
+1. **Supply Chain Exposure**: Companies share suppliers in non-obvious ways (e.g., airlines and defense contractors both depend on Boeing)
+
+2. **Technology Stack Clustering**: Companies using the same technologies (Shopify, NVIDIA GPUs) often have similar supply chain risks
+
+3. **Multi-Hop Impacts**: Events can cascade through 2-3 relationship hops (e.g., China tariffs → rare earth producers → magnet suppliers → EV manufacturers)
+
+4. **Competitive Clustering**: Companies that compete often share similar suppliers and risk profiles (via `SIMILAR_DESCRIPTION` + `HAS_COMPETITOR`)
+
+5. **Cross-Industry Exposure**: Events in one industry (defense) can impact seemingly unrelated industries (commercial aviation) through shared suppliers
+
+---
+
+## Adding New Examples
+
+To create new examples:
+
+1. **Identify a current event** (war, tariff, supply chain disruption, etc.)
+2. **Query the graph** for companies directly impacted (suppliers, customers, competitors)
+3. **Traverse relationships** to find indirect impacts (2-3 hops away)
+4. **Use similarity relationships** to find companies with similar exposure profiles
+5. **Document the impact chain** showing how the event propagates through the graph
+
+The graph's power lies in revealing **non-obvious connections** that traditional databases can't easily surface.
