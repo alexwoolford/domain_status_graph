@@ -130,41 +130,6 @@ ORDER BY s.ticker, c.name
 
 ---
 
-
-## Example 4: Tariffs on Chinese Imports → Technology Companies
-
-**Event**: Increased tariffs on Chinese imports (2024-2025)
-
-**Surprising Connection**: Companies with similar technology stacks often share similar supply chain structures, revealing indirect exposure to Chinese import tariffs even when direct supplier relationships aren't disclosed in 10-K filings.
-
-**Graph Query**:
-```cypher
-// Find companies with similar technology stacks (using SIMILAR_TECHNOLOGY)
-MATCH (c1:Company)-[r:SIMILAR_TECHNOLOGY]->(c2:Company)
-WHERE r.score > 0.60 AND c1.sector IS NOT NULL AND c2.sector IS NOT NULL
-RETURN c1.ticker, c1.name, c1.sector, c2.ticker, c2.name, c2.sector, r.score
-ORDER BY r.score DESC
-LIMIT 10
-```
-
-**Impact Chain**:
-1. **Direct Impact**: Tariffs on Chinese imports increase costs for companies sourcing components from China
-2. **First-Order Impact**: Companies directly sourcing from China (if disclosed in 10-Ks):
-   - Technology companies with manufacturing in China
-   - Consumer electronics companies
-   - Companies with disclosed Chinese suppliers
-3. **Second-Order Impact**: Companies with similar technology stacks:
-   - Via `SIMILAR_TECHNOLOGY` relationships
-   - Companies using similar cloud platforms, frameworks, or infrastructure
-   - Example: Companies using AWS + React + Node.js may share similar backend infrastructure suppliers
-4. **Third-Order Impact**: Companies competing with tariff-exposed firms:
-   - Via `HAS_COMPETITOR` relationships
-   - Competitive advantage shifts when rivals face higher input costs
-
-**Why It's Surprising**: The graph reveals indirect exposure through technology stack similarities, even when direct supplier relationships aren't disclosed. Companies with similar technology stacks (e.g., same cloud providers, frameworks, or infrastructure) often share similar supply chain structures and component sourcing patterns. This creates exposure clusters that aren't obvious from individual company disclosures—a company might not explicitly mention Chinese suppliers, but if it uses the same technology stack as a company that does, it likely faces similar supply chain risks.
-
----
-
 ## How to Use These Examples
 
 ### 1. **Query the Graph Directly**
