@@ -28,6 +28,7 @@ from bs4 import BeautifulSoup
 
 from public_company_graph.config import get_data_dir
 from public_company_graph.utils.datamule import suppress_datamule_output
+from public_company_graph.utils.security import validate_path_within_base
 
 logger = logging.getLogger(__name__)
 
@@ -435,10 +436,7 @@ def extract_business_description(
     """
     # Validate file_path is within expected directory (prevent path traversal)
     if filings_dir is not None:
-        try:
-            file_path.resolve().relative_to(filings_dir.resolve())
-        except ValueError:
-            logger.warning(f"⚠️  Path traversal attempt detected: {file_path}")
+        if not validate_path_within_base(file_path, filings_dir, logger):
             return None
 
     try:

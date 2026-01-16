@@ -29,6 +29,60 @@ else:
 logger = logging.getLogger(__name__)
 
 
+def validate_tar_member_path(
+    member_name: str, extract_dir: Path, logger_instance: logging.Logger | None = None
+) -> tuple[bool, str | None]:
+    """
+    Validate tar member path and return safe filename.
+
+    This function prevents Tar Slip attacks by:
+    1. Extracting just the filename (no directory components)
+    2. Checking for path traversal attempts (.., absolute paths, separators)
+    3. Validating the resolved path is within extract_dir
+
+    Args:
+        member_name: Original tar member name
+        extract_dir: Directory where files will be extracted
+        logger_instance: Optional logger instance (defaults to module logger)
+
+    Returns:
+        Tuple of (is_valid, safe_name) where:
+        - is_valid: True if path is safe to extract
+        - safe_name: Safe filename to use (None if invalid)
+    """
+    _log = logger_instance if logger_instance is not None else logger
+
+    # Check original member_name for path traversal attempts BEFORE extracting filename
+    if ".." in member_name:
+        _log.warning(f"  ⚠️  Skipping suspicious tar member: {member_name}")
+        return (False, None)
+
+    member_path = Path(member_name)
+    safe_name = member_path.name  # Get just the filename, no path
+
+    # Enhanced validation: check for absolute paths and leading slashes
+    if safe_name.startswith("/") or member_path.is_absolute():
+        _log.warning(f"  ⚠️  Skipping suspicious tar member: {member_name}")
+        return (False, None)
+
+    # Additional check: ensure safe_name doesn't contain path separators
+    if "/" in safe_name or "\\" in safe_name:
+        _log.warning(f"  ⚠️  Skipping tar member with path separators: {member_name}")
+        return (False, None)
+
+    # Extract to a safe path within extract_dir
+    safe_extract_path = extract_dir / safe_name
+    # Double-check: ensure resolved path is within extract_dir
+    try:
+        resolved_path = safe_extract_path.resolve()
+        resolved_base = extract_dir.resolve()
+        resolved_path.relative_to(resolved_base)
+        return (True, safe_name)
+    except (ValueError, OSError):
+        _log.warning(f"  ⚠️  Path traversal attempt detected: {member_name}")
+        return (False, None)
+
+
 def get_filing_date_from_tar_name(tar_file: Path) -> tuple[int, int]:
     """
     Extract filing year and filing number from tar filename for sorting.
@@ -126,32 +180,8 @@ def extract_from_tar(
                 # Main 10-K files typically match pattern: a-{date}.htm
                 if member.name.endswith((".htm", ".html")):
                     # Prevent Tar Slip: Validate that extracted path stays within extract_dir
-                    # Resolve paths to prevent directory traversal attacks
-                    member_path = Path(member.name)
-                    # Remove any leading slashes or parent directory references
-                    safe_name = member_path.name  # Get just the filename, no path
-
-                    # Enhanced validation: check for path traversal attempts
-                    if ".." in safe_name or safe_name.startswith("/") or member_path.is_absolute():
-                        logger.warning(f"  ⚠️  Skipping suspicious tar member: {member.name}")
-                        continue
-
-                    # Additional check: ensure safe_name doesn't contain path separators
-                    if "/" in safe_name or "\\" in safe_name:
-                        logger.warning(
-                            f"  ⚠️  Skipping tar member with path separators: {member.name}"
-                        )
-                        continue
-
-                    # Extract to a safe path within extract_dir
-                    safe_extract_path = extract_dir / safe_name
-                    # Double-check: ensure resolved path is within extract_dir
-                    try:
-                        resolved_path = safe_extract_path.resolve()
-                        resolved_base = extract_dir.resolve()
-                        resolved_path.relative_to(resolved_base)
-                    except (ValueError, OSError):
-                        logger.warning(f"  ⚠️  Path traversal attempt detected: {member.name}")
+                    is_valid, safe_name = validate_tar_member_path(member.name, extract_dir, logger)
+                    if not is_valid:
                         continue
 
                     # Extract using the safe path - modify member name to use safe_name
@@ -177,40 +207,22 @@ def extract_from_tar(
             if not main_10k and html_members:
                 member = html_members[0]
                 # Apply same Tar Slip protection with enhanced validation
-                member_path = Path(member.name)
-                safe_name = member_path.name
-
-                # Enhanced validation: check for path traversal attempts
-                if (
-                    ".." not in safe_name
-                    and not safe_name.startswith("/")
-                    and not member_path.is_absolute()
-                    and "/" not in safe_name
-                    and "\\" not in safe_name
-                ):
-                    safe_extract_path = extract_dir / safe_name
+                is_valid, safe_name = validate_tar_member_path(member.name, extract_dir, logger)
+                if is_valid:
+                    # Modify member name to use safe_name before extraction
+                    original_name = member.name
+                    member.name = safe_name
                     try:
-                        resolved_path = safe_extract_path.resolve()
-                        resolved_base = extract_dir.resolve()
-                        resolved_path.relative_to(resolved_base)
-                        # Modify member name to use safe_name before extraction
-                        original_name = member.name
-                        member.name = safe_name
-                        try:
-                            # Use 'data' filter for Python 3.12+ compatibility and security
-                            if TAR_FILTER:
-                                tar.extract(member, extract_dir, filter=TAR_FILTER)
-                            else:
-                                tar.extract(member, extract_dir)
-                        finally:
-                            member.name = original_name
-                        extracted_file = extract_dir / safe_name
-                        if extracted_file.exists():
-                            main_10k = extracted_file
-                    except (ValueError, OSError):
-                        logger.warning(f"  ⚠️  Path traversal attempt detected: {member.name}")
-                else:
-                    logger.warning(f"  ⚠️  Skipping suspicious tar member: {member.name}")
+                        # Use 'data' filter for Python 3.12+ compatibility and security
+                        if TAR_FILTER:
+                            tar.extract(member, extract_dir, filter=TAR_FILTER)
+                        else:
+                            tar.extract(member, extract_dir)
+                    finally:
+                        member.name = original_name
+                    extracted_file = extract_dir / safe_name
+                    if extracted_file.exists():
+                        main_10k = extracted_file
         finally:
             tar.close()
 

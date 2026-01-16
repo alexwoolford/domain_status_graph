@@ -12,6 +12,12 @@ from typing import Any
 
 from neo4j import Driver
 
+from public_company_graph.constants import (
+    VECTOR_INDEX_CHECK_INTERVAL,
+    VECTOR_INDEX_MAX_WAIT_SECONDS,
+)
+from public_company_graph.neo4j.utils import safe_single
+
 logger = logging.getLogger(__name__)
 
 
@@ -30,7 +36,10 @@ def _cosine_similarity(a: list[float], b: list[float]) -> float:
 
 
 def _check_vector_index_online(
-    driver: Driver, index_name: str, database: str | None = None, max_wait_seconds: int = 30
+    driver: Driver,
+    index_name: str,
+    database: str | None = None,
+    max_wait_seconds: int = VECTOR_INDEX_MAX_WAIT_SECONDS,
 ) -> bool:
     """
     Check if a vector index exists and is online.
@@ -52,12 +61,12 @@ def _check_vector_index_online(
                     "SHOW VECTOR INDEXES YIELD name, state WHERE name = $name RETURN state",
                     name=index_name,
                 )
-                record = result.single()
-                if record and record["state"] == "ONLINE":
+                record = safe_single(result)
+                if record and record.get("state") == "ONLINE":
                     return True
-                elif record and record["state"] in ("POPULATING", "BUILDING"):
-                    logger.debug(f"Index {index_name} is {record['state']}, waiting...")
-                    time.sleep(2)
+                elif record and record.get("state") in ("POPULATING", "BUILDING"):
+                    logger.debug(f"Index {index_name} is {record.get('state')}, waiting...")
+                    time.sleep(VECTOR_INDEX_CHECK_INTERVAL)
                     continue
                 else:
                     # Index doesn't exist
@@ -96,7 +105,7 @@ def search_documents(
     """
     # Check if vector index is available
     index_name = "chunk_embedding_vector"
-    use_vector_index = _check_vector_index_online(driver, index_name, database, max_wait_seconds=5)
+    use_vector_index = _check_vector_index_online(driver, index_name, database)
 
     if use_vector_index:
         # Fast path: Use Neo4j vector index
@@ -262,9 +271,11 @@ def search_with_graph_context(
     with driver.session(database=database) as session:
         result = session.run(company_query, company_ticker=company_ticker)
         for record in result:
-            if record["chunk_id"] and record["embedding"]:
-                candidate_chunk_ids.append(record["chunk_id"])
-                candidate_embeddings.append(record["embedding"])
+            chunk_id = record.get("chunk_id")
+            embedding = record.get("embedding")
+            if chunk_id is not None and embedding is not None:
+                candidate_chunk_ids.append(chunk_id)
+                candidate_embeddings.append(embedding)
 
     if not candidate_chunk_ids:
         return []

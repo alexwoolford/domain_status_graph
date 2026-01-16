@@ -5,6 +5,7 @@ Focus areas:
 - Relationship type validation (security-critical for Cypher injection prevention)
 - Batch deletion edge cases
 - Error handling for connection failures
+- safe_single() helper function for None-safe result handling
 """
 
 import pytest
@@ -12,6 +13,7 @@ import pytest
 from public_company_graph.neo4j.utils import (
     REL_TYPE_PATTERN,
     _validate_relationship_type,
+    safe_single,
 )
 
 
@@ -214,3 +216,61 @@ class TestRealWorldRelationshipTypes:
     def test_schema_relationship_types_valid(self, rel_type):
         """All schema relationship types should be valid."""
         _validate_relationship_type(rel_type)  # Should not raise
+
+
+class TestSafeSingle:
+    """Tests for safe_single() helper function."""
+
+    class MockResult:
+        """Mock Neo4j result for testing."""
+
+        def __init__(self, record=None):
+            self._record = record
+
+        def single(self):
+            return self._record
+
+    def test_returns_default_when_no_record(self):
+        """Test that default is returned when result.single() returns None."""
+        result = self.MockResult(record=None)
+        assert safe_single(result, default=0) == 0
+        assert safe_single(result, default=None) is None
+        assert safe_single(result, default=[]) == []
+
+    def test_returns_record_when_no_key(self):
+        """Test that full record is returned when key is not specified."""
+        record = {"count": 42, "name": "test"}
+        result = self.MockResult(record=record)
+        assert safe_single(result) == record
+        assert safe_single(result, default=None) == record
+
+    def test_returns_record_value_when_key_provided(self):
+        """Test that specific key value is returned when key is provided."""
+        record = {"count": 42, "deleted": 5, "created": 10}
+        result = self.MockResult(record=record)
+        assert safe_single(result, default=0, key="count") == 42
+        assert safe_single(result, default=0, key="deleted") == 5
+        assert safe_single(result, default=0, key="created") == 10
+
+    def test_returns_default_when_key_missing(self):
+        """Test that default is returned when key is missing from record."""
+        record = {"count": 42}
+        result = self.MockResult(record=record)
+        assert safe_single(result, default=0, key="missing") == 0
+        assert safe_single(result, default=None, key="missing") is None
+
+    def test_handles_empty_record_dict(self):
+        """Test that empty record dict works correctly."""
+        record = {}
+        result = self.MockResult(record=record)
+        assert safe_single(result, default=0, key="count") == 0
+        assert safe_single(result, default={}) == {}
+
+    def test_handles_none_default_with_key(self):
+        """Test that None default works with key extraction."""
+        result = self.MockResult(record=None)
+        assert safe_single(result, default=None, key="count") is None
+
+        record = {"count": 42}
+        result = self.MockResult(record=record)
+        assert safe_single(result, default=None, key="count") == 42

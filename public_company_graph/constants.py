@@ -49,3 +49,12 @@ CACHE_TTL_NEGATIVE_RESULT = 7  # Negative results (not found) cache TTL (shorter
 # Parallel processing defaults
 DEFAULT_WORKERS = 8  # Default number of parallel workers
 DEFAULT_WORKERS_WITH_API = 16  # Default workers when API key is available (faster)
+
+# Embedding processing defaults
+EMBEDDING_PAGE_SIZE = 50_000  # Fetch 50K keys per page (cursor-based pagination)
+EMBEDDING_NEO4J_BATCH_SIZE_LARGE = 50_000  # Batch size for Neo4j writes (short texts)
+EMBEDDING_NEO4J_BATCH_SIZE_SMALL = 1_000  # Batch size for Neo4j writes (long texts)
+
+# GraphRAG/Vector index defaults
+VECTOR_INDEX_MAX_WAIT_SECONDS = 30  # Maximum time to wait for vector index to come online
+VECTOR_INDEX_CHECK_INTERVAL = 2  # Seconds between vector index status checks

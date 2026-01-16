@@ -48,6 +48,39 @@ def clean_properties_batch(batch: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return [clean_properties(props) for props in batch]
 
 
+def safe_single(result: Any, default: Any = None, key: str | None = None) -> Any:
+    """
+    Safely get value from result.single() with None handling.
+
+    Neo4j's result.single() can return None if no records match, which causes
+    AttributeError when accessing record keys. This helper provides safe access
+    with configurable defaults.
+
+    Args:
+        result: Neo4j result object (must have single() method)
+        default: Default value if no record (default: None)
+        key: Optional key to extract from record (if None, returns full record)
+
+    Returns:
+        Record value or default. If key is provided, returns record[key] or default.
+        If key is None, returns the full record or default.
+
+    Example:
+        >>> # Get count with default 0
+        >>> count = safe_single(result, default=0, key="count")
+        >>> # Get full record or None
+        >>> record = safe_single(result)
+        >>> # Get specific field with default
+        >>> deleted = safe_single(result, default=0, key="deleted")
+    """
+    record = result.single()
+    if not record:
+        return default
+    if key:
+        return record.get(key, default)
+    return record
+
+
 def _validate_relationship_type(rel_type: str) -> None:
     """Validate that a relationship type is safe to use in Cypher queries."""
     if not REL_TYPE_PATTERN.match(rel_type):
@@ -90,9 +123,8 @@ def delete_relationships_in_batches(
 
     with driver.session(database=database) as session:
         # Count relationships before deletion
-        count_before = session.run(
-            f"MATCH ()-[r:{rel_type}]->() RETURN count(r) AS count"
-        ).single()["count"]
+        count_result = session.run(f"MATCH ()-[r:{rel_type}]->() RETURN count(r) AS count")
+        count_before = safe_single(count_result, default=0, key="count")
 
         if count_before == 0:
             logger.info(f"   ✓ No {rel_type} relationships to delete")
@@ -121,8 +153,7 @@ def delete_relationships_in_batches(
                 result = session.run(
                     f"MATCH ()-[r:{rel_type}]->() DELETE r RETURN count(r) AS deleted"
                 )
-                record = result.single()
-                deleted = record["deleted"] if record else 0
+                deleted = safe_single(result, default=0, key="deleted")
                 logger.info(f"   ✓ Deleted {deleted:,} {rel_type} relationships")
                 return deleted
             else:

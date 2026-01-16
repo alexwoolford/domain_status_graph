@@ -20,6 +20,7 @@ from public_company_graph.cache import AppCache
 from public_company_graph.embeddings.create import (
     create_embeddings_for_nodes,
 )
+from tests.conftest import MockResult
 
 
 def mock_async_embedding_function(mock_client):
@@ -183,29 +184,7 @@ class MockNeo4jSession:
         pass
 
 
-class MockResult:
-    """Mock Neo4j result."""
-
-    def __init__(self, records: list[dict[str, Any]]):
-        self.records = [MockRecord(r) for r in records]
-        self._index = 0
-
-    def __iter__(self):
-        return iter(self.records)
-
-    def single(self):
-        """Return the first record or None if empty (matches Neo4j API)."""
-        return self.records[0] if self.records else None
-
-
-class MockRecord:
-    """Mock Neo4j record."""
-
-    def __init__(self, data: dict[str, Any]):
-        self._data = data
-
-    def __getitem__(self, key: str):
-        return self._data[key]
+# MockResult and MockRecord are now imported from tests.conftest
 
 
 class MockDriver:

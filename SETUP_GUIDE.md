@@ -320,14 +320,28 @@ Run these verification queries to ensure everything works:
 ### 8a. Basic Graph Structure
 
 ```cypher
-// Check node counts
-MATCH (d:Domain) RETURN count(d) AS domains;
-MATCH (t:Technology) RETURN count(t) AS technologies;
+// Check node counts - Domains
+MATCH (d:Domain) RETURN count(d) AS domains
+```
 
-// Check relationship counts
-MATCH ()-[r:USES]->() RETURN count(r) AS uses;
-MATCH ()-[r:LIKELY_TO_ADOPT]->() RETURN count(r) AS adoptions;
-MATCH ()-[r:CO_OCCURS_WITH]->() RETURN count(r) AS co_occurs;
+```cypher
+// Check node counts - Technologies
+MATCH (t:Technology) RETURN count(t) AS technologies
+```
+
+```cypher
+// Check relationship counts - USES
+MATCH ()-[r:USES]->() RETURN count(r) AS uses
+```
+
+```cypher
+// Check relationship counts - LIKELY_TO_ADOPT
+MATCH ()-[r:LIKELY_TO_ADOPT]->() RETURN count(r) AS adoptions
+```
+
+```cypher
+// Check relationship counts - CO_OCCURS_WITH
+MATCH ()-[r:CO_OCCURS_WITH]->() RETURN count(r) AS co_occurs
 ```
 
 ### 8c. Technology Adopter Prediction

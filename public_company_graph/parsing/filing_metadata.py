@@ -126,6 +126,8 @@ class FilingMetadataParser(TenKParser):
                 for member in tar.getmembers():
                     if member.name.endswith("metadata.json"):
                         # Prevent Tar Slip: Validate member path before extraction
+                        # Note: tar.extractfile() only reads from the archive, it doesn't write files
+                        # This is safe from Tar Slip perspective, but we validate the path anyway for defense in depth
                         from pathlib import Path
 
                         member_path = Path(member.name)
@@ -139,8 +141,6 @@ class FilingMetadataParser(TenKParser):
                         if member.name.count("/") > 10:  # Reject deeply nested paths
                             logger.warning(f"Suspicious deeply nested path in tar: {member.name}")
                             continue
-                        # Note: tar.extractfile() only reads from the archive, it doesn't write files
-                        # This is safe from Tar Slip perspective, but we validate the path anyway for defense in depth
                         f = tar.extractfile(member)
                         if f:
                             metadata = json.loads(f.read().decode("utf-8"))

@@ -286,10 +286,9 @@ def extract_website_from_cover_page(
     """
     # Validate file_path is within expected directory (prevent path traversal)
     if filings_dir is not None:
-        try:
-            file_path.resolve().relative_to(filings_dir.resolve())
-        except ValueError:
-            logger.warning(f"⚠️  Path traversal attempt detected: {file_path}")
+        from public_company_graph.utils.security import validate_path_within_base
+
+        if not validate_path_within_base(file_path, filings_dir, logger):
             return None
 
     try:

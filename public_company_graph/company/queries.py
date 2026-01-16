@@ -342,9 +342,11 @@ def get_similarity_breakdown(
     """
     query = get_similarity_breakdown_query(ticker1, ticker2)
 
+    from public_company_graph.neo4j.utils import safe_single
+
     with driver.session(database=database) as session:
         result = session.run(query)
-        record = result.single()
+        record = safe_single(result, default={})
         return dict(record) if record else {}
 
 

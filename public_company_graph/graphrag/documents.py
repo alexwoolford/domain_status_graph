@@ -15,6 +15,7 @@ from typing import Any
 from neo4j import Driver
 
 from public_company_graph.graphrag.chunking import DocumentChunk
+from public_company_graph.neo4j.utils import safe_single
 
 logger = logging.getLogger(__name__)
 
@@ -114,9 +115,8 @@ def create_documents_and_chunks(
             """
 
             result = session.run(query, documents=batch)
-            record = result.single()
-            if record:
-                batch_created = record["created"]
+            batch_created = safe_single(result, default=0, key="created")
+            if batch_created:
                 documents_created += batch_created
 
         logger.info(f"✓ Created {documents_created} Document nodes")
@@ -173,9 +173,8 @@ def create_documents_and_chunks(
             """
 
             result = session.run(query, chunks=batch)
-            record = result.single()
-            if record:
-                batch_created = record["created"]
+            batch_created = safe_single(result, default=0, key="created")
+            if batch_created:
                 chunks_created += batch_created
 
             if (i + batch_size) % (batch_size * 10) == 0:
@@ -254,8 +253,7 @@ def link_documents_to_companies(
 
     with driver.session(database=database) as session:
         result = session.run(query)
-        record = result.single()
-        linked = record["linked"] if record else 0
+        linked = safe_single(result, default=0, key="linked")
 
     logger.info(f"✓ Linked {linked} Company-Document relationships")
     return linked

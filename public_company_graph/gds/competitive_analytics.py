@@ -11,6 +11,7 @@ Computes:
 import logging
 
 from public_company_graph.gds.utils import safe_drop_graph
+from public_company_graph.neo4j.utils import safe_single
 
 logger = logging.getLogger(__name__)
 
@@ -232,8 +233,7 @@ def compute_degree_centrality(
                 RETURN count(c) as updated
                 """
             )
-            record = result.single()
-            in_degree_count = record["updated"] if record else 0
+            in_degree_count = safe_single(result, default=0, key="updated")
             logger.info(f"   ✓ Updated in-degree for {in_degree_count} companies")
 
             # Compute out-degree (cites competitors)
@@ -246,8 +246,7 @@ def compute_degree_centrality(
                 RETURN count(c) as updated
                 """
             )
-            record = result.single()
-            out_degree_count = record["updated"] if record else 0
+            out_degree_count = safe_single(result, default=0, key="updated")
             logger.info(f"   ✓ Updated out-degree for {out_degree_count} companies")
 
         logger.info("   ✓ Complete")

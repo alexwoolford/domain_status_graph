@@ -38,6 +38,7 @@ from public_company_graph.graphrag.filing_text import (
     find_10k_file_for_company,
 )
 from public_company_graph.neo4j.constraints import create_document_constraints
+from public_company_graph.utils.security import validate_path_within_base
 
 # Load environment
 load_dotenv(Path(__file__).parent.parent / ".env")
@@ -186,14 +187,7 @@ def main():
         for company in companies_with_files[:sample_size]:
             # Validate file path is within filings_dir to prevent path traversal
             file_path = company["file_path"]
-            try:
-                resolved_path = file_path.resolve()
-                resolved_base = filings_dir.resolve()
-                resolved_path.relative_to(resolved_base)
-            except (ValueError, OSError):
-                script_logger.warning(
-                    f"Path traversal attempt detected: {file_path} (base: {filings_dir})"
-                )
+            if not validate_path_within_base(file_path, filings_dir, script_logger):
                 continue
             text = extract_full_text_with_datamule(file_path, company["cik"], base_dir=filings_dir)
             if text:
@@ -290,14 +284,7 @@ def main():
                 # Extract full text from HTML file
                 file_path = company["file_path"]
                 # Validate file path is within filings_dir to prevent path traversal
-                try:
-                    resolved_path = file_path.resolve()
-                    resolved_base = filings_dir.resolve()
-                    resolved_path.relative_to(resolved_base)
-                except (ValueError, OSError):
-                    script_logger.warning(
-                        f"Path traversal attempt detected: {file_path} (base: {filings_dir})"
-                    )
+                if not validate_path_within_base(file_path, filings_dir, script_logger):
                     failed += 1
                     continue
                 script_logger.debug(f"Extracting text from {file_path.name}...")

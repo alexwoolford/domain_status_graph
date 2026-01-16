@@ -15,6 +15,7 @@ from bs4 import BeautifulSoup, XMLParsedAsHTMLWarning
 
 from public_company_graph.config import get_data_dir
 from public_company_graph.utils.datamule import suppress_datamule_output
+from public_company_graph.utils.security import validate_path_within_base
 
 logger = logging.getLogger(__name__)
 
@@ -45,10 +46,7 @@ def extract_risk_factors(
     """
     # Validate file path is within filings_dir (prevent path traversal)
     if filings_dir:
-        try:
-            file_path.resolve().relative_to(filings_dir.resolve())
-        except ValueError:
-            logger.debug(f"File path outside filings_dir: {file_path}")
+        if not validate_path_within_base(file_path, filings_dir, logger):
             return None
 
     if file_path.suffix != ".html":

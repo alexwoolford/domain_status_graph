@@ -17,6 +17,7 @@ import pytest
 from public_company_graph.cache import AppCache
 from public_company_graph.embeddings.create import create_embeddings_for_nodes
 from public_company_graph.embeddings.openai_client import create_embeddings_batch
+from tests.conftest import MockResult
 
 
 def mock_async_embedding_function(mock_client):
@@ -86,21 +87,7 @@ class MockNeo4jSession:
         pass
 
 
-class MockResult:
-    """Mock Neo4j result."""
-
-    def __init__(self, data):
-        self._data = data
-
-    def __iter__(self):
-        return iter(self._data)
-
-    def single(self):
-        """Return the first record or None if empty (matches Neo4j API)."""
-        if isinstance(self._data, list):
-            return self._data[0] if self._data else None
-        # If _data is already a record-like object, return it
-        return self._data if self._data else None
+# MockResult and MockRecord are now imported from tests.conftest
 
 
 def create_mock_openai_client_with_tracking():

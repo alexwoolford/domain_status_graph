@@ -15,6 +15,7 @@ from public_company_graph.constants import (
     DEFAULT_TOP_K,
 )
 from public_company_graph.gds.utils import safe_drop_graph
+from public_company_graph.neo4j.utils import safe_single
 
 logger = logging.getLogger(__name__)
 
@@ -145,9 +146,9 @@ def compute_tech_affinity_bundling(
                     """,
                     batch=batch_chunk,
                 )
-                record = result.single()
-                if record:
-                    relationships_written += record["created"]
+                created = safe_single(result, default=0, key="created")
+                if created:
+                    relationships_written += created
 
                 if (i + batch_size) % (batch_size * 10) == 0 or i + batch_size >= len(batch):
                     progress = min(i + batch_size, len(batch))

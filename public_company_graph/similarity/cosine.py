@@ -11,6 +11,7 @@ import numpy as np
 from numpy.typing import NDArray
 
 from public_company_graph.constants import EMBEDDING_DIMENSION
+from public_company_graph.neo4j.utils import safe_single
 
 logger = logging.getLogger(__name__)
 
@@ -259,8 +260,7 @@ def write_similarity_relationships(
             RETURN count(r) AS deleted
             """
         )
-        record = result.single()
-        deleted = record["deleted"] if record else 0
+        deleted = safe_single(result, default=0, key="deleted")
         if deleted > 0:
             log.info(f"Deleted {deleted} existing relationships")
 
@@ -291,9 +291,9 @@ def write_similarity_relationships(
                 """,
                 batch=chunk,
             )
-            record = result.single()
-            if record:
-                relationships_written += record["created"]
+            created = safe_single(result, default=0, key="created")
+            if created:
+                relationships_written += created
 
     log.info(f"Created {relationships_written} {relationship_type} relationships")
     return relationships_written

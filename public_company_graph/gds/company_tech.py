@@ -15,6 +15,7 @@ from public_company_graph.constants import (
     DEFAULT_TOP_K,
 )
 from public_company_graph.gds.utils import safe_drop_graph
+from public_company_graph.neo4j.utils import safe_single
 
 logger = logging.getLogger(__name__)
 
@@ -81,8 +82,7 @@ def compute_company_technology_similarity(
                 RETURN count(r) AS deleted
                 """
             )
-            record = result.single()
-            deleted = record["deleted"] if record else 0
+            deleted = safe_single(result, default=0, key="deleted")
             if deleted > 0:
                 logger.info(f"   ✓ Deleted {deleted} existing relationships")
             else:
@@ -127,10 +127,8 @@ def compute_company_technology_similarity(
 
         with driver.session(database=database) as session:
             result = session.run("MATCH (c:Company) RETURN collect(id(c)) AS company_ids")
-            record = result.single()
-            company_ids = (
-                set(record["company_ids"]) if record and record.get("company_ids") else set()
-            )
+            record = safe_single(result, default={})
+            company_ids = set(record.get("company_ids", [])) if record else set()
 
         if isinstance(similarity_result, pd.DataFrame):
             col1, col2 = _identify_node_columns(similarity_result)
@@ -195,9 +193,9 @@ def compute_company_technology_similarity(
                     """,
                     batch=batch_chunk,
                 )
-                record = result.single()
-                if record:
-                    relationships_written += record["created"]
+                created = safe_single(result, default=0, key="created")
+                if created:
+                    relationships_written += created
 
                 if (i + batch_size) % (batch_size * 10) == 0 or i + batch_size >= len(batch):
                     progress = min(i + batch_size, len(batch))

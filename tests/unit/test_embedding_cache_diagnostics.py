@@ -17,6 +17,7 @@ from public_company_graph.embeddings.openai_client import (
     EMBEDDING_TRUNCATE_TOKENS,
     count_tokens,
 )
+from tests.conftest import MockResult
 
 
 def mock_async_embedding_function(mock_client):
@@ -154,26 +155,7 @@ class MockNeo4jSession:
         pass
 
 
-class MockRecord:
-    """Mock Neo4j record that avoids closure bugs."""
-
-    def __init__(self, data):
-        self._data = data
-
-    def __getitem__(self, key):
-        return self._data[key]
-
-
-class MockResult:
-    def __init__(self, records):
-        self.records = [MockRecord(r) for r in records]
-
-    def __iter__(self):
-        return iter(self.records)
-
-    def single(self):
-        """Return the first record or None if empty (matches Neo4j API)."""
-        return self.records[0] if self.records else None
+# MockResult and MockRecord are now imported from tests.conftest
 
 
 class MockDriver:

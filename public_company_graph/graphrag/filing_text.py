@@ -10,6 +10,8 @@ from pathlib import Path
 
 from bs4 import BeautifulSoup
 
+from public_company_graph.utils.security import validate_path_within_base
+
 logger = logging.getLogger(__name__)
 
 
@@ -28,13 +30,7 @@ def extract_full_text_from_html(file_path: Path, base_dir: Path | None = None) -
     """
     # Validate path to prevent path traversal attacks
     if base_dir:
-        try:
-            resolved_path = file_path.resolve()
-            resolved_base = base_dir.resolve()
-            # Ensure resolved path is within base_dir
-            resolved_path.relative_to(resolved_base)
-        except (ValueError, OSError):
-            logger.warning(f"Path traversal attempt detected: {file_path} (base: {base_dir})")
+        if not validate_path_within_base(file_path, base_dir, logger):
             return None
 
     try:

@@ -30,12 +30,16 @@ except ImportError:
 
 from public_company_graph.cache import AppCache
 from public_company_graph.constants import (
+    EMBEDDING_NEO4J_BATCH_SIZE_LARGE,
+    EMBEDDING_NEO4J_BATCH_SIZE_SMALL,
+    EMBEDDING_PAGE_SIZE,
     MIN_DESCRIPTION_LENGTH_FOR_SIMILARITY,
 )
 from public_company_graph.embeddings.openai_client import (
     EMBEDDING_TRUNCATE_TOKENS,
     count_tokens,
 )
+from public_company_graph.neo4j.utils import safe_single
 
 logger = logging.getLogger(__name__)
 
@@ -150,7 +154,7 @@ def create_embeddings_for_nodes(
         RETURN count(n) AS total
         """
         count_result = session.run(count_query, min_length=MIN_DESCRIPTION_LENGTH_FOR_SIMILARITY)
-        count_record = count_result.single()
+        count_record = safe_single(count_result)
         if not count_record:
             _logger.warning(f"No {node_label} nodes found matching criteria")
             return (0, 0, 0, 0)
@@ -200,7 +204,7 @@ def create_embeddings_for_nodes(
 
     # Setup Neo4j batch writing
     neo4j_batch: list[dict[str, Any]] = []
-    neo4j_batch_size = 50000  # Write to Neo4j every 50K embeddings (large batches for speed)
+    neo4j_batch_size = EMBEDDING_NEO4J_BATCH_SIZE_LARGE
 
     # Create callback factory - returns a callback bound to specific cache_keys
     def make_cache_and_write_callback(cache_keys: list[str]):
@@ -225,16 +229,21 @@ def create_embeddings_for_nodes(
                 new_embeddings[cache_key] = embedding
 
                 # Cache immediately (diskcache auto-commits)
-                cache.set(
-                    "embeddings",
-                    cache_key,
-                    {
-                        "embedding": embedding,
-                        "text": text,
-                        "model": embedding_model,
-                        "dimension": embedding_dimension,
-                    },
-                )
+                # Wrap in try/except to handle disk full, permission errors gracefully
+                try:
+                    cache.set(
+                        "embeddings",
+                        cache_key,
+                        {
+                            "embedding": embedding,
+                            "text": text,
+                            "model": embedding_model,
+                            "dimension": embedding_dimension,
+                        },
+                    )
+                except Exception as e:
+                    _logger.warning(f"Cache write failed for {cache_key}: {e}")
+                    # Continue - cache failures shouldn't stop embedding creation
 
                 # Add to Neo4j batch for incremental writes
                 node_key = cache_key.split(":", 1)[0]
@@ -269,7 +278,7 @@ def create_embeddings_for_nodes(
         # Cursor-based pagination: safer and more efficient than SKIP/LIMIT
         # Uses WHERE key > last_key to avoid issues with concurrent data changes
         processed_count = 0
-        page_size = 50_000  # Fetch 50K keys per page (reasonable Neo4j transaction size)
+        page_size = EMBEDDING_PAGE_SIZE
         last_key: str | None = None
 
         while True:
@@ -409,7 +418,7 @@ def create_embeddings_for_nodes(
             processed_count += len(page_keys)
 
             # Log progress (more frequently for visibility)
-            if processed_count % 50_000 == 0 or len(page_keys) < page_size:
+            if processed_count % EMBEDDING_PAGE_SIZE == 0 or len(page_keys) < page_size:
                 mem_mb = get_memory_usage_mb()
                 _logger.info(
                     f"✓ Processed {processed_count:,}/{total_nodes:,} nodes ({processed_count / total_nodes * 100:.1f}%) | Cached: {cached_count:,} | Created: {uncached_count:,} | Memory: {mem_mb:.1f} MB"
@@ -469,22 +478,27 @@ def create_embeddings_for_nodes(
 
             # Process results, update cache, and write to Neo4j incrementally
             neo4j_batch: list[dict[str, Any]] = []
-            neo4j_batch_size = 1000  # Write to Neo4j every 1000 embeddings
+            neo4j_batch_size = EMBEDDING_NEO4J_BATCH_SIZE_SMALL
 
             for cache_key, embedding in batched_results.items():
                 if embedding and len(embedding) == embedding_dimension:
                     new_embeddings[cache_key] = embedding
                     # Cache immediately
-                    cache.set(
-                        "embeddings",
-                        cache_key,
-                        {
-                            "embedding": embedding,
-                            "text": text_by_key[cache_key],
-                            "model": embedding_model,
-                            "dimension": embedding_dimension,
-                        },
-                    )
+                    # Wrap in try/except to handle disk full, permission errors gracefully
+                    try:
+                        cache.set(
+                            "embeddings",
+                            cache_key,
+                            {
+                                "embedding": embedding,
+                                "text": text_by_key[cache_key],
+                                "model": embedding_model,
+                                "dimension": embedding_dimension,
+                            },
+                        )
+                    except Exception as e:
+                        _logger.warning(f"Cache write failed for {cache_key}: {e}")
+                        # Continue - cache failures shouldn't stop embedding creation
 
                     # Add to Neo4j batch for incremental writes
                     node_key = cache_key.split(":", 1)[0]

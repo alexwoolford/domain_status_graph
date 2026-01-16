@@ -25,13 +25,15 @@ The Public Company Graph is a knowledge graph modeling **public companies**, the
 
 | Property | Coverage | Notes |
 |----------|----------|-------|
-| `ticker` | 100% (5,398/5,398) | From SEC EDGAR |
-| `name` | 100% (5,398/5,398) | From SEC EDGAR |
-| `description` | 99.85% (5,390/5,398) | From 10-K Item 1 |
-| `description_embedding` | 99.85% (5,390/5,398) | OpenAI text-embedding-3-small |
-| `sector` / `industry` | ~18% (959/5,398) | Yahoo Finance (only actively traded stocks) |
-| `market_cap` | ~18% (960/5,398) | Yahoo Finance (only actively traded stocks) |
-| `revenue` | ~15% (815/5,398) | Yahoo Finance (only actively traded stocks) |
+| `ticker` | 100% (5,410/5,410) | From SEC EDGAR |
+| `name` | 100% (5,410/5,410) | From SEC EDGAR |
+| `description` | 99.85% (5,390/5,410) | From 10-K Item 1 |
+| `description_embedding` | 99.85% (5,390/5,410) | OpenAI text-embedding-3-small |
+| `risk_factors` | ~99% | From 10-K Item 1A |
+| `risk_factors_embedding` | ~99% | OpenAI text-embedding-3-small |
+| `sector` / `industry` | ~18% | Yahoo Finance (only actively traded stocks) |
+| `market_cap` | ~18% | Yahoo Finance (only actively traded stocks) |
+| `revenue` | ~15% | Yahoo Finance (only actively traded stocks) |
 
 **Missing Descriptions (8 companies)**: These are edge cases:
 - BNS (Bank of Nova Scotia) - Canadian company, files 20-F not 10-K
@@ -46,11 +48,13 @@ The Public Company Graph is a knowledge graph modeling **public companies**, the
 
 | Metric | Count |
 |--------|-------|
-| **Total Nodes** | 10,562 |
-| - Company | 5,398 |
+| **Total Nodes** | 2,865,473 |
+| - Company | 5,410 |
 | - Domain | 4,337 |
 | - Technology | 827 |
-| **Total Relationships** | ~2,028,329 |
+| - Document | 5,410 |
+| - Chunk | 2,850,489 |
+| **Total Relationships** | ~5,700,000+ |
 | - Similarity relationships | 1,890,697 |
 |   - SIMILAR_INDUSTRY | 520,672 |
 |   - SIMILAR_DESCRIPTION | 436,973 |
@@ -72,6 +76,10 @@ The Public Company Graph is a knowledge graph modeling **public companies**, the
 |   - LIKELY_TO_ADOPT | 41,250 |
 |   - CO_OCCURS_WITH | 41,220 |
 | - Domain-Company links | 3,745 |
+| - GraphRAG relationships | 2,856,378 |
+|   - HAS (Company → Document) | 5,410 |
+|   - PART_OF_DOCUMENT (Chunk → Document) | 2,850,489 |
+|   - NEXT_CHUNK (Chunk → Chunk) | 2,845,079 |
 
 ---
 
@@ -100,6 +108,8 @@ The Public Company Graph is a knowledge graph modeling **public companies**, the
 | `description_embedding` | LIST<FLOAT> | ❌ | OpenAI embedding vector | 1536-dim vector |
 | `embedding_model` | STRING | ❌ | Embedding model used | `text-embedding-3-small` |
 | `embedding_dimension` | INTEGER | ❌ | Embedding vector dimension | `1536` |
+| `risk_factors` | STRING | ❌ | Risk factors from 10-K Item 1A | (Item 1A text) |
+| `risk_factors_embedding` | LIST<FLOAT> | ❌ | OpenAI embedding vector for risk factors | 1536-dim vector |
 | `revenue` | INTEGER | ❌ | Annual revenue (USD) | `416161005568` |
 | `market_cap` | INTEGER | ❌ | Market capitalization (USD) | `4058697957376` |
 | `employees` | INTEGER | ❌ | Number of employees | `166000` |
@@ -117,6 +127,7 @@ The Public Company Graph is a knowledge graph modeling **public companies**, the
 
 **Relationships**:
 - `(Company)-[:HAS_DOMAIN]->(Domain)` - Company's web domain
+- `(Company)-[:HAS]->(Document)` - Company's filing documents (GraphRAG)
 - `(Company)-[:HAS_COMPETITOR]->(Company)` - Cited competitors from 10-K
 - `(Company)-[:HAS_CUSTOMER]->(Company)` - Cited customers from 10-K
 - `(Company)-[:HAS_SUPPLIER]->(Company)` - Cited suppliers from 10-K
@@ -213,7 +224,7 @@ The Public Company Graph is a knowledge graph modeling **public companies**, the
 
 **Description**: Company A explicitly mentioned Company B as a competitor in their 10-K filing. Directional - reverse may not exist.
 
-**Count**: 3,249 (high confidence, embedding-verified at threshold ≥0.35)
+**Count**: 3,282 (high confidence, embedding-verified at threshold ≥0.35)
 
 **Properties**:
 | Property | Type | Description |
@@ -223,11 +234,8 @@ The Public Company Graph is a knowledge graph modeling **public companies**, the
 | `raw_mention` | STRING | How competitor was mentioned |
 | `context` | STRING | Surrounding text from filing |
 | `source` | STRING | Always `ten_k_filing` |
-| `source_cik` | STRING | CIK of company making the citation |
-| `target_cik` | STRING | CIK of cited company |
-| `is_mutual` | BOOLEAN | Whether the relationship is bidirectional |
-| `inbound_citations` | INTEGER | How many companies cite this competitor |
 | `extracted_at` | DATETIME | When relationship was extracted |
+| `embedding_similarity` | FLOAT | Semantic similarity score (0-1) |
 
 **Example**:
 ```cypher
@@ -235,7 +243,9 @@ The Public Company Graph is a knowledge graph modeling **public companies**, the
 MATCH (c:Company {ticker:'NVDA'})-[r:HAS_COMPETITOR]->(comp:Company)
 RETURN comp.ticker, comp.name, r.confidence, r.raw_mention
 ORDER BY r.confidence DESC
+```
 
+```cypher
 // Find mutual competitors
 MATCH (a:Company)-[:HAS_COMPETITOR]->(b:Company)-[:HAS_COMPETITOR]->(a)
 WHERE a.ticker < b.ticker
@@ -250,9 +260,20 @@ RETURN a.ticker, b.ticker
 
 **Description**: Company A mentioned Company B as a customer in their 10-K filing.
 
-**Count**: 243 (high confidence, LLM-verified)
+**Count**: 337 (high confidence, LLM-verified)
 
-**Properties**: Same as HAS_COMPETITOR
+**Properties**:
+| Property | Type | Description |
+|----------|------|-------------|
+| `confidence` | FLOAT | Entity resolution confidence (0-1) |
+| `confidence_tier` | STRING | Always `high` for HAS_CUSTOMER |
+| `raw_mention` | STRING | How customer was mentioned |
+| `context` | STRING | Surrounding text from filing |
+| `source` | STRING | Always `ten_k_filing` |
+| `extracted_at` | DATETIME | When relationship was extracted |
+| `embedding_similarity` | FLOAT | Semantic similarity score (0-1) |
+| `llm_confidence` | FLOAT | LLM verification confidence (0-1) |
+| `llm_verified` | BOOLEAN | Whether LLM verified the relationship |
 
 **Example**:
 ```cypher
@@ -270,9 +291,20 @@ ORDER BY r.confidence DESC
 
 **Description**: Company A mentioned Company B as a supplier/vendor in their 10-K filing.
 
-**Count**: 130 (high confidence, LLM-verified)
+**Count**: 176 (high confidence, LLM-verified)
 
-**Properties**: Same as HAS_COMPETITOR
+**Properties**:
+| Property | Type | Description |
+|----------|------|-------------|
+| `confidence` | FLOAT | Entity resolution confidence (0-1) |
+| `confidence_tier` | STRING | Always `high` for HAS_SUPPLIER |
+| `raw_mention` | STRING | How supplier was mentioned |
+| `context` | STRING | Surrounding text from filing |
+| `source` | STRING | Always `ten_k_filing` |
+| `extracted_at` | DATETIME | When relationship was extracted |
+| `embedding_similarity` | FLOAT | Semantic similarity score (0-1) |
+| `llm_confidence` | FLOAT | LLM verification confidence (0-1) |
+| `llm_verified` | BOOLEAN | Whether LLM verified the relationship |
 
 **Example**:
 ```cypher
@@ -289,9 +321,18 @@ RETURN supp.name, r.raw_mention
 
 **Description**: Company A mentioned Company B as a partner/alliance in their 10-K filing.
 
-**Count**: 588 (high confidence, embedding-verified)
+**Count**: 733 (high confidence, embedding-verified)
 
-**Properties**: Same as HAS_COMPETITOR
+**Properties**:
+| Property | Type | Description |
+|----------|------|-------------|
+| `confidence` | FLOAT | Entity resolution confidence (0-1) |
+| `confidence_tier` | STRING | Always `high` for HAS_PARTNER |
+| `raw_mention` | STRING | How partner was mentioned |
+| `context` | STRING | Surrounding text from filing |
+| `source` | STRING | Always `ten_k_filing` |
+| `extracted_at` | DATETIME | When relationship was extracted |
+| `embedding_similarity` | FLOAT | Semantic similarity score (0-1) |
 
 ---
 
@@ -306,10 +347,10 @@ RETURN supp.name, r.raw_mention
 **Description**: Medium-confidence business relationships extracted from 10-K filings. These contain the same properties as their HAS_* counterparts but didn't meet the embedding similarity or LLM verification thresholds.
 
 **Counts**:
-- CANDIDATE_PARTNER: 673
-- CANDIDATE_COMPETITOR: 111
-- CANDIDATE_SUPPLIER: 151
-- CANDIDATE_CUSTOMER: 113
+- CANDIDATE_PARTNER: 899
+- CANDIDATE_COMPETITOR: 134
+- CANDIDATE_SUPPLIER: 150
+- CANDIDATE_CUSTOMER: 114
 
 **Properties**:
 | Property | Type | Description |
@@ -345,7 +386,7 @@ ORDER BY r.embedding_similarity DESC
 
 **Description**: Companies with similar business descriptions based on embedding cosine similarity.
 
-**Count**: 436,973
+**Count**: 438,039
 
 **Properties**:
 | Property | Type | Description |
@@ -369,7 +410,7 @@ ORDER BY r.score DESC LIMIT 10
 
 **Description**: Companies in the same industry and/or sector.
 
-**Count**: 520,672
+**Count**: 524,556
 
 **Properties**:
 | Property | Type | Description |
@@ -387,7 +428,7 @@ ORDER BY r.score DESC LIMIT 10
 
 **Description**: Companies of similar size (revenue, market cap, employees).
 
-**Count**: 414,096
+**Count**: 419,282
 
 **Properties**:
 | Property | Type | Description |
@@ -406,7 +447,7 @@ ORDER BY r.score DESC LIMIT 10
 
 **Description**: Companies with similar risk factor profiles based on 10-K Item 1A.
 
-**Count**: 394,372
+**Count**: 395,152
 
 **Properties**:
 | Property | Type | Description |
@@ -514,6 +555,67 @@ RETURN d.final_domain, d.title
 
 ---
 
+### GraphRAG Relationships
+
+> **Note**: The GraphRAG layer enables semantic search over 10-K filing text. See [graphrag.md](graphrag.md) for usage examples.
+
+#### HAS
+
+**Pattern**: `(Company)-[:HAS]->(Document)`
+
+**Description**: Links a company to its filing documents (business descriptions and risk factors that have been chunked for semantic search).
+
+**Count**: 5,410
+
+**Properties**: None
+
+**Example**:
+```cypher
+// Find all documents for a company
+MATCH (c:Company {ticker:'AAPL'})-[:HAS]->(d:Document)
+RETURN d.section_type, d.filing_year, d.chunk_count
+```
+
+---
+
+#### PART_OF_DOCUMENT
+
+**Pattern**: `(Chunk)-[:PART_OF_DOCUMENT]->(Document)`
+
+**Description**: Links text chunks to their parent documents. Used for retrieving full document context after semantic search.
+
+**Count**: 2,850,489
+
+**Properties**: None
+
+**Example**:
+```cypher
+// Find document for a chunk
+MATCH (chunk:Chunk {chunk_id: '0000320193_business_2021_chunk_0'})-[:PART_OF_DOCUMENT]->(d:Document)
+RETURN d.company_name, d.section_type
+```
+
+---
+
+#### NEXT_CHUNK
+
+**Pattern**: `(Chunk)-[:NEXT_CHUNK]->(Chunk)`
+
+**Description**: Sequential ordering of chunks within a document. Enables retrieving surrounding context when a chunk matches a query.
+
+**Count**: 2,845,079
+
+**Properties**: None
+
+**Example**:
+```cypher
+// Get next chunk for context
+MATCH (chunk:Chunk {chunk_id: '0000320193_business_2021_chunk_0'})-[:NEXT_CHUNK]->(next:Chunk)
+RETURN next.text
+```
+
+---
+
 ## Constraints and Indexes
 
 ### Constraints
@@ -522,6 +624,8 @@ RETURN d.final_domain, d.title
 CREATE CONSTRAINT company_cik IF NOT EXISTS FOR (c:Company) REQUIRE c.cik IS UNIQUE;
 CREATE CONSTRAINT domain_name IF NOT EXISTS FOR (d:Domain) REQUIRE d.final_domain IS UNIQUE;
 CREATE CONSTRAINT technology_name IF NOT EXISTS FOR (t:Technology) REQUIRE t.name IS UNIQUE;
+CREATE CONSTRAINT document_doc_id IF NOT EXISTS FOR (d:Document) REQUIRE d.doc_id IS UNIQUE;
+CREATE CONSTRAINT chunk_chunk_id IF NOT EXISTS FOR (c:Chunk) REQUIRE c.chunk_id IS UNIQUE;
 ```
 
 ### Indexes
@@ -539,6 +643,23 @@ CREATE INDEX company_accession_number IF NOT EXISTS FOR (c:Company) ON (c.access
 
 -- Domain indexes
 CREATE INDEX domain_domain IF NOT EXISTS FOR (d:Domain) ON (d.domain);
+
+-- Document indexes
+CREATE INDEX document_company_cik IF NOT EXISTS FOR (d:Document) ON (d.company_cik);
+CREATE INDEX document_section_type IF NOT EXISTS FOR (d:Document) ON (d.section_type);
+
+-- Chunk indexes
+CREATE INDEX chunk_chunk_index IF NOT EXISTS FOR (c:Chunk) ON (c.chunk_index);
+
+-- Vector index (for semantic search)
+CREATE VECTOR INDEX chunk_embedding_vector IF NOT EXISTS
+FOR (c:Chunk) ON c.embedding
+OPTIONS {
+  indexConfig: {
+    `vector.dimensions`: 1536,
+    `vector.similarity_function`: 'cosine'
+  }
+};
 
 -- Relationship indexes
 CREATE INDEX has_competitor_confidence IF NOT EXISTS FOR ()-[r:HAS_COMPETITOR]->() ON (r.confidence);
@@ -614,6 +735,7 @@ LIMIT 20
 | `scripts/extract_with_llm_verification.py --clean` | Extract HAS_COMPETITOR/CUSTOMER/SUPPLIER/PARTNER from 10-Ks |
 | `scripts/compute_gds_features.py` | Compute LIKELY_TO_ADOPT, CO_OCCURS_WITH |
 | `scripts/compute_company_similarity.py` | Compute all SIMILAR_* relationships |
+| `scripts/create_graphrag_layer.py` | Create Document and Chunk nodes for GraphRAG |
 
 ---
 
@@ -622,3 +744,4 @@ LIMIT 20
 - **Architecture**: `architecture.md` - Package structure and design principles
 - **High-Value Queries**: `money_queries.md` - Business intelligence queries
 - **Step-by-Step Guide**: `step_by_step_guide.md` - Pipeline walkthrough
+- **GraphRAG**: `graphrag.md` - GraphRAG layer for semantic search and Q&A

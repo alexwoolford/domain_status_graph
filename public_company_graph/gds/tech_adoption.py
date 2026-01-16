@@ -16,6 +16,7 @@ from public_company_graph.constants import (
 )
 from public_company_graph.gds.utils import safe_drop_graph
 from public_company_graph.neo4j import delete_relationships_in_batches
+from public_company_graph.neo4j.utils import safe_single
 
 logger = logging.getLogger(__name__)
 
@@ -174,9 +175,9 @@ def compute_tech_adoption_prediction(
                                 tech_id=tech_id,
                                 top_k=top_k,
                             )
-                            record = result.single()
-                            if record:
-                                predictions_written += record["created"]
+                            created = safe_single(result, default=0, key="created")
+                            if created:
+                                predictions_written += created
                         except Exception as e:
                             logger.warning(f"   ⚠ Error processing {tech_name}: {e}")
                             continue

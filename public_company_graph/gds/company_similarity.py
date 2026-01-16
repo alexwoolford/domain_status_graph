@@ -12,6 +12,7 @@ from public_company_graph.constants import (
     DEFAULT_TOP_K,
     MIN_DESCRIPTION_LENGTH_FOR_SIMILARITY,
 )
+from public_company_graph.neo4j.utils import safe_single
 from public_company_graph.similarity.cosine import find_top_k_similar_pairs
 
 logger = logging.getLogger(__name__)
@@ -75,8 +76,7 @@ def compute_company_description_similarity(
                 RETURN count(r) AS deleted
                 """
             )
-            record = result.single()
-            deleted = record["deleted"] if record else 0
+            deleted = safe_single(result, default=0, key="deleted")
             if deleted > 0:
                 logger.info(f"   ✓ Deleted {deleted} existing relationships")
             else:
