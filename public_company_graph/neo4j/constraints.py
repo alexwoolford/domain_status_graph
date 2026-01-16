@@ -2,7 +2,7 @@
 Neo4j constraint and index creation.
 
 This module provides functions to create constraints and indexes
-for Domain and Technology nodes.
+for Domain, Technology, Company, and Document nodes.
 """
 
 import logging
@@ -106,6 +106,46 @@ def create_company_constraints(
         "CREATE INDEX company_filing_date IF NOT EXISTS FOR (c:Company) ON (c.filing_date)",
         "CREATE INDEX company_filing_year IF NOT EXISTS FOR (c:Company) ON (c.filing_year)",
         "CREATE INDEX company_accession_number IF NOT EXISTS FOR (c:Company) ON (c.accession_number)",
+    ]
+    _run_constraints(driver, constraints, database=database, log=logger)
+
+
+def create_document_constraints(
+    driver, database: str | None = None, logger: logging.Logger | None = None
+) -> None:
+    """
+    Create constraints and indexes for Document and Chunk nodes (GraphRAG layer).
+
+    Document nodes represent filings (10-K HTML files).
+    Chunk nodes represent individual text pieces from those filings.
+
+    The unique constraints are critical for performance when using MERGE operations.
+
+    Args:
+        driver: Neo4j driver instance
+        database: Neo4j database name
+        logger: Optional logger instance
+    """
+    constraints = [
+        # Document node constraints (filing-level)
+        (
+            "CREATE CONSTRAINT unique_doc_id IF NOT EXISTS "
+            "FOR (d:Document) REQUIRE d.doc_id IS UNIQUE"
+        ),
+        "CREATE INDEX document_company_cik IF NOT EXISTS FOR (d:Document) ON (d.company_cik)",
+        "CREATE INDEX document_section_type IF NOT EXISTS FOR (d:Document) ON (d.section_type)",
+        # Chunk node constraints (text piece-level)
+        (
+            "CREATE CONSTRAINT unique_chunk_id IF NOT EXISTS "
+            "FOR (c:Chunk) REQUIRE c.chunk_id IS UNIQUE"
+        ),
+        "CREATE INDEX chunk_chunk_index IF NOT EXISTS FOR (c:Chunk) ON (c.chunk_index)",
+        # Vector index for fast similarity search (Neo4j 5+)
+        (
+            "CREATE VECTOR INDEX chunk_embedding_vector IF NOT EXISTS "
+            "FOR (c:Chunk) ON c.embedding "
+            "OPTIONS {indexConfig: {`vector.dimensions`: 1536, `vector.similarity_function`: 'cosine'}}"
+        ),
     ]
     _run_constraints(driver, constraints, database=database, log=logger)
 

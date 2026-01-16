@@ -139,13 +139,22 @@ class TestLLMRelationshipVerifier:
 
     def test_cache_stats(self, mock_client):
         """Cache stats should return namespace info."""
+        from unittest.mock import patch
+
+        from public_company_graph.cache import get_cache
+
         verifier = LLMRelationshipVerifier(client=mock_client)
 
-        stats = verifier.cache_stats()
+        # Mock cache.count() to avoid iterating through all keys (expensive)
+        with patch.object(get_cache(), "count", return_value=42) as mock_count:
+            stats = verifier.cache_stats()
 
-        assert "namespace" in stats
-        assert stats["namespace"] == "llm_verification"
-        assert "count" in stats
+            assert "namespace" in stats
+            assert stats["namespace"] == "llm_verification"
+            assert "count" in stats
+            assert stats["count"] == 42
+            # Verify cache.count was called with the correct namespace
+            mock_count.assert_called_once_with("llm_verification")
 
 
 class TestCostEstimation:
@@ -169,9 +178,9 @@ class TestCostEstimation:
         assert estimate_1000["estimated_cost_usd"] > estimate_100["estimated_cost_usd"] * 5
 
     def test_estimate_default_model(self):
-        """Default model should be gpt-4o-mini."""
+        """Default model should be gpt-4.1-mini."""
         estimate = estimate_verification_cost(100)
-        assert estimate["model"] == "gpt-4o-mini"
+        assert estimate["model"] == "gpt-4.1-mini"
 
     def test_per_relationship_cost_reasonable(self):
         """Per-relationship cost should be reasonable (< $0.01)."""

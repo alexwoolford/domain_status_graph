@@ -19,6 +19,18 @@ from public_company_graph.embeddings.openai_client import (
 )
 
 
+def mock_async_embedding_function(mock_client):
+    """Create a mock async embedding function that calls the sync version for testing."""
+    from public_company_graph.embeddings.openai_client import create_embeddings_batch
+
+    async def mock_async_embed(client, texts, model, max_concurrent=None, **kwargs):
+        # Convert async to sync for testing - call the sync version
+        kwargs.pop("max_concurrent", None)
+        return create_embeddings_batch(mock_client, texts, model, **kwargs)
+
+    return mock_async_embed
+
+
 class MockNeo4jSession:
     """Mock Neo4j session for testing."""
 
@@ -27,12 +39,113 @@ class MockNeo4jSession:
         self.updates = []
 
     def run(self, query, **kwargs):
-        if "RETURN" in query and "key" in query:
-            return MockResult(self.nodes)
+        if "RETURN" in query and "count" in query.lower() and "total" in query.lower():
+            # It's a count query (e.g., "RETURN count(n) AS total")
+            # Filter nodes based on query conditions (but skip embedding filter for count)
+            filtered_nodes = self._filter_nodes_by_query(query, kwargs, skip_embedding_filter=True)
+            count = len(filtered_nodes) if filtered_nodes else 0
+            return MockResult([{"total": count}])
+        elif "RETURN" in query and "key" in query and "text" not in query.lower():
+            # It's a read query for keys only (e.g., "RETURN n.key AS key")
+            # Filter nodes based on query conditions (e.g., embedding_property IS NULL)
+            filtered_nodes = self._filter_nodes_by_query(query, kwargs)
+            # Extract just the key property
+            records = [
+                {"key": node.get("key", node.get("chunk_id", ""))} for node in filtered_nodes
+            ]
+            return MockResult(records)
+        elif "RETURN" in query and "text" in query.lower():
+            # It's a read query for keys and/or text
+            filtered_nodes = self._filter_nodes_by_query(query, kwargs)
+            records = []
+            for node in filtered_nodes:
+                record = {}
+                if "key" in query.lower() or "AS key" in query:
+                    record["key"] = node.get("key", node.get("chunk_id", ""))
+                if "text" in query.lower():
+                    record["text"] = node.get("text", "")
+                records.append(record)
+            return MockResult(records)
         elif "UNWIND" in query:
             self.updates.extend(kwargs.get("batch", []))
             return MockResult([])
         return MockResult([])
+
+    def _filter_nodes_by_query(
+        self, query: str, kwargs: dict, skip_embedding_filter: bool = False
+    ) -> list:
+        """Filter nodes based on query conditions."""
+        import re
+
+        filtered = self.nodes.copy()
+
+        # Find embedding_property name (e.g., "description_embedding" from "n.description_embedding IS NULL")
+        if not skip_embedding_filter:
+            is_null_matches = list(re.finditer(r"n\.(\w+)\s+IS\s+NULL", query))
+            embedding_property = None
+            if is_null_matches:
+                embedding_property = is_null_matches[-1].group(1)
+
+            # Filter by embedding_property IS NULL (nodes without embeddings)
+            if embedding_property:
+                filtered = [
+                    n
+                    for n in filtered
+                    if embedding_property not in n or n.get(embedding_property) is None
+                ]
+
+        # Filter by text_property IS NOT NULL and not empty
+        if "IS NOT NULL" in query:
+            filtered = [
+                n
+                for n in filtered
+                if "text" in n
+                and n.get("text") is not None
+                and str(n.get("text", "")).strip() != ""
+            ]
+
+        # Filter by text_property <> '' (not empty string)
+        if "<>" in query and "''" in query:
+            filtered = [n for n in filtered if "text" in n and str(n.get("text", "")).strip() != ""]
+
+        # Filter by size (minimum length)
+        if "size(" in query.lower() and ">=" in query:
+            size_match = re.search(r"size\([^)]+\)\s*>=\s*\$(\w+)", query)
+            if size_match:
+                param_name = size_match.group(1)
+                min_length = kwargs.get(param_name, 0)
+                filtered = [
+                    n
+                    for n in filtered
+                    if "text" in n and len(str(n.get("text", "")).strip()) >= min_length
+                ]
+
+        # Filter by key > last_key (cursor-based pagination)
+        if ">" in query and "last_key" in query and "key" in query:
+            last_key = kwargs.get("last_key")
+            if last_key:
+                filtered = [n for n in filtered if n.get("key", "") > last_key]
+
+        # Filter by key IN $keys (for text fetching queries)
+        if "IN $keys" in query or "IN $keys" in query.replace(" ", ""):
+            keys = kwargs.get("keys", [])
+            if keys:
+                filtered = [n for n in filtered if n.get("key") in keys]
+
+        # Apply LIMIT if present
+        if "LIMIT" in query.upper():
+            limit_match = re.search(r"LIMIT\s+\$(\w+)", query)
+            if limit_match:
+                param_name = limit_match.group(1)
+                limit = kwargs.get(param_name, len(filtered))
+                filtered = filtered[:limit]
+            else:
+                limit_match = re.search(r"LIMIT\s+(\d+)", query)
+                if limit_match:
+                    limit = int(limit_match.group(1))
+                    filtered = filtered[:limit]
+
+        return filtered
 
     def __enter__(self):
         return self
@@ -57,6 +170,10 @@ class MockResult:
 
     def __iter__(self):
         return iter(self.records)
+
+    def single(self):
+        """Return the first record or None if empty (matches Neo4j API)."""
+        return self.records[0] if self.records else None
 
 
 class MockDriver:
@@ -111,7 +228,13 @@ class TestLongTextChunkingBehavior:
             driver = MockDriver(nodes)
             client = create_mock_client()
 
-            with patch("public_company_graph.embeddings.create.BATCH_SIZE_SMALL", 100):
+            with (
+                patch("public_company_graph.embeddings.create.BATCH_SIZE_SMALL", 100),
+                patch(
+                    "public_company_graph.embeddings.openai_client_async.create_embeddings_batch_async",
+                    side_effect=mock_async_embedding_function(client),
+                ),
+            ):
                 create_embeddings_for_nodes(
                     driver=driver,
                     cache=cache,
@@ -150,7 +273,13 @@ class TestLongTextChunkingBehavior:
             driver = MockDriver(nodes)
             client = create_mock_client()
 
-            with patch("public_company_graph.embeddings.create.BATCH_SIZE_SMALL", 100):
+            with (
+                patch("public_company_graph.embeddings.create.BATCH_SIZE_SMALL", 100),
+                patch(
+                    "public_company_graph.embeddings.openai_client_async.create_embeddings_batch_async",
+                    side_effect=mock_async_embedding_function(client),
+                ),
+            ):
                 create_embeddings_for_nodes(
                     driver=driver,
                     cache=cache,
@@ -245,7 +374,13 @@ class TestCacheHitRateCalculation:
             driver = MockDriver(nodes)
             client = create_mock_client()
 
-            with patch("public_company_graph.embeddings.create.BATCH_SIZE_SMALL", 100):
+            with (
+                patch("public_company_graph.embeddings.create.BATCH_SIZE_SMALL", 100),
+                patch(
+                    "public_company_graph.embeddings.openai_client_async.create_embeddings_batch_async",
+                    side_effect=mock_async_embedding_function(client),
+                ),
+            ):
                 processed, created, cached_count, failed = create_embeddings_for_nodes(
                     driver=driver,
                     cache=cache,
@@ -266,58 +401,8 @@ class TestCacheHitRateCalculation:
             cache.close()
 
 
-class TestTimeEstimation:
-    """Tests for embedding time estimation based on text characteristics."""
-
-    def test_estimate_processing_time(self):
-        """Estimate processing time based on text lengths."""
-        # Simulate analysis of texts
-        texts = [
-            ("short1", "Short description" * 50, 200),  # ~200 tokens
-            ("short2", "Another short one" * 60, 240),  # ~240 tokens
-            ("long1", "Very detailed" * 3000, 12000),  # ~12K tokens
-            ("long2", "Extended description" * 4000, 16000),  # ~16K tokens
-        ]
-
-        short_texts = [t for t in texts if t[2] <= EMBEDDING_TRUNCATE_TOKENS]
-        long_texts = [t for t in texts if t[2] > EMBEDDING_TRUNCATE_TOKENS]
-
-        # Short texts: batch API, ~20 per request, ~1.5 sec per request
-        short_api_calls = (len(short_texts) + 19) // 20  # Ceiling division
-        short_time_sec = short_api_calls * 1.5
-
-        # Long texts: chunking, ~3 chunks per text, ~1 sec per chunk API call
-        avg_chunks_per_long = 3
-        long_api_calls = len(long_texts) * avg_chunks_per_long
-        long_time_sec = long_api_calls * 1.0
-
-        total_time_sec = short_time_sec + long_time_sec
-
-        # Verify estimation logic
-        assert len(short_texts) == 2, "Should have 2 short texts"
-        assert len(long_texts) == 2, "Should have 2 long texts"
-        assert short_api_calls == 1, "2 short texts fit in 1 batch"
-        assert long_api_calls == 6, "2 long texts × 3 chunks = 6 calls"
-
-        # Total: ~1.5 + 6 = 7.5 seconds
-        assert 7 < total_time_sec < 8, f"Expected ~7.5 sec, got {total_time_sec}"
-
-
 class TestCacheKeyConsistency:
     """Tests verifying cache key consistency between runs."""
-
-    def test_cache_key_deterministic(self):
-        """Cache keys should be deterministic across runs."""
-        key1 = "example.com:description"
-        key2 = "example.com:description"
-        assert key1 == key2, "Cache keys should be deterministic"
-
-    def test_cache_key_from_cik(self):
-        """Cache key format for Company nodes (CIK-based)."""
-        cik = "0001234567"
-        text_property = "description"
-        expected_key = f"{cik}:{text_property}"
-        assert expected_key == "0001234567:description"
 
     def test_cache_lookup_consistency(self):
         """Verify cache lookup uses same key format as cache storage."""

@@ -102,7 +102,7 @@
     <entry file="public_company_graph/cli.py" desc="Common CLI utilities (logging, dry-run, connection handling)"/>
     <entry file="public_company_graph/config.py" desc="Configuration management (Neo4j, OpenAI, data paths)"/>
     <entry file="public_company_graph/neo4j/connection.py" desc="Neo4j driver and session management"/>
-    <entry file="docs/ARCHITECTURE.md" desc="Complete architecture documentation (package structure, design principles)"/>
+    <entry file="docs/architecture.md" desc="Complete architecture documentation (package structure, design principles)"/>
     <entry file="docs/money_queries.md" desc="High-value Cypher query examples"/>
   </architecture_overview>
 </agents_guidance>

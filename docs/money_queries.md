@@ -11,7 +11,7 @@ This document provides **tested, verified queries** that return meaningful resul
 | **Companies** | 5,398 |
 | **Domains** | 4,337 |
 | **Technologies** | 827 |
-| **Total Relationships** | ~2,024,000 |
+| **Total Relationships** | ~2,028,329 |
 
 ### Relationship Counts (Verified)
 

@@ -145,7 +145,9 @@ def compute_tech_affinity_bundling(
                     """,
                     batch=batch_chunk,
                 )
-                relationships_written += result.single()["created"]
+                record = result.single()
+                if record:
+                    relationships_written += record["created"]
 
                 if (i + batch_size) % (batch_size * 10) == 0 or i + batch_size >= len(batch):
                     progress = min(i + batch_size, len(batch))

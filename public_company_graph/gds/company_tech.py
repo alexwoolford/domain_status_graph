@@ -81,7 +81,8 @@ def compute_company_technology_similarity(
                 RETURN count(r) AS deleted
                 """
             )
-            deleted = result.single()["deleted"]
+            record = result.single()
+            deleted = record["deleted"] if record else 0
             if deleted > 0:
                 logger.info(f"   ✓ Deleted {deleted} existing relationships")
             else:
@@ -126,7 +127,10 @@ def compute_company_technology_similarity(
 
         with driver.session(database=database) as session:
             result = session.run("MATCH (c:Company) RETURN collect(id(c)) AS company_ids")
-            company_ids = set(result.single()["company_ids"])
+            record = result.single()
+            company_ids = (
+                set(record["company_ids"]) if record and record.get("company_ids") else set()
+            )
 
         if isinstance(similarity_result, pd.DataFrame):
             col1, col2 = _identify_node_columns(similarity_result)
@@ -191,7 +195,9 @@ def compute_company_technology_similarity(
                     """,
                     batch=batch_chunk,
                 )
-                relationships_written += result.single()["created"]
+                record = result.single()
+                if record:
+                    relationships_written += record["created"]
 
                 if (i + batch_size) % (batch_size * 10) == 0 or i + batch_size >= len(batch):
                     progress = min(i + batch_size, len(batch))

@@ -5,6 +5,8 @@ LOG_FILE=$(ls -t logs/extract_llm_verified_*.log 2>/dev/null | head -1)
 
 if [ -z "$LOG_FILE" ]; then
     echo "No extraction log file found"
+    echo "Note: Log files are temporary and may have been cleaned up."
+    echo "Run the extraction script to generate a new log file."
     exit 1
 fi
 

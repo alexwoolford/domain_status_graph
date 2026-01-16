@@ -55,188 +55,193 @@ def main():
 
     driver, database = get_driver_and_database(logger)
 
-    if not verify_neo4j_connection(driver, database, logger):
-        sys.exit(1)
+    try:
+        if not verify_neo4j_connection(driver, database, logger):
+            sys.exit(1)
 
-    cache = get_cache()
+        cache = get_cache()
 
-    # Log cache status upfront
-    cache_stats = cache.stats()
-    logger.info("Cache status:")
-    logger.info(f"  Total entries: {cache_stats['total']:,}")
-    logger.info(f"  Size: {cache_stats['size_mb']} MB")
-    for ns, ns_count in sorted(cache_stats["by_namespace"].items(), key=lambda x: -x[1]):
-        logger.info(f"    {ns}: {ns_count:,}")
+        # Log cache status upfront
+        cache_stats = cache.stats()
+        logger.info("Cache status:")
+        logger.info(f"  Total entries: {cache_stats['total']:,}")
+        logger.info(f"  Size: {cache_stats['size_mb']} MB")
+        for ns, ns_count in sorted(cache_stats["by_namespace"].items(), key=lambda x: -x[1]):
+            logger.info(f"    {ns}: {ns_count:,}")
 
-    # Step 1: Load risk factors from cache into Neo4j
-    logger.info("=" * 80)
-    logger.info("STEP 1: Load Risk Factors into Neo4j")
-    logger.info("=" * 80)
-    logger.info("")
-
-    if not args.execute:
-        logger.info("DRY RUN MODE")
-        logger.info("Would load risk factors from cache into Company nodes")
+        # Step 1: Load risk factors from cache into Neo4j
+        logger.info("=" * 80)
+        logger.info("STEP 1: Load Risk Factors into Neo4j")
+        logger.info("=" * 80)
         logger.info("")
-        driver.close()
-        return
 
-    # Get all companies
-    logger.info("Updating Company nodes with risk factors from cache...")
-    with driver.session(database=database) as session:
-        result = session.run("MATCH (c:Company) RETURN c.cik AS cik")
-        companies = [record["cik"] for record in result]
+        if not args.execute:
+            logger.info("DRY RUN MODE")
+            logger.info("Would load risk factors from cache into Company nodes")
+            logger.info("")
+            return
 
-    # Check cache for risk factors and build batch
-    updates_batch: list[dict] = []
-    cache_hits = 0
-    cache_misses = 0
+        # Get all companies
+        logger.info("Updating Company nodes with risk factors from cache...")
+        with driver.session(database=database) as session:
+            result = session.run("MATCH (c:Company) RETURN c.cik AS cik")
+            companies = [record["cik"] for record in result]
 
-    for cik in tqdm(companies, desc="Checking 10-K cache", unit="company"):
-        ten_k_data = cache.get("10k_extracted", cik)
-        if ten_k_data and ten_k_data.get("risk_factors"):
-            risk_text = ten_k_data["risk_factors"].strip()
-            # Only update if risk factors are meaningful (not too short)
-            if len(risk_text) >= 200:
-                updates_batch.append({"cik": cik, "risk_text": risk_text})
-                cache_hits += 1
+        # Check cache for risk factors and build batch
+        updates_batch: list[dict] = []
+        cache_hits = 0
+        cache_misses = 0
+
+        for cik in tqdm(companies, desc="Checking 10-K cache", unit="company"):
+            ten_k_data = cache.get("10k_extracted", cik)
+            if ten_k_data and ten_k_data.get("risk_factors"):
+                risk_text = ten_k_data["risk_factors"].strip()
+                # Only update if risk factors are meaningful (not too short)
+                if len(risk_text) >= 200:
+                    updates_batch.append({"cik": cik, "risk_text": risk_text})
+                    cache_hits += 1
+                else:
+                    cache_misses += 1
             else:
                 cache_misses += 1
-        else:
-            cache_misses += 1
 
-    logger.info(
-        f"  10-K cache: {cache_hits:,} hits, {cache_misses:,} misses "
-        f"({100 * cache_hits / len(companies):.1f}% hit rate)"
-    )
-
-    # Batch update Neo4j (much faster than individual updates)
-    if updates_batch:
-        start_time = time.time()
-        total_updated = 0
-
-        with driver.session(database=database) as session:
-            for i in tqdm(
-                range(0, len(updates_batch), BATCH_SIZE_SMALL),
-                desc="Updating Neo4j",
-                unit="batch",
-            ):
-                batch = updates_batch[i : i + BATCH_SIZE_SMALL]
-                session.run(
-                    """
-                    UNWIND $batch AS row
-                    MATCH (c:Company {cik: row.cik})
-                    SET c.risk_factors = row.risk_text
-                    """,
-                    batch=batch,
-                )
-                total_updated += len(batch)
-
-        elapsed = time.time() - start_time
-        logger.info(f"  Updated {total_updated:,} companies in {elapsed:.1f}s")
-
-    logger.info("")
-    logger.info("✓ Step 1 complete: Risk factors loaded")
-    logger.info("")
-
-    # Step 2: Create embeddings for risk factors
-    logger.info("=" * 80)
-    logger.info("STEP 2: Create Embeddings for Risk Factors")
-    logger.info("=" * 80)
-    logger.info("")
-
-    try:
-        client = get_openai_client()
-    except (ImportError, ValueError) as e:
-        logger.error(f"Failed to get OpenAI client: {e}")
-        logger.error("Set OPENAI_API_KEY environment variable")
-        driver.close()
-        sys.exit(1)
-
-    logger.info("Creating embeddings for companies with risk factors...")
-    processed, created, cached, failed = create_embeddings_for_nodes(
-        driver=driver,
-        cache=cache,
-        node_label="Company",
-        text_property="risk_factors",
-        key_property="cik",
-        embedding_property="risk_factors_embedding",
-        openai_client=client,
-        database=database,
-        execute=True,
-        log=logger,
-    )
-
-    logger.info(f"  Processed: {processed}, Created: {created}, Cached: {cached}, Failed: {failed}")
-    logger.info("")
-    logger.info("✓ Step 2 complete: Risk factor embeddings created")
-    logger.info("")
-
-    # Step 3: Create SIMILAR_RISK relationships between Companies
-    logger.info("=" * 80)
-    logger.info("STEP 3: Create SIMILAR_RISK Relationships Between Companies")
-    logger.info("=" * 80)
-    logger.info("")
-
-    # Reuse the similarity computation function, but for risk factors
-    # We'll need to create a similar function or adapt the existing one
-    relationships_created = compute_company_risk_similarity(
-        driver=driver,
-        similarity_threshold=0.6,  # Same threshold as descriptions
-        top_k=50,
-        database=database,
-        execute=True,
-        logger=logger,
-    )
-
-    logger.info("")
-    logger.info(f"✓ Step 3 complete: {relationships_created} SIMILAR_RISK relationships created")
-    logger.info("")
-
-    # Summary
-    logger.info("=" * 80)
-    logger.info("PIPELINE COMPLETE")
-    logger.info("=" * 80)
-    logger.info("")
-
-    # Show final statistics
-    with driver.session(database=database) as session:
-        # Risk factors stats
-        result = session.run(
-            """
-            MATCH (c:Company)
-            RETURN
-                count(c) AS total,
-                sum(CASE WHEN c.risk_factors IS NOT NULL THEN 1 ELSE 0 END) AS with_risks,
-                sum(CASE WHEN c.risk_factors_embedding IS NOT NULL THEN 1 ELSE 0 END) AS with_embedding,
-                sum(CASE WHEN EXISTS((c)-[:SIMILAR_RISK]->()) THEN 1 ELSE 0 END) AS with_similar_rel
-            """
+        logger.info(
+            f"  10-K cache: {cache_hits:,} hits, {cache_misses:,} misses "
+            f"({100 * cache_hits / len(companies):.1f}% hit rate)"
         )
-        row = result.single()
-        logger.info("Risk Factors Statistics:")
-        logger.info(f"  Total companies: {row['total']:,}")
-        logger.info(f"  With risk factors: {row['with_risks']:,}")
-        logger.info(f"  With embeddings: {row['with_embedding']:,}")
-        logger.info(f"  With SIMILAR_RISK relationships: {row['with_similar_rel']:,}")
 
-        result = session.run(
-            """
-            MATCH ()-[r:SIMILAR_RISK]->()
-            WHERE startNode(r):Company
-            RETURN count(r) AS count
-            """
-        )
-        rel_count = result.single()["count"]
-        logger.info(f"  Total Company SIMILAR_RISK relationships: {rel_count:,}")
+        # Batch update Neo4j (much faster than individual updates)
+        if updates_batch:
+            start_time = time.time()
+            total_updated = 0
+
+            with driver.session(database=database) as session:
+                for i in tqdm(
+                    range(0, len(updates_batch), BATCH_SIZE_SMALL),
+                    desc="Updating Neo4j",
+                    unit="batch",
+                ):
+                    batch = updates_batch[i : i + BATCH_SIZE_SMALL]
+                    session.run(
+                        """
+                        UNWIND $batch AS row
+                        MATCH (c:Company {cik: row.cik})
+                        SET c.risk_factors = row.risk_text
+                        """,
+                        batch=batch,
+                    )
+                    total_updated += len(batch)
+
+            elapsed = time.time() - start_time
+            logger.info(f"  Updated {total_updated:,} companies in {elapsed:.1f}s")
+
+        logger.info("")
+        logger.info("✓ Step 1 complete: Risk factors loaded")
         logger.info("")
 
-    logger.info("=" * 80)
-    logger.info("Next Steps:")
-    logger.info("  1. Test similarity queries for risk factors")
-    logger.info("  2. Compare risk similarity vs description similarity")
-    logger.info("=" * 80)
+        # Step 2: Create embeddings for risk factors
+        logger.info("=" * 80)
+        logger.info("STEP 2: Create Embeddings for Risk Factors")
+        logger.info("=" * 80)
+        logger.info("")
 
-    driver.close()
+        try:
+            client = get_openai_client()
+        except (ImportError, ValueError) as e:
+            logger.error(f"Failed to get OpenAI client: {e}")
+            logger.error("Set OPENAI_API_KEY environment variable")
+            sys.exit(1)
+
+        logger.info("Creating embeddings for companies with risk factors...")
+        processed, created, cached, failed = create_embeddings_for_nodes(
+            driver=driver,
+            cache=cache,
+            node_label="Company",
+            text_property="risk_factors",
+            key_property="cik",
+            embedding_property="risk_factors_embedding",
+            openai_client=client,
+            database=database,
+            execute=True,
+            log=logger,
+        )
+
+        logger.info(
+            f"  Processed: {processed}, Created: {created}, Cached: {cached}, Failed: {failed}"
+        )
+        logger.info("")
+        logger.info("✓ Step 2 complete: Risk factor embeddings created")
+        logger.info("")
+
+        # Step 3: Create SIMILAR_RISK relationships between Companies
+        logger.info("=" * 80)
+        logger.info("STEP 3: Create SIMILAR_RISK Relationships Between Companies")
+        logger.info("=" * 80)
+        logger.info("")
+
+        # Reuse the similarity computation function, but for risk factors
+        # We'll need to create a similar function or adapt the existing one
+        relationships_created = compute_company_risk_similarity(
+            driver=driver,
+            similarity_threshold=0.6,  # Same threshold as descriptions
+            top_k=50,
+            database=database,
+            execute=True,
+            logger=logger,
+        )
+
+        logger.info("")
+        logger.info(
+            f"✓ Step 3 complete: {relationships_created} SIMILAR_RISK relationships created"
+        )
+        logger.info("")
+
+        # Summary
+        logger.info("=" * 80)
+        logger.info("PIPELINE COMPLETE")
+        logger.info("=" * 80)
+        logger.info("")
+
+        # Show final statistics
+        with driver.session(database=database) as session:
+            # Risk factors stats
+            result = session.run(
+                """
+                MATCH (c:Company)
+                RETURN
+                    count(c) AS total,
+                    sum(CASE WHEN c.risk_factors IS NOT NULL THEN 1 ELSE 0 END) AS with_risks,
+                    sum(CASE WHEN c.risk_factors_embedding IS NOT NULL THEN 1 ELSE 0 END) AS with_embedding,
+                    sum(CASE WHEN EXISTS((c)-[:SIMILAR_RISK]->()) THEN 1 ELSE 0 END) AS with_similar_rel
+                """
+            )
+            record = result.single()
+            if record:
+                logger.info("Risk Factors Statistics:")
+                logger.info(f"  Total companies: {record['total']:,}")
+                logger.info(f"  With risk factors: {record['with_risks']:,}")
+                logger.info(f"  With embeddings: {record['with_embedding']:,}")
+                logger.info(f"  With SIMILAR_RISK relationships: {record['with_similar_rel']:,}")
+
+            result = session.run(
+                """
+                MATCH ()-[r:SIMILAR_RISK]->()
+                WHERE startNode(r):Company
+                RETURN count(r) AS count
+                """
+            )
+            record = result.single()
+            rel_count = record["count"] if record else 0
+            logger.info(f"  Total Company SIMILAR_RISK relationships: {rel_count:,}")
+            logger.info("")
+
+        logger.info("=" * 80)
+        logger.info("Next Steps:")
+        logger.info("  1. Test similarity queries for risk factors")
+        logger.info("  2. Compare risk similarity vs description similarity")
+        logger.info("=" * 80)
+    finally:
+        driver.close()
 
 
 def compute_company_risk_similarity(

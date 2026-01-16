@@ -104,7 +104,7 @@ def main():
     parser.add_argument(
         "--fast",
         action="store_true",
-        help="Fast mode: skip uncached companies in collect_domains.py",
+        help="Fast mode: skip re-downloading/parsing 10-Ks if already cached",
     )
     args = parser.parse_args()
 
@@ -126,7 +126,6 @@ def main():
         logger.info("  - parse_10k_filings.py - Extract websites, business descriptions")
         logger.info("")
         logger.info("Step 3: Load Company Data")
-        logger.info("  - collect_domains.py - Collect company domains (fallback if 10-K missing)")
         logger.info("  - load_company_data.py - Load Company nodes and HAS_DOMAIN relationships")
         logger.info(
             "  - enrich_company_identifiers.py - Add name/ticker from SEC EDGAR (required!)"

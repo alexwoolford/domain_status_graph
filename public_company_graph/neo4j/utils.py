@@ -121,7 +121,8 @@ def delete_relationships_in_batches(
                 result = session.run(
                     f"MATCH ()-[r:{rel_type}]->() DELETE r RETURN count(r) AS deleted"
                 )
-                deleted = result.single()["deleted"]
+                record = result.single()
+                deleted = record["deleted"] if record else 0
                 logger.info(f"   ✓ Deleted {deleted:,} {rel_type} relationships")
                 return deleted
             else:

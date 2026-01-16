@@ -253,7 +253,7 @@ def extract_with_verification(
         logger.info(f"PHASE 2: Parallel LLM verification ({len(all_candidates)} candidates)...")
         logger.info("=" * 60)
 
-        verifier = LLMRelationshipVerifier(model="gpt-4o-mini")
+        verifier = LLMRelationshipVerifier(model="gpt-4.1-mini")
 
         # Prepare batch for verification
         verification_batch = [

@@ -259,7 +259,8 @@ def write_similarity_relationships(
             RETURN count(r) AS deleted
             """
         )
-        deleted = result.single()["deleted"]
+        record = result.single()
+        deleted = record["deleted"] if record else 0
         if deleted > 0:
             log.info(f"Deleted {deleted} existing relationships")
 
@@ -290,7 +291,9 @@ def write_similarity_relationships(
                 """,
                 batch=chunk,
             )
-            relationships_written += result.single()["created"]
+            record = result.single()
+            if record:
+                relationships_written += record["created"]
 
     log.info(f"Created {relationships_written} {relationship_type} relationships")
     return relationships_written

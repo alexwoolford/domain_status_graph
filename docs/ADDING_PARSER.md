@@ -157,7 +157,7 @@ return [
 - `WebsiteParser` - Extracts company website
 - `BusinessDescriptionParser` - Extracts Item 1: Business
 - `RiskFactorsParser` - Extracts Item 1A: Risk Factors
-- `CompetitorParser` - Placeholder for competitors (TODO)
+- `CompetitorParser` - Placeholder parser for competitor extraction (actual extraction logic is in `competitor_extraction.py` but is not a TenKParser implementation)
 - `FilingMetadataParser` - Extracts filing date, accession number, fiscal year end
 
 ## Summary

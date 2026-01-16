@@ -112,10 +112,12 @@ python scripts/extract_with_llm_verification.py --clean --execute
 ```
 
 **Expected output**:
-- ~3,843 HAS_COMPETITOR relationships
-- ~2,597 HAS_SUPPLIER relationships
-- ~2,139 HAS_PARTNER relationships
-- ~1,714 HAS_CUSTOMER relationships
+- ~3,249 HAS_COMPETITOR relationships (high confidence, embedding-verified)
+- ~588 HAS_PARTNER relationships (high confidence, embedding-verified)
+- ~243 HAS_CUSTOMER relationships (high confidence, LLM-verified)
+- ~130 HAS_SUPPLIER relationships (high confidence, LLM-verified)
+
+Note: Actual counts may vary. See [graph_schema.md](graph_schema.md) for current verified statistics.
 
 ---
 

@@ -17,9 +17,12 @@ DEFAULT_CACHE_DIR = Path("data/cache")
 _cache: Optional["AppCache"] = None
 
 
-# 10GB cache size limit - large enough for embeddings + parsed 10-K data
+# 45GB cache size limit - large enough for 2.8M+ chunk embeddings + parsed 10-K data
+# Each chunk embedding: ~13.5 KB (12.3 KB vector + 1 KB text + metadata)
+# 2.8M embeddings = ~38 GB, plus other cached data (10-K extracts, etc.)
+# 45 GB provides comfortable headroom for all embeddings + other cached data
 # Default diskcache limit is 1GB which causes eviction during embedding creation
-DEFAULT_CACHE_SIZE_LIMIT = 10 * 1024 * 1024 * 1024  # 10 GB
+DEFAULT_CACHE_SIZE_LIMIT = 45 * 1024 * 1024 * 1024  # 45 GB
 
 
 class AppCache:
@@ -60,6 +63,41 @@ class AppCache:
         """Get a value from cache."""
         full_key = self._make_key(namespace, key)
         return self._cache.get(full_key)
+
+    def get_many(self, namespace: str, keys: list[str]) -> dict[str, Any]:
+        """
+        Get multiple values from cache efficiently.
+
+        This is much faster than individual get() calls. For reads, we don't need
+        a transaction (transactions are for writes). Just batch the gets directly.
+
+        Args:
+            namespace: Cache namespace
+            keys: List of cache keys to retrieve
+
+        Returns:
+            Dict mapping cache keys to their values (only includes keys that exist)
+        """
+        if not keys:
+            return {}
+
+        # Build full keys
+        full_keys = [self._make_key(namespace, key) for key in keys]
+
+        # Batch gets directly (no transaction needed for reads)
+        # diskcache.get() is already optimized for reads
+        results = {}
+        namespace_prefix = f"{namespace}:"
+
+        # Direct batch gets - much faster than transaction wrapper
+        for full_key in full_keys:
+            value = self._cache.get(full_key)
+            if value is not None:
+                # Strip namespace prefix to get original key
+                original_key = full_key[len(namespace_prefix) :]
+                results[original_key] = value
+
+        return results
 
     def set(
         self,

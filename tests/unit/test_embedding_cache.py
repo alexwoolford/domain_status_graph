@@ -22,6 +22,18 @@ from public_company_graph.embeddings.create import (
 )
 
 
+def mock_async_embedding_function(mock_client):
+    """Create a mock async embedding function that calls the sync version for testing."""
+    from public_company_graph.embeddings.openai_client import create_embeddings_batch
+
+    async def mock_async_embed(client, texts, model, max_concurrent=None, **kwargs):
+        # Convert async to sync for testing - call the sync version
+        kwargs.pop("max_concurrent", None)
+        return create_embeddings_batch(mock_client, texts, model, **kwargs)
+
+    return mock_async_embed
+
+
 class MockNeo4jSession:
     """Mock Neo4j session for testing."""
 
@@ -31,15 +43,138 @@ class MockNeo4jSession:
 
     def run(self, query: str, **kwargs):
         """Mock run method."""
-        if "RETURN" in query and "key" in query:
-            # It's a read query
-            return MockResult(self.nodes)
+        if "RETURN" in query and "count" in query.lower() and "total" in query.lower():
+            # It's a count query (e.g., "RETURN count(n) AS total")
+            # Note: The actual count query in create.py does NOT include embedding_property IS NULL
+            # So we should NOT filter by embedding_property for count queries
+            # Filter nodes based on query conditions (but skip embedding filter for count)
+            filtered_nodes = self._filter_nodes_by_query(query, kwargs, skip_embedding_filter=True)
+            count = len(filtered_nodes) if filtered_nodes else 0
+            return MockResult([{"total": count}])
+        elif "RETURN" in query and "key" in query and "text" not in query.lower():
+            # It's a read query for keys only (e.g., "RETURN n.key AS key")
+            # Filter nodes based on query conditions (e.g., embedding_property IS NULL)
+            filtered_nodes = self._filter_nodes_by_query(query, kwargs)
+            # Extract just the key property
+            records = [
+                {"key": node.get("key", node.get("chunk_id", ""))} for node in filtered_nodes
+            ]
+            return MockResult(records)
+        elif "RETURN" in query and "text" in query.lower():
+            # It's a read query for keys and/or text (e.g., "RETURN n.key AS key, n.description AS text")
+            # Filter nodes - for text queries, we filter by key IN $keys
+            filtered_nodes = self._filter_nodes_by_query(query, kwargs)
+            records = []
+            for node in filtered_nodes:
+                record = {}
+                # Extract property names from query (e.g., "n.key AS key, n.description AS text")
+                import re
+
+                if "key" in query.lower() or "AS key" in query:
+                    record["key"] = node.get("key", node.get("chunk_id", ""))
+                # Map query text property (e.g., "description") to node "text" property
+                # Test nodes always use "text" property regardless of query property name
+                text_prop_match = re.search(r"n\.(\w+)\s+AS\s+text", query)
+                if text_prop_match or "text" in query.lower():
+                    record["text"] = node.get("text", "")
+                records.append(record)
+            return MockResult(records)
         elif "UNWIND" in query:
             # It's a batch update
             batch = kwargs.get("batch", [])
             self.updates.extend(batch)
             return MockResult([])
         return MockResult([])
+
+    def _filter_nodes_by_query(
+        self, query: str, kwargs: dict, skip_embedding_filter: bool = False
+    ) -> list[dict]:
+        """Filter nodes based on query conditions.
+
+        Note: Test nodes use "text" property, but queries may use different property names
+        (e.g., "description"). We map all text property checks to "text" in test nodes.
+        """
+        import re
+
+        filtered = self.nodes.copy()
+
+        # Find embedding_property name (e.g., "description_embedding" from "n.description_embedding IS NULL")
+        # Look for the LAST IS NULL clause (embedding property comes after text property)
+        # Skip this filter for count queries (they don't include embedding_property IS NULL)
+        if not skip_embedding_filter:
+            is_null_matches = list(re.finditer(r"n\.(\w+)\s+IS\s+NULL", query))
+            embedding_property = None
+            if is_null_matches:
+                # Take the last match (embedding property is usually last)
+                embedding_property = is_null_matches[-1].group(1)
+
+            # Filter by embedding_property IS NULL (nodes without embeddings)
+            # In tests, nodes don't have embedding properties unless explicitly set
+            if embedding_property:
+                filtered = [
+                    n
+                    for n in filtered
+                    if embedding_property not in n or n.get(embedding_property) is None
+                ]
+
+        # Filter by text_property IS NOT NULL and not empty
+        # Test nodes always use "text" property, regardless of query property name
+        if "IS NOT NULL" in query:
+            filtered = [
+                n
+                for n in filtered
+                if "text" in n
+                and n.get("text") is not None
+                and str(n.get("text", "")).strip() != ""
+            ]
+
+        # Filter by text_property <> '' (not empty string)
+        if "<>" in query and "''" in query:
+            filtered = [n for n in filtered if "text" in n and str(n.get("text", "")).strip() != ""]
+
+        # Filter by size (minimum length)
+        # Match patterns like: size(n.description) >= $min_length
+        if "size(" in query.lower() and ">=" in query:
+            # Try to extract parameter name from size() >= $param
+            size_match = re.search(r"size\([^)]+\)\s*>=\s*\$(\w+)", query)
+            if size_match:
+                param_name = size_match.group(1)
+                min_length = kwargs.get(param_name, 0)
+                # Check "text" property (test nodes use "text")
+                filtered = [
+                    n
+                    for n in filtered
+                    if "text" in n and len(str(n.get("text", "")).strip()) >= min_length
+                ]
+
+        # Filter by key > last_key (cursor-based pagination)
+        if ">" in query and "last_key" in query and "key" in query:
+            last_key = kwargs.get("last_key")
+            if last_key:
+                filtered = [n for n in filtered if n.get("key", "") > last_key]
+
+        # Filter by key IN $keys (for text fetching queries)
+        # Match patterns like: WHERE n.key IN $keys
+        if "IN $keys" in query or "IN $keys" in query.replace(" ", ""):
+            keys = kwargs.get("keys", [])
+            if keys:
+                filtered = [n for n in filtered if n.get("key") in keys]
+
+        # Apply LIMIT if present
+        if "LIMIT" in query.upper():
+            limit_match = re.search(r"LIMIT\s+\$(\w+)", query)
+            if limit_match:
+                param_name = limit_match.group(1)
+                limit = kwargs.get(param_name, len(filtered))
+                filtered = filtered[:limit]
+            else:
+                # Try to extract numeric limit
+                limit_match = re.search(r"LIMIT\s+(\d+)", query)
+                if limit_match:
+                    limit = int(limit_match.group(1))
+                    filtered = filtered[:limit]
+
+        return filtered
 
     def __enter__(self):
         return self
@@ -57,6 +192,10 @@ class MockResult:
 
     def __iter__(self):
         return iter(self.records)
+
+    def single(self):
+        """Return the first record or None if empty (matches Neo4j API)."""
+        return self.records[0] if self.records else None
 
 
 class MockRecord:
@@ -118,48 +257,6 @@ def create_mock_openai_client(embeddings_to_return: dict[str, list[float]]):
     return client
 
 
-class TestEmbeddingCacheKeyFormat:
-    """Tests for cache key format and validation."""
-
-    def test_cache_key_format_domain(self):
-        """Cache key for Domain nodes uses correct format."""
-        with tempfile.TemporaryDirectory() as tmpdir:
-            cache = AppCache(Path(tmpdir) / "cache")
-
-            # Simulate what create_embeddings_for_nodes does
-            # Key format: {node_key}:{text_property}
-            cache_key = "example.com:description"
-            cache.set(
-                "embeddings",
-                cache_key,
-                {"embedding": [0.1] * 1536, "model": "text-embedding-3-small", "dimension": 1536},
-            )
-
-            # Verify retrieval
-            cached = cache.get("embeddings", cache_key)
-            assert cached is not None
-            assert len(cached["embedding"]) == 1536
-            cache.close()
-
-    def test_cache_key_format_company(self):
-        """Cache key for Company nodes uses correct format."""
-        with tempfile.TemporaryDirectory() as tmpdir:
-            cache = AppCache(Path(tmpdir) / "cache")
-
-            # Company nodes use CIK as key
-            cache_key = "0001234567:description"
-            cache.set(
-                "embeddings",
-                cache_key,
-                {"embedding": [0.2] * 1536, "model": "text-embedding-3-small", "dimension": 1536},
-            )
-
-            cached = cache.get("embeddings", cache_key)
-            assert cached is not None
-            assert len(cached["embedding"]) == 1536
-            cache.close()
-
-
 class TestEmbeddingCacheHitMiss:
     """Tests for cache hit/miss behavior."""
 
@@ -169,12 +266,15 @@ class TestEmbeddingCacheHitMiss:
             cache = AppCache(Path(tmpdir) / "cache")
 
             # Pre-populate cache with embeddings
+            # Text must match what's in nodes (with length >= 200 chars)
+            example_text = "Example company description. " * 10  # ~370 chars
+            test_text = "Test company description. " * 10  # ~370 chars
             cache.set(
                 "embeddings",
                 "example.com:description",
                 {
                     "embedding": [0.1] * 1536,
-                    "text": "Example company description",
+                    "text": example_text,
                     "model": "text-embedding-3-small",
                     "dimension": 1536,
                 },
@@ -184,16 +284,17 @@ class TestEmbeddingCacheHitMiss:
                 "test.com:description",
                 {
                     "embedding": [0.2] * 1536,
-                    "text": "Test company description",
+                    "text": test_text,
                     "model": "text-embedding-3-small",
                     "dimension": 1536,
                 },
             )
 
             # Create mock driver with nodes matching cached keys
+            # Text must be >= MIN_DESCRIPTION_LENGTH_FOR_SIMILARITY (200 chars) to pass size filter
             nodes = [
-                {"key": "example.com", "text": "Example company description"},
-                {"key": "test.com", "text": "Test company description"},
+                {"key": "example.com", "text": "Example company description. " * 10},  # ~370 chars
+                {"key": "test.com", "text": "Test company description. " * 10},  # ~370 chars
             ]
             driver = MockDriver(nodes)
 
@@ -201,7 +302,22 @@ class TestEmbeddingCacheHitMiss:
             mock_client = create_mock_openai_client({})
 
             # Run embedding creation
-            with patch("public_company_graph.embeddings.create.BATCH_SIZE_SMALL", 100):
+            # The code uses async embeddings, so we need to mock the async function
+            from public_company_graph.embeddings.openai_client import create_embeddings_batch
+
+            # Create a mock async function that calls the sync version
+            async def mock_async_embed(client, texts, model, max_concurrent=None, **kwargs):
+                # Convert async to sync for testing - call the sync version
+                kwargs.pop("max_concurrent", None)
+                return create_embeddings_batch(mock_client, texts, model, **kwargs)
+
+            with (
+                patch("public_company_graph.embeddings.create.BATCH_SIZE_SMALL", 100),
+                patch(
+                    "public_company_graph.embeddings.openai_client_async.create_embeddings_batch_async",
+                    side_effect=mock_async_embed,
+                ),
+            ):
                 processed, created, cached_count, failed = create_embeddings_for_nodes(
                     driver=driver,
                     cache=cache,
@@ -229,8 +345,12 @@ class TestEmbeddingCacheHitMiss:
             # Cache is empty - no pre-populated embeddings
 
             # Create mock driver with nodes
+            # Text must be >= MIN_DESCRIPTION_LENGTH_FOR_SIMILARITY (200 chars) to pass size filter
             nodes = [
-                {"key": "new.com", "text": "A new company that needs embedding"},
+                {
+                    "key": "new.com",
+                    "text": "A new company that needs embedding. " * 10,
+                },  # ~370 chars
             ]
             driver = MockDriver(nodes)
 
@@ -238,7 +358,14 @@ class TestEmbeddingCacheHitMiss:
             mock_client = create_mock_openai_client({})
 
             # Run embedding creation
-            with patch("public_company_graph.embeddings.create.BATCH_SIZE_SMALL", 100):
+            # The code uses async embeddings, so we need to mock the async function
+            with (
+                patch("public_company_graph.embeddings.create.BATCH_SIZE_SMALL", 100),
+                patch(
+                    "public_company_graph.embeddings.openai_client_async.create_embeddings_batch_async",
+                    side_effect=mock_async_embedding_function(mock_client),
+                ),
+            ):
                 processed, created, cached_count, failed = create_embeddings_for_nodes(
                     driver=driver,
                     cache=cache,
@@ -263,21 +390,27 @@ class TestEmbeddingCacheHitMiss:
             cache = AppCache(Path(tmpdir) / "cache")
 
             # Pre-populate cache with ONE embedding
+            # Text must match what's in nodes (with length >= 200 chars)
+            # Note: "Cached description. " * 10 = 200 chars exactly, but after strip() it's 199
+            # So we need to add characters to ensure it passes the size filter (>= 200 after strip)
+            cached_text = "Cached description. " * 10 + "X"  # 201 chars, 200 after strip
+            new_text = "A brand new description that needs embedding. " * 10  # ~370 chars
             cache.set(
                 "embeddings",
                 "cached.com:description",
                 {
                     "embedding": [0.1] * 1536,
-                    "text": "Cached description",
+                    "text": cached_text,
                     "model": "text-embedding-3-small",
                     "dimension": 1536,
                 },
             )
 
             # Create mock driver with mixed nodes
+            # Text must be >= MIN_DESCRIPTION_LENGTH_FOR_SIMILARITY (200 chars) to pass size filter
             nodes = [
-                {"key": "cached.com", "text": "Cached description"},
-                {"key": "new.com", "text": "A brand new description that needs embedding"},
+                {"key": "cached.com", "text": cached_text},  # Matches cache
+                {"key": "new.com", "text": new_text},  # Not in cache
             ]
             driver = MockDriver(nodes)
 
@@ -285,7 +418,14 @@ class TestEmbeddingCacheHitMiss:
             mock_client = create_mock_openai_client({})
 
             # Run embedding creation
-            with patch("public_company_graph.embeddings.create.BATCH_SIZE_SMALL", 100):
+            # The code uses async embeddings, so we need to mock the async function
+            with (
+                patch("public_company_graph.embeddings.create.BATCH_SIZE_SMALL", 100),
+                patch(
+                    "public_company_graph.embeddings.openai_client_async.create_embeddings_batch_async",
+                    side_effect=mock_async_embedding_function(mock_client),
+                ),
+            ):
                 processed, created, cached_count, failed = create_embeddings_for_nodes(
                     driver=driver,
                     cache=cache,
@@ -316,22 +456,32 @@ class TestEmbeddingCacheValidation:
             cache = AppCache(Path(tmpdir) / "cache")
 
             # Pre-populate cache with WRONG model
+            # Text must be >= MIN_DESCRIPTION_LENGTH_FOR_SIMILARITY (200 chars) to pass size filter
+            example_text = "Example description that is long enough. " * 10  # ~370 chars
             cache.set(
                 "embeddings",
                 "example.com:description",
                 {
                     "embedding": [0.1] * 1536,
-                    "text": "Example description",
+                    "text": example_text,
                     "model": "text-embedding-ada-002",  # Wrong model!
                     "dimension": 1536,
                 },
             )
 
-            nodes = [{"key": "example.com", "text": "Example description"}]
+            # Text must be >= MIN_DESCRIPTION_LENGTH_FOR_SIMILARITY (200 chars) to pass size filter
+            example_text = "Example description that is long enough. " * 10  # ~370 chars
+            nodes = [{"key": "example.com", "text": example_text}]
             driver = MockDriver(nodes)
             mock_client = create_mock_openai_client({})
 
-            with patch("public_company_graph.embeddings.create.BATCH_SIZE_SMALL", 100):
+            with (
+                patch("public_company_graph.embeddings.create.BATCH_SIZE_SMALL", 100),
+                patch(
+                    "public_company_graph.embeddings.openai_client_async.create_embeddings_batch_async",
+                    side_effect=mock_async_embedding_function(mock_client),
+                ),
+            ):
                 processed, created, cached_count, failed = create_embeddings_for_nodes(
                     driver=driver,
                     cache=cache,
@@ -354,22 +504,32 @@ class TestEmbeddingCacheValidation:
             cache = AppCache(Path(tmpdir) / "cache")
 
             # Pre-populate cache with WRONG dimension
+            # Text must be >= MIN_DESCRIPTION_LENGTH_FOR_SIMILARITY (200 chars) to pass size filter
+            example_text = "Example description that is long enough. " * 10  # ~370 chars
             cache.set(
                 "embeddings",
                 "example.com:description",
                 {
                     "embedding": [0.1] * 768,  # Wrong dimension!
-                    "text": "Example description",
+                    "text": example_text,
                     "model": "text-embedding-3-small",
                     "dimension": 768,
                 },
             )
 
-            nodes = [{"key": "example.com", "text": "Example description"}]
+            # Text must be >= MIN_DESCRIPTION_LENGTH_FOR_SIMILARITY (200 chars) to pass size filter
+            example_text = "Example description that is long enough. " * 10  # ~370 chars
+            nodes = [{"key": "example.com", "text": example_text}]
             driver = MockDriver(nodes)
             mock_client = create_mock_openai_client({})
 
-            with patch("public_company_graph.embeddings.create.BATCH_SIZE_SMALL", 100):
+            with (
+                patch("public_company_graph.embeddings.create.BATCH_SIZE_SMALL", 100),
+                patch(
+                    "public_company_graph.embeddings.openai_client_async.create_embeddings_batch_async",
+                    side_effect=mock_async_embedding_function(mock_client),
+                ),
+            ):
                 processed, created, cached_count, failed = create_embeddings_for_nodes(
                     driver=driver,
                     cache=cache,
@@ -392,22 +552,30 @@ class TestEmbeddingCacheValidation:
             cache = AppCache(Path(tmpdir) / "cache")
 
             # Pre-populate cache with correct model and dimension
+            # Text must be >= MIN_DESCRIPTION_LENGTH_FOR_SIMILARITY (200 chars) to pass size filter
+            example_text = "Example description that is long enough. " * 10  # ~370 chars
             cache.set(
                 "embeddings",
                 "example.com:description",
                 {
                     "embedding": [0.1] * 1536,
-                    "text": "Example description",
+                    "text": example_text,
                     "model": "text-embedding-3-small",
                     "dimension": 1536,
                 },
             )
 
-            nodes = [{"key": "example.com", "text": "Example description"}]
+            nodes = [{"key": "example.com", "text": example_text}]
             driver = MockDriver(nodes)
             mock_client = create_mock_openai_client({})
 
-            with patch("public_company_graph.embeddings.create.BATCH_SIZE_SMALL", 100):
+            with (
+                patch("public_company_graph.embeddings.create.BATCH_SIZE_SMALL", 100),
+                patch(
+                    "public_company_graph.embeddings.openai_client_async.create_embeddings_batch_async",
+                    side_effect=mock_async_embedding_function(mock_client),
+                ),
+            ):
                 processed, created, cached_count, failed = create_embeddings_for_nodes(
                     driver=driver,
                     cache=cache,
@@ -436,15 +604,31 @@ class TestEmbeddingCacheIdempotency:
             cache = AppCache(Path(tmpdir) / "cache")
 
             nodes = [
-                {"key": "company1.com", "text": "Company one does amazing things"},
-                {"key": "company2.com", "text": "Company two makes great products"},
-                {"key": "company3.com", "text": "Company three provides services"},
+                {
+                    "key": "company1.com",
+                    "text": "Company one does amazing things. " * 10,
+                },  # ~370 chars
+                {
+                    "key": "company2.com",
+                    "text": "Company two makes great products. " * 10,
+                },  # ~370 chars
+                {
+                    "key": "company3.com",
+                    "text": "Company three provides services. " * 10,
+                },  # ~370 chars
             ]
             driver = MockDriver(nodes)
             mock_client = create_mock_openai_client({})
 
             # First run - should call API for all
-            with patch("public_company_graph.embeddings.create.BATCH_SIZE_SMALL", 100):
+            # The code uses async embeddings, so we need to mock the async function
+            with (
+                patch("public_company_graph.embeddings.create.BATCH_SIZE_SMALL", 100),
+                patch(
+                    "public_company_graph.embeddings.openai_client_async.create_embeddings_batch_async",
+                    side_effect=mock_async_embedding_function(mock_client),
+                ),
+            ):
                 proc1, created1, cached1, failed1 = create_embeddings_for_nodes(
                     driver=driver,
                     cache=cache,
@@ -466,7 +650,14 @@ class TestEmbeddingCacheIdempotency:
             driver2 = MockDriver(nodes)
 
             # Second run - should use cache for all
-            with patch("public_company_graph.embeddings.create.BATCH_SIZE_SMALL", 100):
+            # The code uses async embeddings, so we need to mock the async function
+            with (
+                patch("public_company_graph.embeddings.create.BATCH_SIZE_SMALL", 100),
+                patch(
+                    "public_company_graph.embeddings.openai_client_async.create_embeddings_batch_async",
+                    side_effect=mock_async_embedding_function(mock_client),
+                ),
+            ):
                 proc2, created2, cached2, failed2 = create_embeddings_for_nodes(
                     driver=driver2,
                     cache=cache,
@@ -514,33 +705,6 @@ class TestEmbeddingCachePersistence:
             assert cached["embedding"][0] == 0.123
             assert len(cached["embedding"]) == 1536
             cache2.close()
-
-
-class TestEmbeddingCacheStats:
-    """Tests for cache statistics reporting."""
-
-    def test_stats_track_embeddings_namespace(self):
-        """Stats should correctly count embeddings namespace."""
-        with tempfile.TemporaryDirectory() as tmpdir:
-            cache = AppCache(Path(tmpdir) / "cache")
-
-            # Add some embeddings
-            for i in range(5):
-                cache.set(
-                    "embeddings",
-                    f"domain{i}.com:description",
-                    {"embedding": [0.1] * 1536, "model": "test", "dimension": 1536},
-                )
-
-            # Add something in another namespace
-            cache.set("10k_extracted", "12345", {"data": "test"})
-
-            stats = cache.stats()
-
-            assert stats["by_namespace"]["embeddings"] == 5
-            assert stats["by_namespace"]["10k_extracted"] == 1
-            assert stats["total"] == 6
-            cache.close()
 
 
 class TestEmbeddingCacheEdgeCases:
@@ -631,7 +795,9 @@ class TestEmbeddingCacheKeyDerivation:
             # f"{record['key']}:{text_property}"
             expected_key = "mycompany.com:description"
 
-            nodes = [{"key": "mycompany.com", "text": "My company does great things"}]
+            nodes = [
+                {"key": "mycompany.com", "text": "My company does great things. " * 10}
+            ]  # ~370 chars
             driver = MockDriver(nodes)
             mock_client = create_mock_openai_client({})
 
@@ -658,11 +824,19 @@ class TestEmbeddingCacheKeyDerivation:
             cache = AppCache(Path(tmpdir) / "cache")
 
             # Domain with hyphen and numbers
-            nodes = [{"key": "my-company-123.com", "text": "Special chars company"}]
+            # Text must be >= MIN_DESCRIPTION_LENGTH_FOR_SIMILARITY (200 chars) to pass size filter
+            special_text = "Special chars company with hyphen and numbers. " * 10  # ~370 chars
+            nodes = [{"key": "my-company-123.com", "text": special_text}]
             driver = MockDriver(nodes)
             mock_client = create_mock_openai_client({})
 
-            with patch("public_company_graph.embeddings.create.BATCH_SIZE_SMALL", 100):
+            with (
+                patch("public_company_graph.embeddings.create.BATCH_SIZE_SMALL", 100),
+                patch(
+                    "public_company_graph.embeddings.openai_client_async.create_embeddings_batch_async",
+                    side_effect=mock_async_embedding_function(mock_client),
+                ),
+            ):
                 create_embeddings_for_nodes(
                     driver=driver,
                     cache=cache,

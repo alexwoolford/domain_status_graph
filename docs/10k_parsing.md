@@ -107,7 +107,11 @@ python scripts/extract_with_llm_verification.py --clean --execute
 
 - **Business description**: ~99.85% success rate (5,390/5,398 companies)
 - **Website extraction**: ~98% success rate
-- **Business relationships**: ~3,843 competitor, ~2,597 supplier, ~2,139 partner, ~1,714 customer
+- **Business relationships**: See [graph_schema.md](graph_schema.md) for current counts:
+  - `HAS_COMPETITOR`: 3,249 (high confidence)
+  - `HAS_PARTNER`: 588 (high confidence)
+  - `HAS_CUSTOMER`: 243 (LLM verified)
+  - `HAS_SUPPLIER`: 130 (LLM verified)
 
 ### Inspection
 

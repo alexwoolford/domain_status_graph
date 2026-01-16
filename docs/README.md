@@ -23,10 +23,13 @@
 | Document | Description |
 |----------|-------------|
 | [**10k_parsing.md**](./10k_parsing.md) | 10-K parsing pipeline details |
-| [**ADDING_PARSER.md**](./ADDING_PARSER.md) | How to add parsing capabilities |
+| [**adding_parser.md**](./adding_parser.md) | How to add parsing capabilities |
 | [**research_enhancements.md**](./research_enhancements.md) | Research-backed enhancements roadmap |
 | [**entity_resolution_evaluation.md**](./entity_resolution_evaluation.md) | Entity resolution evaluation and testing |
-| [**EDGE_QUALITY_SYSTEM.md**](./EDGE_QUALITY_SYSTEM.md) | Edge quality system and tiered confidence |
+| [**edge_quality_system.md**](./edge_quality_system.md) | Edge quality system and tiered confidence |
+| [**graphrag.md**](./graphrag.md) | GraphRAG layer architecture and usage |
+| [**graphrag_testing.md**](./graphrag_testing.md) | GraphRAG testing guide and strategies |
+| [**monitoring_graphrag.md**](./monitoring_graphrag.md) | GraphRAG monitoring and troubleshooting |
 
 ## Quick Start
 
@@ -43,7 +46,7 @@ The Public Company Graph contains:
 | **Company nodes** | 5,398 |
 | **Domain nodes** | 4,337 |
 | **Technology nodes** | 827 |
-| **Total relationships** | ~2,013,922 |
+| **Total relationships** | ~2,028,329 |
 
 ### Key Relationship Types
 

@@ -174,7 +174,9 @@ def compute_tech_adoption_prediction(
                                 tech_id=tech_id,
                                 top_k=top_k,
                             )
-                            predictions_written += result.single()["created"]
+                            record = result.single()
+                            if record:
+                                predictions_written += record["created"]
                         except Exception as e:
                             logger.warning(f"   ⚠ Error processing {tech_name}: {e}")
                             continue

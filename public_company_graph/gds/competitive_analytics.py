@@ -232,7 +232,8 @@ def compute_degree_centrality(
                 RETURN count(c) as updated
                 """
             )
-            in_degree_count = result.single()["updated"]
+            record = result.single()
+            in_degree_count = record["updated"] if record else 0
             logger.info(f"   ✓ Updated in-degree for {in_degree_count} companies")
 
             # Compute out-degree (cites competitors)
@@ -245,7 +246,8 @@ def compute_degree_centrality(
                 RETURN count(c) as updated
                 """
             )
-            out_degree_count = result.single()["updated"]
+            record = result.single()
+            out_degree_count = record["updated"] if record else 0
             logger.info(f"   ✓ Updated out-degree for {out_degree_count} companies")
 
         logger.info("   ✓ Complete")

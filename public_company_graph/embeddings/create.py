@@ -16,12 +16,20 @@ accuracy for long 10-K business descriptions while maintaining speed for shorter
 
 import logging
 import re
-import time
+import traceback
 from typing import Any
+
+try:
+    import os
+
+    import psutil
+
+    PSUTIL_AVAILABLE = True
+except ImportError:
+    PSUTIL_AVAILABLE = False
 
 from public_company_graph.cache import AppCache
 from public_company_graph.constants import (
-    BATCH_SIZE_SMALL,
     MIN_DESCRIPTION_LENGTH_FOR_SIMILARITY,
 )
 from public_company_graph.embeddings.openai_client import (
@@ -31,8 +39,26 @@ from public_company_graph.embeddings.openai_client import (
 
 logger = logging.getLogger(__name__)
 
+
+def get_memory_usage_mb() -> float:
+    """Get current process memory usage in MB."""
+    if PSUTIL_AVAILABLE:
+        try:
+            process = psutil.Process(os.getpid())
+            return process.memory_info().rss / 1024 / 1024
+        except Exception:
+            pass
+    return 0.0
+
+
+def log_memory_state(logger: logging.Logger, context: str = "") -> None:
+    """Log current memory state for debugging."""
+    mem_mb = get_memory_usage_mb()
+    logger.info(f"💾 Memory: {mem_mb:.1f} MB {context}")
+
+
 # Allowed node labels and property names for security (prevent injection)
-ALLOWED_NODE_LABELS = {"Domain", "Company"}
+ALLOWED_NODE_LABELS = {"Domain", "Company", "Document", "Chunk"}
 ALLOWED_PROPERTY_PATTERN = re.compile(r"^[a-zA-Z_][a-zA-Z0-9_]*$")
 
 
@@ -108,202 +134,304 @@ def create_embeddings_for_nodes(
     _validate_property_name(model_property, "model_property")
     _validate_property_name(dimension_property, "dimension_property")
 
-    # Load nodes with text
-    _logger.info(f"Loading {node_label} nodes with {text_property}...")
+    # STREAMING: Process nodes directly from Neo4j result iterator
+    # Never build full nodes list - process in chunks as we read
+    _logger.info(
+        f"Loading and processing {node_label} nodes with {text_property} in streaming fashion..."
+    )
+
+    # Get total count first (for progress logging)
     with driver.session(database=database) as session:
-        query = f"""
+        count_query = f"""
         MATCH (n:{node_label})
         WHERE n.{text_property} IS NOT NULL
           AND n.{text_property} <> ''
           AND size(n.{text_property}) >= $min_length
-        RETURN n.{key_property} AS key, n.{text_property} AS text
-        ORDER BY n.{key_property}
+        RETURN count(n) AS total
         """
-        result = session.run(query, min_length=MIN_DESCRIPTION_LENGTH_FOR_SIMILARITY)
-        nodes = [
-            (f"{record['key']}:{text_property}", record["text"])
-            for record in result
-            if record["text"] and record["text"].strip()
-        ]
+        count_result = session.run(count_query, min_length=MIN_DESCRIPTION_LENGTH_FOR_SIMILARITY)
+        count_record = count_result.single()
+        if not count_record:
+            _logger.warning(f"No {node_label} nodes found matching criteria")
+            return (0, 0, 0, 0)
+        total_nodes = count_record["total"]
 
-    _logger.info(f"Found {len(nodes)} {node_label} nodes with {text_property}")
+    _logger.info(f"Found {total_nodes:,} {node_label} nodes with {text_property}")
 
     if not execute:
-        _logger.info(f"DRY RUN: Would process embeddings for {len(nodes)} nodes")
+        _logger.info(f"DRY RUN: Would process embeddings for {total_nodes:,} nodes")
         return (0, 0, 0, 0)
 
-    # Step 1: Check cache for existing embeddings
-    _logger.info("Checking cache for existing embeddings...")
-    cached_embeddings: dict[str, list[float]] = {}
-    uncached_items: list[tuple[str, str]] = []  # (cache_key, text)
-
-    for cache_key, text in nodes:
-        cached_data = cache.get("embeddings", cache_key)
-        if cached_data and "embedding" in cached_data:
-            if (
-                cached_data.get("model") == embedding_model
-                and len(cached_data["embedding"]) == embedding_dimension
-            ):
-                cached_embeddings[cache_key] = cached_data["embedding"]
-                continue
-        uncached_items.append((cache_key, text))
-
-    _logger.info(f"  Cached: {len(cached_embeddings)}, Need to create: {len(uncached_items)}")
-
-    # Step 2: Create embeddings for uncached items
-    # Strategy: Short texts use fast batch API, long texts use chunking for accuracy
+    # Step 1: Check cache and process in streaming chunks
+    # STREAMING: Never build full lists - process nodes in chunks directly
+    # This prevents holding all 2.16M texts in memory at once
+    _logger.info("=" * 80)
+    _logger.info("STREAMING MODE: Processing in 50K chunks (no full lists)")
+    _logger.info("This is the NEW code path - if you see 'Separating texts', old code is running!")
+    _logger.info("=" * 80)
+    _logger.info("Checking cache and processing embeddings in streaming chunks...")
+    # CRITICAL: Don't accumulate cached embeddings in memory - write directly to Neo4j
+    # Only store newly created embeddings temporarily before writing
     new_embeddings: dict[str, list[float]] = {}
     failed = 0
+    cached_count_for_neo4j = 0  # Track count for final stats
 
-    if uncached_items:
-        if openai_client is None:
-            raise ValueError("openai_client is required. Use get_openai_client() to create one.")
+    if openai_client is None:
+        raise ValueError("openai_client is required. Use get_openai_client() to create one.")
 
-        from public_company_graph.embeddings.openai_client import (
-            create_embeddings_batch,
-        )
+    import asyncio
 
-        # Separate short texts (batch-able) from long texts (need chunking)
-        short_items: list[tuple[str, str]] = []
-        long_items: list[tuple[str, str]] = []
+    from public_company_graph.embeddings.openai_client_async import (
+        create_embeddings_batch_async,
+        get_async_openai_client,
+    )
 
-        for cache_key, text in uncached_items:
-            token_count = count_tokens(text, embedding_model)
-            if token_count <= EMBEDDING_TRUNCATE_TOKENS:
-                short_items.append((cache_key, text))
-            else:
-                long_items.append((cache_key, text))
+    async_client = get_async_openai_client()
 
-        if long_items:
-            _logger.info(
-                f"  Text length distribution: {len(short_items)} short (batch), "
-                f"{len(long_items)} long (chunked)"
-            )
+    # STREAMING: Process nodes directly from Neo4j iterator in chunks
+    # Never build full nodes list - process as we read
+    # Increased to 20K now that memory is stable and sessions are fresh
+    chunk_size = 20_000  # Process 20K nodes at a time (increased from 5K for speed)
+    cached_count = 0
+    uncached_count = 0
+    long_items: list[tuple[str, str]] = []  # Only keep long items (usually very few)
 
-        # Process short texts with fast batch API
-        # create_embeddings_batch handles token-based batching internally
-        if short_items:
-            _logger.info(f"Creating {len(short_items)} embeddings via batch API...")
-            batch_keys = [k for k, _ in short_items]
-            batch_texts = [t for _, t in short_items]
+    _logger.info(f"Processing {total_nodes:,} nodes in streaming chunks of {chunk_size:,}")
 
-            # create_embeddings_batch uses token-based batching (max 150K tokens per API call)
-            embeddings = create_embeddings_batch(openai_client, batch_texts, embedding_model)
+    # Setup Neo4j batch writing
+    neo4j_batch: list[dict[str, Any]] = []
+    neo4j_batch_size = 50000  # Write to Neo4j every 50K embeddings (large batches for speed)
 
-            start_time = time.time()
-            last_log_time = start_time
-            total_short = len(short_items)
+    # Create callback factory - returns a callback bound to specific cache_keys
+    def make_cache_and_write_callback(cache_keys: list[str]):
+        """Create a callback function bound to specific cache keys."""
 
-            for i, embedding in enumerate(embeddings):
-                cache_key = batch_keys[i]
-                if embedding and len(embedding) == embedding_dimension:
-                    new_embeddings[cache_key] = embedding
-                    cache.set(
-                        "embeddings",
-                        cache_key,
-                        {
-                            "embedding": embedding,
-                            "text": batch_texts[i],
-                            "model": embedding_model,
-                            "dimension": embedding_dimension,
-                        },
-                    )
-                else:
-                    failed += 1
+        def cache_and_write_batch(
+            indices: list[int], embeddings: list[list[float]], texts: list[str]
+        ):
+            """Cache and write embeddings immediately as each API batch completes."""
+            for idx_in_batch, embedding in enumerate(embeddings):
+                if not embedding or len(embedding) != embedding_dimension:
+                    continue
 
-                # Time-based progress logging (every 30 seconds)
-                current_time = time.time()
-                if current_time - last_log_time >= 30:
-                    processed_short = i + 1
-                    elapsed = current_time - start_time
-                    rate = processed_short / elapsed if elapsed > 0 else 0
-                    remaining = (total_short - processed_short) / rate if rate > 0 else 0
-                    pct = (processed_short / total_short * 100) if total_short > 0 else 0
-                    _logger.info(
-                        f"  Progress: {processed_short:,}/{total_short:,} ({pct:.1f}%) | "
-                        f"Rate: {rate:.1f}/sec | ETA: {remaining / 60:.1f}min"
-                    )
-                    last_log_time = current_time
+                # indices[idx_in_batch] is the index within the batch
+                text_idx = indices[idx_in_batch]
+                if text_idx >= len(cache_keys):
+                    continue
 
-            _logger.info(f"  Completed {len(short_items)} short text embeddings")
+                cache_key = cache_keys[text_idx]
+                text = texts[idx_in_batch] if idx_in_batch < len(texts) else ""
 
-        # Process long texts with batched chunking
-        if long_items:
-            from public_company_graph.embeddings.chunking import (
-                create_embeddings_for_long_texts_batched,
-            )
+                new_embeddings[cache_key] = embedding
 
-            _logger.info(f"Creating {len(long_items)} embeddings with chunking...")
-
-            # Create text lookup for caching
-            text_by_key = dict(long_items)
-
-            try:
-                batched_results = create_embeddings_for_long_texts_batched(
-                    client=openai_client,
-                    items=long_items,
-                    model=embedding_model,
-                    log=_logger,
+                # Cache immediately (diskcache auto-commits)
+                cache.set(
+                    "embeddings",
+                    cache_key,
+                    {
+                        "embedding": embedding,
+                        "text": text,
+                        "model": embedding_model,
+                        "dimension": embedding_dimension,
+                    },
                 )
 
-                # Process results and update cache
-                for cache_key, embedding in batched_results.items():
-                    if embedding and len(embedding) == embedding_dimension:
-                        new_embeddings[cache_key] = embedding
-                        cache.set(
-                            "embeddings",
-                            cache_key,
+                # Add to Neo4j batch for incremental writes
+                node_key = cache_key.split(":", 1)[0]
+                neo4j_batch.append(
+                    {
+                        "key": node_key,
+                        "embedding": embedding,
+                        "model": embedding_model,
+                        "dimension": embedding_dimension,
+                    }
+                )
+
+            # Write to Neo4j in batches to avoid losing work
+            if len(neo4j_batch) >= neo4j_batch_size:
+                with driver.session(database=database) as session:
+                    query = f"""
+                    UNWIND $batch AS row
+                    MATCH (n:{node_label} {{{key_property}: row.key}})
+                    SET n.{embedding_property} = row.embedding,
+                        n.{model_property} = row.model,
+                        n.{dimension_property} = row.dimension
+                    """
+                    session.run(query, batch=neo4j_batch)
+                neo4j_batch.clear()
+
+        return cache_and_write_batch
+
+    # STREAMING: Read from Neo4j and process in chunks (never build full nodes list)
+    log_memory_state(_logger, "(before streaming)")
+
+    try:
+        # Cursor-based pagination: safer and more efficient than SKIP/LIMIT
+        # Uses WHERE key > last_key to avoid issues with concurrent data changes
+        processed_count = 0
+        page_size = 50_000  # Fetch 50K keys per page (reasonable Neo4j transaction size)
+        last_key: str | None = None
+
+        while True:
+            # Build query with cursor (WHERE key > last_key if we have one)
+            # Only process nodes that don't already have embeddings
+            if last_key is None:
+                key_query = f"""
+                MATCH (n:{node_label})
+                WHERE n.{text_property} IS NOT NULL
+                  AND n.{text_property} <> ''
+                  AND size(n.{text_property}) >= $min_length
+                  AND n.{embedding_property} IS NULL
+                RETURN n.{key_property} AS key
+                ORDER BY n.{key_property}
+                LIMIT $limit
+                """
+                query_params = {
+                    "min_length": MIN_DESCRIPTION_LENGTH_FOR_SIMILARITY,
+                    "limit": page_size,
+                }
+            else:
+                key_query = f"""
+                MATCH (n:{node_label})
+                WHERE n.{text_property} IS NOT NULL
+                  AND n.{text_property} <> ''
+                  AND size(n.{text_property}) >= $min_length
+                  AND n.{embedding_property} IS NULL
+                  AND n.{key_property} > $last_key
+                RETURN n.{key_property} AS key
+                ORDER BY n.{key_property}
+                LIMIT $limit
+                """
+                query_params = {
+                    "min_length": MIN_DESCRIPTION_LENGTH_FOR_SIMILARITY,
+                    "last_key": last_key,
+                    "limit": page_size,
+                }
+
+            # Fetch a page of keys
+            with driver.session(database=database) as session:
+                key_result = session.run(key_query, **query_params)
+                page_keys = [f"{record['key']}:{text_property}" for record in key_result]
+
+            if not page_keys:
+                break
+
+            # Update cursor to last key in this page
+            last_key = page_keys[-1].split(":", 1)[0]  # Extract node key from cache key
+
+            # Check cache for all keys in this page
+            cached_results = cache.get_many("embeddings", page_keys)
+
+            # Separate cached vs uncached
+            cached_batch: list[dict[str, Any]] = []
+            uncached_keys: list[str] = []
+
+            for cache_key in page_keys:
+                cached_data = cached_results.get(cache_key)
+                if cached_data and "embedding" in cached_data:
+                    model_match = cached_data.get("model") == embedding_model
+                    dim_match = len(cached_data["embedding"]) == embedding_dimension
+                    if model_match and dim_match:
+                        node_key = cache_key.split(":", 1)[0]
+                        cached_batch.append(
                             {
-                                "embedding": embedding,
-                                "text": text_by_key[cache_key],
+                                "key": node_key,
+                                "embedding": cached_data["embedding"],
                                 "model": embedding_model,
                                 "dimension": embedding_dimension,
-                            },
+                            }
                         )
-                    else:
-                        failed += 1
+                        cached_count += 1
+                        cached_count_for_neo4j += 1
+                        continue
+                # Not cached or validation failed - add to uncached
+                uncached_keys.append(cache_key)
+                uncached_count += 1
 
-                # Count failures (items not in results)
-                missing = set(text_by_key.keys()) - set(batched_results.keys())
-                failed += len(missing)
+            # Write cached embeddings to Neo4j immediately
+            if cached_batch:
+                neo4j_batch.extend(cached_batch)
+                if len(neo4j_batch) >= neo4j_batch_size:
+                    with driver.session(database=database) as write_session:
+                        query = f"""
+                        UNWIND $batch AS row
+                        MATCH (n:{node_label} {{{key_property}: row.key}})
+                        SET n.{embedding_property} = row.embedding,
+                            n.{model_property} = row.model,
+                            n.{dimension_property} = row.dimension
+                        """
+                        write_session.run(query, batch=neo4j_batch)
+                    neo4j_batch.clear()
 
-            except Exception as e:
-                _logger.error(f"Batched chunking failed: {e}")
-                failed += len(long_items)
-
-    # Step 3: Update Neo4j nodes with all embeddings (cached + new)
-    all_embeddings = {**cached_embeddings, **new_embeddings}
-    _logger.info(f"Updating {len(all_embeddings)} {node_label} nodes in Neo4j...")
-
-    update_batch: list[dict[str, Any]] = []
-    processed = 0
-
-    for cache_key, embedding in all_embeddings.items():
-        node_key = cache_key.split(":", 1)[0]
-        update_batch.append(
-            {
-                "key": node_key,
-                "embedding": embedding,
-                "model": embedding_model,
-                "dimension": embedding_dimension,
-            }
-        )
-
-        if len(update_batch) >= BATCH_SIZE_SMALL:
-            with driver.session(database=database) as session:
-                query = f"""
-                UNWIND $batch AS row
-                MATCH (n:{node_label} {{{key_property}: row.key}})
-                SET n.{embedding_property} = row.embedding,
-                    n.{model_property} = row.model,
-                    n.{dimension_property} = row.dimension
+            # Process uncached items (fetch text, call API, write)
+            if uncached_keys:
+                uncached_node_keys = [ck.split(":", 1)[0] for ck in uncached_keys]
+                text_query = f"""
+                MATCH (n:{node_label})
+                WHERE n.{key_property} IN $keys
+                RETURN n.{key_property} AS key, n.{text_property} AS text
                 """
-                session.run(query, batch=update_batch)
-            processed += len(update_batch)
-            update_batch.clear()
+                with driver.session(database=database) as text_session:
+                    text_result = text_session.run(text_query, keys=uncached_node_keys)
+                    text_map = {f"{r['key']}:{text_property}": r["text"] for r in text_result}
 
-    # Flush remaining
-    if update_batch:
+                # Separate short/long texts
+                short_items: list[tuple[str, str]] = []
+                for cache_key in uncached_keys:
+                    text = text_map.get(cache_key)
+                    if text and text.strip():
+                        token_count = count_tokens(text, embedding_model)
+                        if token_count <= EMBEDDING_TRUNCATE_TOKENS:
+                            short_items.append((cache_key, text))
+                        else:
+                            long_items.append((cache_key, text))
+
+                # Process short items with API
+                if short_items:
+                    short_keys = [k for k, _ in short_items]
+                    short_texts = [t for _, t in short_items]
+
+                    # Create callback bound to these cache keys
+                    batch_callback = make_cache_and_write_callback(short_keys)
+
+                    # Capture loop variables as default arguments to avoid closure bugs
+                    async def process_short_items(texts=short_texts, callback=batch_callback):
+                        return await create_embeddings_batch_async(
+                            async_client,
+                            texts.copy(),
+                            embedding_model,
+                            max_concurrent=10,
+                            on_batch_complete=callback,
+                        )
+
+                    asyncio.run(process_short_items())
+
+            processed_count += len(page_keys)
+
+            # Log progress (more frequently for visibility)
+            if processed_count % 50_000 == 0 or len(page_keys) < page_size:
+                mem_mb = get_memory_usage_mb()
+                _logger.info(
+                    f"✓ Processed {processed_count:,}/{total_nodes:,} nodes ({processed_count / total_nodes * 100:.1f}%) | Cached: {cached_count:,} | Created: {uncached_count:,} | Memory: {mem_mb:.1f} MB"
+                )
+
+            # Done if we got fewer keys than requested (no more to fetch)
+            if len(page_keys) < page_size:
+                break
+
+    except Exception as e:
+        # Capture state before crash
+        mem_mb = get_memory_usage_mb()
+        _logger.error(
+            f"❌ FATAL ERROR in streaming loop at {processed_count:,}/{total_nodes:,} nodes"
+        )
+        _logger.error(f"   Memory: {mem_mb:.1f} MB")
+        _logger.error(f"   Error: {e}")
+        _logger.error(f"   Traceback:\n{traceback.format_exc()}")
+        raise
+
+    # Flush any remaining Neo4j batch from streaming loop
+    if neo4j_batch:
         with driver.session(database=database) as session:
             query = f"""
             UNWIND $batch AS row
@@ -312,7 +440,108 @@ def create_embeddings_for_nodes(
                 n.{model_property} = row.model,
                 n.{dimension_property} = row.dimension
             """
-            session.run(query, batch=update_batch)
-        processed += len(update_batch)
+            session.run(query, batch=neo4j_batch)
+        neo4j_batch.clear()
 
-    return (processed, len(new_embeddings), len(cached_embeddings), failed)
+    # Log final stats
+    _logger.info(
+        f"  ✓ Cache check complete: {cached_count:,} cached, {uncached_count:,} need creation"
+    )
+
+    # Process long texts with batched chunking
+    if long_items:
+        from public_company_graph.embeddings.chunking import (
+            create_embeddings_for_long_texts_batched,
+        )
+
+        _logger.info(f"Creating {len(long_items)} embeddings with chunking...")
+
+        # Create text lookup for caching
+        text_by_key = dict(long_items)
+
+        try:
+            batched_results = create_embeddings_for_long_texts_batched(
+                client=openai_client,
+                items=long_items,
+                model=embedding_model,
+                log=_logger,
+            )
+
+            # Process results, update cache, and write to Neo4j incrementally
+            neo4j_batch: list[dict[str, Any]] = []
+            neo4j_batch_size = 1000  # Write to Neo4j every 1000 embeddings
+
+            for cache_key, embedding in batched_results.items():
+                if embedding and len(embedding) == embedding_dimension:
+                    new_embeddings[cache_key] = embedding
+                    # Cache immediately
+                    cache.set(
+                        "embeddings",
+                        cache_key,
+                        {
+                            "embedding": embedding,
+                            "text": text_by_key[cache_key],
+                            "model": embedding_model,
+                            "dimension": embedding_dimension,
+                        },
+                    )
+
+                    # Add to Neo4j batch for incremental writes
+                    node_key = cache_key.split(":", 1)[0]
+                    neo4j_batch.append(
+                        {
+                            "key": node_key,
+                            "embedding": embedding,
+                            "model": embedding_model,
+                            "dimension": embedding_dimension,
+                        }
+                    )
+
+                    # Write to Neo4j in batches to avoid losing work
+                    if len(neo4j_batch) >= neo4j_batch_size:
+                        with driver.session(database=database) as session:
+                            query = f"""
+                            UNWIND $batch AS row
+                            MATCH (n:{node_label} {{{key_property}: row.key}})
+                            SET n.{embedding_property} = row.embedding,
+                                n.{model_property} = row.model,
+                                n.{dimension_property} = row.dimension
+                            """
+                            session.run(query, batch=neo4j_batch)
+                        neo4j_batch.clear()
+                else:
+                    failed += 1
+
+            # Flush remaining Neo4j batch
+            if neo4j_batch:
+                with driver.session(database=database) as session:
+                    query = f"""
+                    UNWIND $batch AS row
+                    MATCH (n:{node_label} {{{key_property}: row.key}})
+                    SET n.{embedding_property} = row.embedding,
+                        n.{model_property} = row.model,
+                        n.{dimension_property} = row.dimension
+                    """
+                    session.run(query, batch=neo4j_batch)
+
+            # Count failures (items not in results)
+            missing = set(text_by_key.keys()) - set(batched_results.keys())
+            failed += len(missing)
+
+        except Exception as e:
+            _logger.error(f"Batched chunking failed: {e}")
+            failed += len(long_items)
+
+    # Step 3: Update Neo4j nodes with cached embeddings (new ones already written incrementally)
+    # Only need to write cached embeddings that weren't just created
+    # Count processed nodes: both cached (written here) and new (written incrementally via callback)
+    # Cached embeddings were already written to Neo4j incrementally during processing
+    # New embeddings were also written incrementally via callback
+    processed = len(new_embeddings) + cached_count_for_neo4j
+
+    if cached_count_for_neo4j > 0:
+        _logger.info(
+            f"✓ Already updated {cached_count_for_neo4j:,} cached {node_label} nodes in Neo4j (written incrementally)"
+        )
+
+    return (processed, len(new_embeddings), cached_count_for_neo4j, failed)

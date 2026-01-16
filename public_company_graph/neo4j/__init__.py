@@ -7,6 +7,7 @@ from public_company_graph.neo4j.connection import (
 from public_company_graph.neo4j.constraints import (
     create_bootstrap_constraints,
     create_company_constraints,
+    create_document_constraints,
     create_domain_constraints,
     create_technology_constraints,
 )
@@ -22,6 +23,7 @@ __all__ = [
     "create_bootstrap_constraints",
     "create_company_constraints",
     "create_domain_constraints",
+    "create_document_constraints",
     "create_technology_constraints",
     "clean_properties",
     "clean_properties_batch",

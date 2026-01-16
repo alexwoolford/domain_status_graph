@@ -14,6 +14,19 @@ from public_company_graph.entity_resolution.embedding_scorer import (
 class TestEmbeddingSimilarityScorer:
     """Tests for EmbeddingSimilarityScorer."""
 
+    @pytest.fixture(autouse=True)
+    def mock_neo4j_driver(self):
+        """Create a mock Neo4j driver to prevent real connection attempts."""
+        # Mark cache as loaded to skip Neo4j connection entirely
+        # This prevents any real connection attempts
+        original_cache_loaded = EmbeddingSimilarityScorer._cache_loaded
+        EmbeddingSimilarityScorer._cache_loaded = True
+
+        yield None
+
+        # Restore original state
+        EmbeddingSimilarityScorer._cache_loaded = original_cache_loaded
+
     @pytest.fixture
     def mock_client(self):
         """Create a mock OpenAI client."""
@@ -141,23 +154,38 @@ class TestEmbeddingSimilarityScorer:
         scorer = EmbeddingSimilarityScorer(client=mock_client, threshold=0.30)
         cache = get_cache()
 
-        # Get initial count
-        initial_count = cache.count("context_embeddings")
-
         # Score with a unique context
         import uuid
 
         unique_context = f"Unique test context {uuid.uuid4()}"
-        scorer.score(context=unique_context, ticker="WMT", company_name="Walmart")
 
-        # Cache should have grown by 1
-        new_count = cache.count("context_embeddings")
-        assert new_count >= initial_count  # At least same (could be more from other tests)
+        # Track cache key directly (more efficient than counting all keys)
+        from public_company_graph.entity_resolution.embedding_scorer import CONTEXT_CACHE_NAMESPACE
 
-        # Second call with same context should not increase cache
-        scorer.score(context=unique_context, ticker="WMT", company_name="Walmart")
-        final_count = cache.count("context_embeddings")
-        assert final_count == new_count  # No growth, cached
+        cache_key = scorer._hash_text(unique_context[:500])
+
+        # Verify not cached initially
+        assert cache.get(CONTEXT_CACHE_NAMESPACE, cache_key) is None
+
+        # First call should compute and cache the context embedding
+        # Note: score() returns early if company embedding is missing, so we need to
+        # call _get_context_embedding() directly to test caching
+        context_embedding_1 = scorer._get_context_embedding(unique_context)
+
+        # Verify it's now cached
+        cached_embedding = cache.get(CONTEXT_CACHE_NAMESPACE, cache_key)
+        assert cached_embedding is not None, "Embedding should be cached after first call"
+        assert cached_embedding == context_embedding_1, (
+            "Cached embedding should match returned value"
+        )
+
+        # Second call with same context should use cache (no new API call)
+        context_embedding_2 = scorer._get_context_embedding(unique_context)
+
+        # Verify cache still has the same embedding and we got the same result
+        cached_embedding_2 = cache.get(CONTEXT_CACHE_NAMESPACE, cache_key)
+        assert cached_embedding_2 == cached_embedding, "Cache should not change on second call"
+        assert context_embedding_2 == context_embedding_1, "Second call should return cached value"
 
     def test_missing_embedding_defaults_to_1_0(self, mock_client):
         """

@@ -8,7 +8,7 @@ Before starting, ensure you have:
 
 - [ ] **Neo4j 5.x or later** installed and running
 - [ ] **Neo4j Graph Data Science (GDS) library** installed and enabled
-- [ ] **Python 3.11+** (or use conda environment)
+- [ ] **Python 3.11+** (3.13 recommended, or use conda environment)
 - [ ] **SQLite database** at `data/domain_status.db` (source data - included in repository, or generate your own with [`domain_status`](https://github.com/alexwoolford/domain_status))
 - [ ] **Network access** to Neo4j (default: `bolt://localhost:7687`)
 
@@ -392,7 +392,7 @@ LIMIT 10;
 **Solution**:
 1. Ensure you're using the correct Python environment
 2. Reinstall dependencies: `pip install -e . --force-reinstall`
-3. Check Python version: `python3 --version` (should be 3.13+)
+3. Check Python version: `python3 --version` (should be 3.11+)
 
 ---
 

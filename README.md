@@ -142,7 +142,7 @@ Edit `.env` with your credentials:
 
 ```bash
 # Neo4j Connection (required)
-NEO4J_URI=neo4j://localhost:7687
+NEO4J_URI=bolt://localhost:7687
 NEO4J_USER=neo4j
 NEO4J_PASSWORD=your_neo4j_password
 NEO4J_DATABASE=domain
@@ -161,7 +161,7 @@ FINNHUB_API_KEY=your_finnhub_key_here
 
 ```bash
 # Check Neo4j connection
-python -c "from public_company_graph.neo4j import get_neo4j_driver, verify_connection; driver = get_neo4j_driver(); verify_connection(driver); driver.close()"
+python -c "from public_company_graph.neo4j.connection import get_neo4j_driver; driver = get_neo4j_driver(); driver.verify_connectivity(); driver.close()"
 
 # Run health check
 health-check

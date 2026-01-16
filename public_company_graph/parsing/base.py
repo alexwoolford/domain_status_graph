@@ -166,7 +166,7 @@ class CompetitorParser(TenKParser):
         """
         Extract competitor mentions from 10-K.
 
-        TODO: Implement entity resolution on risk_factors text.
+        # Note: Entity resolution on risk_factors text can be implemented if needed
         This requires:
         1. Risk factors text (from RiskFactorsParser)
         2. Named entity recognition (NER) to find company names
@@ -268,7 +268,7 @@ def get_default_parsers() -> list:
     To add a parser:
     1. Implement TenKParser interface
     2. Add to the list below
-    3. See docs/ADDING_PARSER.md for details
+    3. See docs/adding_parser.md for details
 
     Returns:
         List of TenKParser instances

@@ -75,7 +75,8 @@ def compute_company_description_similarity(
                 RETURN count(r) AS deleted
                 """
             )
-            deleted = result.single()["deleted"]
+            record = result.single()
+            deleted = record["deleted"] if record else 0
             if deleted > 0:
                 logger.info(f"   ✓ Deleted {deleted} existing relationships")
             else:

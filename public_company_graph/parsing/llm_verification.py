@@ -105,7 +105,7 @@ class LLMRelationshipVerifier:
     def __init__(
         self,
         client: OpenAI | None = None,
-        model: str = "gpt-4o-mini",  # Fast and cheap for verification
+        model: str = "gpt-4.1-mini",  # Fast and cheap for verification
     ):
         """Initialize the verifier."""
         self._client = client or get_openai_client()
@@ -431,7 +431,7 @@ class LLMRelationshipVerifier:
 def estimate_verification_cost(
     num_relationships: int,
     avg_context_tokens: int = 300,
-    model: str = "gpt-4o-mini",
+    model: str = "gpt-4.1-mini",
 ) -> dict[str, float]:
     """
     Estimate cost for LLM verification.
@@ -446,13 +446,13 @@ def estimate_verification_cost(
     """
     # Approximate pricing (as of 2024)
     pricing = {
-        "gpt-4o-mini": {"input": 0.00015, "output": 0.0006},  # per 1K tokens
-        "gpt-4o": {"input": 0.005, "output": 0.015},
-        "gpt-4-turbo": {"input": 0.01, "output": 0.03},
+        "gpt-4.1-mini": {"input": 0.0004, "output": 0.0016},  # per 1K tokens
+        "gpt-4.1": {"input": 0.002, "output": 0.008},
+        "gpt-5.2-chat-latest": {"input": 0.00125, "output": 0.01},
     }
 
     if model not in pricing:
-        model = "gpt-4o-mini"
+        model = "gpt-4.1-mini"
 
     # Estimate tokens per verification
     prompt_tokens = 200 + avg_context_tokens  # System + prompt + context
