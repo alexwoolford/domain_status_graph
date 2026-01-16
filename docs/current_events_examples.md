@@ -28,37 +28,41 @@ python scripts/chat_graphrag.py
 
 ---
 
-## Example 1: Red Sea Shipping Disruptions → E-commerce Companies
+## Example 1: Boeing Production Delays → Multi-Hop Supply Chain Exposure
 
-**Event**: Houthi attacks on Red Sea shipping routes (2024)
+**Event**: Boeing 737 MAX production issues and quality control problems (2024)
 
-**Surprising Connection**: The graph identifies e-commerce companies through their technology stack (Shopify), revealing which specific companies have global supply chain dependencies that aren't obvious from company descriptions alone.
+**Surprising Connection**: The graph reveals 2-hop supply chain exposure—companies that depend on Boeing's suppliers (like GE) are indirectly impacted, even though they don't directly source from Boeing.
 
 **Graph Query**:
 ```cypher
-// Find companies using Shopify (e-commerce platform)
-MATCH (c:Company)-[:HAS_DOMAIN]->(d:Domain)-[:USES]->(t:Technology {name: 'Shopify'})
-RETURN c.ticker, c.name, c.sector
-LIMIT 20
+// Find companies with 2-hop supply chain exposure to Boeing
+MATCH path = (c:Company)-[:HAS_SUPPLIER*2]->(ba:Company {ticker: 'BA'})
+RETURN c.ticker, c.name,
+       [r in relationships(path) | endNode(r).ticker] as supply_chain
+ORDER BY length(path)
+LIMIT 10
 ```
 
 **Impact Chain**:
-1. **Direct Impact**: Shipping disruptions affect global logistics
-2. **First-Order Impact**: E-commerce companies using Shopify:
-   - **Allbirds (BIRD)** - Direct-to-consumer footwear
-   - **Arhaus (ARHS)** - Furniture retailer
-   - **Constellation Brands (STZ)** - Consumer goods
-   - **Edgewell Personal Care (EPC)** - Consumer products
-3. **Second-Order Impact**: Companies with similar business models (via `SIMILAR_DESCRIPTION`):
-   - Other D2C brands
-   - Companies with similar supply chain structures
-   - Retailers dependent on global shipping
+1. **Direct Impact**: Boeing production delays
+2. **First-Order Impact**: Companies directly dependent on Boeing:
+   - **United Airlines (UAL)** - "sources majority of aircraft from Boeing"
+   - **Southwest Airlines (LUV)** - Boeing 737 fleet
+   - **General Electric (GE)** - Aircraft engines (supplier to Boeing)
+3. **Second-Order Impact** (via 2-hop supply chain):
+   - **SkyWest (SKYW)** - Regional airline (depends on GE → which supplies Boeing)
+   - **Wheels Up (UP)** - Private aviation (depends on Textron → which supplies Boeing)
+   - **FlyExclusive (FLYX)** - Private aviation (depends on Textron → which supplies Boeing)
+4. **Third-Order Impact** (via similarity relationships):
+   - Companies similar to SkyWest, Wheels Up (via `SIMILAR_DESCRIPTION`)
+   - Other regional airlines and private aviation companies
 
-**Why It's Surprising**: The graph's value is in **identifying which specific e-commerce companies are exposed** through their technology stack, even when their global supply chain dependencies aren't explicitly mentioned in company descriptions. Technology choices (Shopify) serve as a signal for companies with global shipping needs.
+**Why It's Surprising**: The graph's **multi-hop traversal** reveals that regional airlines (SkyWest) and private aviation companies (Wheels Up, FlyExclusive) are exposed to Boeing delays through their suppliers (GE, Textron), even though they don't directly source from Boeing. This 2-hop exposure wouldn't be obvious without graph traversal—a simple table lookup wouldn't reveal these indirect connections.
 
 ---
 
-## Example 2: Boeing Production Delays → Airlines & Defense Contractors
+## Example 2: Boeing Production Delays → Airlines & Defense Contractors (Direct Relationships)
 
 **Event**: Boeing 737 MAX production issues and quality control problems (2024)
 
