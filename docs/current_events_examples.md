@@ -62,47 +62,7 @@ LIMIT 10
 
 ---
 
-## Example 2: Boeing Production Delays → Airlines & Defense Contractors (Direct Relationships)
-
-**Event**: Boeing 737 MAX production issues and quality control problems (2024)
-
-**Surprising Connection**: Defense contractors and aerospace suppliers are impacted through shared supply chains.
-
-**Graph Query**:
-```cypher
-// Find companies that depend on Boeing as a supplier
-MATCH (c:Company)-[:HAS_SUPPLIER]->(ba:Company {ticker: 'BA'})
-RETURN c.ticker, c.name, c.sector
-```
-
-**Impact Chain**:
-1. **Direct Impact**: Boeing production delays
-2. **First-Order Impact** (all from direct `HAS_SUPPLIER` relationships):
-   - **Airlines directly dependent on Boeing**:
-     - **United Airlines (UAL)** - "sources majority of aircraft from Boeing"
-     - **Southwest Airlines (LUV)** - Boeing 737 fleet
-     - **Air Lease Corp (AL)** - Aircraft leasing
-   - **Aerospace suppliers and defense contractors** (also have Boeing as a supplier):
-     - **General Electric (GE)** - Aircraft engines
-     - **Moog Inc. (MOG-A)** - Aerospace components
-     - **Textron (TXT)** - Aerospace systems
-     - **SIFCO Industries (SIF)** - Aerospace manufacturing
-3. **Second-Order Impact** (via similarity relationships):
-   ```cypher
-   // Find companies similar to directly impacted companies
-   MATCH (c:Company)-[:HAS_SUPPLIER]->(ba:Company {ticker: 'BA'})
-   MATCH (c)-[:SIMILAR_DESCRIPTION]->(similar:Company)
-   WHERE NOT (similar)-[:HAS_SUPPLIER]->(ba)
-   RETURN DISTINCT similar.ticker, similar.name
-   ```
-   - Companies with similar business models to UAL, LUV, GE, etc.
-   - Other airlines, aerospace suppliers, defense contractors
-
-**Why It's Surprising**: Defense contractors (GE, Moog) and commercial airlines (UAL, LUV) both have Boeing as a direct supplier, creating unexpected exposure clusters. When Boeing has production issues, both customer segments (airlines) and supplier/partner segments (defense contractors) are simultaneously impacted—revealing cross-industry exposure that wouldn't be obvious without the graph.
-
----
-
-## Example 3: China Rare Earth Export Controls → EV Manufacturers
+## Example 2: China Rare Earth Export Controls → EV Manufacturers
 
 **Event**: Potential China restrictions on rare earth exports (2024-2025)
 
@@ -133,11 +93,11 @@ LIMIT 10
    - Via `HAS_COMPETITOR` relationships
    - Via `SIMILAR_TECHNOLOGY` (shared tech stack)
 
-**Why It's Surprising**: The graph reveals that solar companies (FTC Solar) share similar risk profiles to EV companies, both dependent on rare earth magnets for power electronics.
+**Why It's Surprising**: The graph reveals that solar companies (FTC Solar) share similar risk profiles to EV companies (Tesla, Rivian) through `SIMILAR_DESCRIPTION` relationships, even though they operate in different industries. Both depend on rare earth magnets for power electronics—EVs for traction motors, solar for inverters. This cross-industry similarity wouldn't be obvious without the graph's semantic similarity analysis of 10-K filings.
 
 ---
 
-## Example 4: Oracle Cloud Outage → Government Contractors
+## Example 3: Oracle Cloud Outage → Government Contractors
 
 **Event**: Hypothetical Oracle Cloud infrastructure failure
 
@@ -162,43 +122,12 @@ RETURN c.ticker, c.name, type(r) as relationship_type
    - Companies with similar government contract exposure
    - Defense contractors using Oracle for enterprise systems
 
-**Why It's Surprising**: E-commerce companies (Brilliant Earth) and government contractors (Telos) share the same critical infrastructure dependency (Oracle), creating unexpected systemic risk.
+**Why It's Surprising**: The graph reveals that e-commerce companies (Brilliant Earth) and government contractors (Telos) share the same critical infrastructure dependency (Oracle), even though they operate in completely different sectors. When Oracle has an outage, both consumer-facing e-commerce and government defense systems are simultaneously impacted—revealing unexpected systemic risk across industries that wouldn't be obvious without the graph's relationship mapping.
 
 ---
 
-## Example 5: Helium Shortage → Medical Device Companies
 
-**Event**: Global helium supply shortages (2023-2024)
-
-**Surprising Connection**: Medical device companies are impacted through industrial gas supply chains, not just MRI manufacturers.
-
-**Graph Query**:
-```cypher
-// Find companies similar to GE HealthCare (medical imaging)
-MATCH (gehc:Company {ticker: 'GEHC'})-[r:SIMILAR_DESCRIPTION]->(similar:Company)
-WHERE r.score > 0.70
-RETURN similar.ticker, similar.name, r.score
-ORDER BY r.score DESC
-LIMIT 10
-```
-
-**Impact Chain**:
-1. **Direct Impact**: Helium supply shortages (Russia, Qatar disruptions)
-2. **First-Order Impact**: Industrial gas companies:
-   - **Air Products (APD)** - Helium liquefaction
-   - **Linde (LIN)** - Helium distribution
-3. **Second-Order Impact**: Medical device companies:
-   - **GE HealthCare (GEHC)** - MRI systems (liquid helium)
-   - Companies similar to GEHC (via `SIMILAR_DESCRIPTION`):
-     - **Teleflex (TFX)** - Medical technology
-     - Other medical device manufacturers
-4. **Third-Order Impact**: Healthcare providers and hospitals (via customer relationships)
-
-**Why It's Surprising**: The graph reveals that medical device companies beyond just MRI manufacturers are exposed, through similarity relationships that indicate shared technology dependencies.
-
----
-
-## Example 6: Semiconductor Export Controls → Cross-Industry Exposure
+## Example 4: Semiconductor Export Controls → Cross-Industry Exposure
 
 **Event**: U.S. restrictions on advanced semiconductor exports (2023-2024)
 
@@ -231,108 +160,38 @@ ORDER BY s.ticker, c.name
 
 ---
 
-## Example 7: Middle East Conflict → Shipping & Logistics Companies
 
-**Event**: Houthi attacks on Red Sea shipping, Panama Canal drought (2024)
-
-**Surprising Connection**: The graph identifies e-commerce and consumer goods companies through their technology stack, revealing which specific companies have global shipping dependencies that may not be obvious from company descriptions.
-
-**Graph Query**:
-```cypher
-// Find companies using Shopify (indicating e-commerce, global shipping needs)
-MATCH (c:Company)-[:HAS_DOMAIN]->(d:Domain)-[:USES]->(t:Technology {name: 'Shopify'})
-WITH c
-MATCH (c)-[r:SIMILAR_DESCRIPTION]->(similar:Company)
-WHERE r.score > 0.70
-RETURN DISTINCT similar.ticker, similar.name, similar.sector
-LIMIT 15
-```
-
-**Impact Chain**:
-1. **Direct Impact**: Red Sea shipping disruptions, Panama Canal restrictions
-2. **First-Order Impact**: E-commerce companies using Shopify:
-   - **Allbirds (BIRD)** - Global footwear supply chain
-   - **Arhaus (ARHS)** - Furniture (heavy shipping)
-   - **Constellation Brands (STZ)** - Consumer goods
-3. **Second-Order Impact**: Companies with similar business models:
-   - Via `SIMILAR_DESCRIPTION` relationships
-   - D2C brands with similar supply chain structures
-   - Consumer goods companies with global manufacturing
-
-**Why It's Surprising**: The graph's value is in **identifying which specific companies are exposed** through technology stack analysis, even when global shipping dependencies aren't explicitly mentioned. Technology choices (Shopify) serve as a signal for companies with global supply chain needs.
-
----
-
-## Example 9: Defense Budget Changes → Commercial Aerospace
-
-**Event**: U.S. defense budget shifts or procurement changes
-
-**Surprising Connection**: Commercial airlines and defense contractors share suppliers (Boeing, Lockheed Martin).
-
-**Graph Query**:
-```cypher
-// Find companies that depend on defense contractors as suppliers
-MATCH (c:Company)-[:HAS_SUPPLIER]->(s:Company)
-WHERE s.ticker IN ['BA', 'LMT', 'RTX', 'NOC']
-RETURN c.ticker, c.name, c.sector, s.ticker, s.name
-```
-
-**Impact Chain**:
-1. **Direct Impact**: Defense budget changes affect Lockheed Martin, Raytheon, Northrop Grumman
-2. **First-Order Impact**: Defense contractors:
-   - **Lockheed Martin (LMT)** - Defense systems
-   - **Boeing (BA)** - Both commercial and defense
-3. **Second-Order Impact**: Companies dependent on these suppliers:
-   - **United Airlines (UAL)** - Boeing commercial aircraft
-   - **Southwest Airlines (LUV)** - Boeing 737 fleet
-   - **Sidus Space (SIDU)** - Space systems (Lockheed supplier)
-   - **Griffon Corp (GFF)** - Aerospace components
-   - **Bruker Corp (BRKR)** - Scientific instruments (defense applications)
-
-**Why It's Surprising**: Commercial airlines (United, Southwest) share the same supplier (Boeing) as defense contractors, creating unexpected exposure to defense budget changes through production capacity constraints.
-
----
-
-## Example 9: Tariffs on Chinese Imports → Technology Companies
+## Example 5: Tariffs on Chinese Imports → Technology Companies
 
 **Event**: Increased tariffs on Chinese imports (2024-2025)
 
-**Surprising Connection**: Technology companies with similar technology stacks may share similar supply chain structures, revealing indirect exposure to Chinese import tariffs even when direct supplier relationships aren't disclosed.
+**Surprising Connection**: Companies with similar technology stacks often share similar supply chain structures, revealing indirect exposure to Chinese import tariffs even when direct supplier relationships aren't disclosed in 10-K filings.
 
 **Graph Query**:
 ```cypher
-// Find companies with similar technology stacks (may indicate similar supply chains)
-MATCH (c1:Company)-[:HAS_DOMAIN]->(d1:Domain)-[:USES]->(t:Technology)
-WITH c1, collect(DISTINCT t.name) as tech_stack
-MATCH (c2:Company)-[:HAS_DOMAIN]->(d2:Domain)-[:USES]->(t)
-WITH c1, c2, tech_stack, collect(DISTINCT t.name) as tech_stack2
-WHERE c1 <> c2 AND size(apoc.coll.intersection(tech_stack, tech_stack2)) > 5
-RETURN c1.ticker, c1.name, c2.ticker, c2.name,
-       size(apoc.coll.intersection(tech_stack, tech_stack2)) as shared_tech
-LIMIT 10
-```
-
-**Alternative Approach** (using similarity relationships):
-```cypher
-// Find companies with similar technology stacks
+// Find companies with similar technology stacks (using SIMILAR_TECHNOLOGY)
 MATCH (c1:Company)-[r:SIMILAR_TECHNOLOGY]->(c2:Company)
-WHERE r.score > 0.60
-RETURN c1.ticker, c1.name, c2.ticker, c2.name, r.score
+WHERE r.score > 0.60 AND c1.sector IS NOT NULL AND c2.sector IS NOT NULL
+RETURN c1.ticker, c1.name, c1.sector, c2.ticker, c2.name, c2.sector, r.score
 ORDER BY r.score DESC
 LIMIT 10
 ```
 
 **Impact Chain**:
-1. **Direct Impact**: Tariffs on Chinese imports
-2. **First-Order Impact**: Companies directly sourcing from China (if disclosed in 10-Ks)
+1. **Direct Impact**: Tariffs on Chinese imports increase costs for companies sourcing components from China
+2. **First-Order Impact**: Companies directly sourcing from China (if disclosed in 10-Ks):
+   - Technology companies with manufacturing in China
+   - Consumer electronics companies
+   - Companies with disclosed Chinese suppliers
 3. **Second-Order Impact**: Companies with similar technology stacks:
    - Via `SIMILAR_TECHNOLOGY` relationships
-   - Companies using similar components may have similar supply chains
+   - Companies using similar cloud platforms, frameworks, or infrastructure
+   - Example: Companies using AWS + React + Node.js may share similar backend infrastructure suppliers
 4. **Third-Order Impact**: Companies competing with tariff-exposed firms:
    - Via `HAS_COMPETITOR` relationships
-   - Competitive advantage shifts
+   - Competitive advantage shifts when rivals face higher input costs
 
-**Why It's Surprising**: The graph can reveal indirect exposure through technology stack similarities, even when direct supplier relationships aren't disclosed. Companies with similar technology stacks often share similar supply chain structures, creating exposure clusters that aren't obvious from individual company disclosures.
+**Why It's Surprising**: The graph reveals indirect exposure through technology stack similarities, even when direct supplier relationships aren't disclosed. Companies with similar technology stacks (e.g., same cloud providers, frameworks, or infrastructure) often share similar supply chain structures and component sourcing patterns. This creates exposure clusters that aren't obvious from individual company disclosures—a company might not explicitly mention Chinese suppliers, but if it uses the same technology stack as a company that does, it likely faces similar supply chain risks.
 
 ---
 
@@ -380,7 +239,7 @@ RETURN similar.ticker, similar.name, supplier.name, r.score
 
 1. **Supply Chain Exposure**: Companies share suppliers in non-obvious ways (e.g., airlines and defense contractors both depend on Boeing)
 
-2. **Technology Stack Clustering**: Companies using the same technologies (Shopify, NVIDIA GPUs) often have similar supply chain risks
+2. **Technology Stack Clustering**: Companies using the same technologies (NVIDIA GPUs, cloud platforms) often have similar supply chain risks
 
 3. **Multi-Hop Impacts**: Events can cascade through 2-3 relationship hops (e.g., China tariffs → rare earth producers → magnet suppliers → EV manufacturers)
 
