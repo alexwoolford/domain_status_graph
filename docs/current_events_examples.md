@@ -97,37 +97,7 @@ LIMIT 10
 
 ---
 
-## Example 3: Oracle Cloud Outage → Government Contractors
-
-**Event**: Hypothetical Oracle Cloud infrastructure failure
-
-**Surprising Connection**: Government contractors and defense companies are exposed through enterprise software dependencies.
-
-**Graph Query**:
-```cypher
-// Find companies that depend on Oracle (customers, suppliers, partners)
-MATCH (c:Company)-[r:HAS_CUSTOMER|HAS_SUPPLIER|HAS_PARTNER]->(orcl:Company {ticker: 'ORCL'})
-RETURN c.ticker, c.name, type(r) as relationship_type
-```
-
-**Impact Chain**:
-1. **Direct Impact**: Oracle Cloud outage
-2. **First-Order Impact**: Companies directly dependent on Oracle:
-   - **Telos Corp (TLS)** - Cybersecurity, government contracts
-   - **Calix (CALX)** - Network infrastructure
-   - **Inuvo (INUV)** - Marketing technology
-   - **Brilliant Earth (BRLT)** - E-commerce (Oracle cloud infrastructure)
-3. **Second-Order Impact**: Government and defense contractors:
-   - Via `SIMILAR_DESCRIPTION` to Telos (cybersecurity companies)
-   - Companies with similar government contract exposure
-   - Defense contractors using Oracle for enterprise systems
-
-**Why It's Surprising**: The graph reveals that e-commerce companies (Brilliant Earth) and government contractors (Telos) share the same critical infrastructure dependency (Oracle), even though they operate in completely different sectors. When Oracle has an outage, both consumer-facing e-commerce and government defense systems are simultaneously impacted—revealing unexpected systemic risk across industries that wouldn't be obvious without the graph's relationship mapping.
-
----
-
-
-## Example 4: Semiconductor Export Controls → Cross-Industry Exposure
+## Example 3: Semiconductor Export Controls → Cross-Industry Exposure
 
 **Event**: U.S. restrictions on advanced semiconductor exports (2023-2024)
 
@@ -161,7 +131,7 @@ ORDER BY s.ticker, c.name
 ---
 
 
-## Example 5: Tariffs on Chinese Imports → Technology Companies
+## Example 4: Tariffs on Chinese Imports → Technology Companies
 
 **Event**: Increased tariffs on Chinese imports (2024-2025)
 
