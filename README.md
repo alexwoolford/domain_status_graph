@@ -199,21 +199,33 @@ health-check
 
 ## Quick Start with Pre-built Graph
 
-If you want to explore the graph immediately without running the full ingest pipeline, you can restore from the included database dump.
+If you want to explore the graph immediately without running the full ingest pipeline, you can restore from the pre-built database dump.
 
 ### Prerequisites
 
 - Neo4j 5.x+ installed and **stopped** (`bin/neo4j stop`)
-- Git LFS installed (`brew install git-lfs` on macOS)
+- **37GB free disk space** (the dump file is large)
+- Google Drive access (to download the dump file)
 
-### Restore the Dump
+### Download and Restore the Dump
+
+**Step 1: Download the dump file**
+
+Download `company.dump` from Google Drive:
+- **Direct link**: [company.dump (37GB)](https://drive.google.com/file/d/18ghOUs611rQUeF6paI3rCpsadur98m_M/view?usp=drive_link)
+- **File size**: 37GB uncompressed
+- **Location**: Save to `data/company.dump` in the project directory
+
+> **⚠️ Important**: Ensure you have at least 37GB free disk space before downloading. The database will require additional space when loaded into Neo4j.
+
+**Step 2: Restore the database**
 
 ```bash
-# Pull LFS files if not already done
-git lfs pull
+# Navigate to project directory
+cd public-company-graph
 
 # Copy dump to match target database name (e.g., neo4j)
-cp data/domain.dump data/neo4j.dump
+cp data/company.dump data/neo4j.dump
 
 # Restore the database (Neo4j must be stopped)
 neo4j-admin database load neo4j --from-path=data/ --overwrite-destination=true
@@ -221,7 +233,7 @@ neo4j-admin database load neo4j --from-path=data/ --overwrite-destination=true
 # Start Neo4j
 neo4j start
 
-# Clean up the copied file
+# Clean up the copied file (optional, saves ~37GB)
 rm data/neo4j.dump
 ```
 
@@ -231,7 +243,7 @@ The dump contains:
 
 After restore, connect to Neo4j and start exploring with the [example queries](#example-queries) below.
 
-> **Note**: The dump is stored in Git LFS (~6MB compressed, ~34MB uncompressed). The full pipeline with all data sources requires running the steps in [Running the Pipeline](#running-the-pipeline).
+> **Note**: The full pipeline with all data sources requires running the steps in [Running the Pipeline](#running-the-pipeline). The dump is a snapshot of the complete graph.
 
 ### Ask Questions with GraphRAG Chat
 
